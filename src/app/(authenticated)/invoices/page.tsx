@@ -24,7 +24,7 @@ export default function InvoicesPage() {
             Quản lý hóa đơn nhập hàng từ nhà cung cấp.
           </p>
         </div>
-        <Button render={<Link href="/invoices/new" />}>
+        <Button nativeButton={false} render={<Link href="/invoices/new" />}>
           <Plus className="mr-2 size-4" />
           Tạo hóa đơn
         </Button>

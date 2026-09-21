@@ -24,7 +24,7 @@ export default function ReceiptsPage() {
             Danh sách các phiếu nhập hàng đã ghi nhận.
           </p>
         </div>
-        <Button render={<Link href="/receipts/new" />}>
+        <Button nativeButton={false} render={<Link href="/receipts/new" />}>
           <Plus className="mr-2 size-4" />
           Nhập hàng mới
         </Button>

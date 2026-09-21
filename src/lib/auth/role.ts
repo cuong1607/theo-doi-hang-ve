@@ -21,3 +21,7 @@ export function canManageSuppliers(role: Role): boolean {
 export function canManageProducts(role: Role): boolean {
   return role === "admin";
 }
+
+export function canCreateReceipts(role: Role): boolean {
+  return role === "admin" || role === "staff";
+}
