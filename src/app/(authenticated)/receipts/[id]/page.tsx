@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CalendarDays } from "lucide-react";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/format";
@@ -27,6 +27,7 @@ type ReceiptDetail = {
   shift: string;
   receiver_name: string;
   note: string | null;
+  supplier_id: string;
   suppliers: { code: string; name: string } | null;
   receipt_items: {
     id: string;
@@ -44,7 +45,7 @@ async function getReceipt(id: string) {
   const { data } = await supabase
     .from("receipts")
     .select(
-      "id, receipt_no, receipt_date, shift, receiver_name, note, suppliers(code, name), receipt_items(id, unit_price, delivered_qty, received_qty, difference_qty, line_total, products(sku, name, unit))"
+      "id, receipt_no, receipt_date, shift, receiver_name, note, supplier_id, suppliers(code, name), receipt_items(id, unit_price, delivered_qty, received_qty, difference_qty, line_total, products(sku, name, unit))"
     )
     .eq("id", id)
     .maybeSingle();
@@ -72,19 +73,29 @@ export default async function ReceiptDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          nativeButton={false}
-          render={<Link href="/receipts" />}
-        >
-          <ArrowLeft />
-        </Button>
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">{receipt.receipt_no}</h2>
-          <p className="text-muted-foreground">Chi tiết phiếu nhập hàng.</p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            nativeButton={false}
+            render={<Link href="/receipts" />}
+          >
+            <ArrowLeft />
+          </Button>
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">{receipt.receipt_no}</h2>
+            <p className="text-muted-foreground">Chi tiết phiếu nhập hàng.</p>
+          </div>
         </div>
+        <Button
+          variant="outline"
+          nativeButton={false}
+          render={<Link href={`/receipts/daily/${receipt.receipt_date}/${receipt.supplier_id}`} />}
+        >
+          <CalendarDays className="mr-2 size-4" />
+          Xem tổng hợp cả ngày
+        </Button>
       </div>
 
       <Card>
