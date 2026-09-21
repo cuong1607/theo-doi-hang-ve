@@ -13,8 +13,8 @@ import {
 } from "@/components/ui/select";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/format";
+import type { SupplierProduct } from "@/lib/receipts/actions";
 
-import type { SupplierProduct } from "./actions";
 import type { ReceiptItemState } from "./receipt-form";
 
 export function ReceiptItemRow({
@@ -95,18 +95,10 @@ export function ReceiptItemRow({
           aria-label="SL nhận"
         />
       </TableCell>
-      <TableCell className={difference < 0 ? "text-destructive" : undefined}>
-        {difference}
-      </TableCell>
+      <TableCell className={difference < 0 ? "text-destructive" : undefined}>{difference}</TableCell>
       <TableCell>{formatCurrency(lineTotal)}</TableCell>
       <TableCell className="text-right">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          onClick={onRemove}
-          aria-label="Xóa dòng"
-        >
+        <Button type="button" variant="ghost" size="icon-sm" onClick={onRemove} aria-label="Xóa dòng">
           <Trash2 className="text-destructive" />
         </Button>
       </TableCell>

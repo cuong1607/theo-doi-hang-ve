@@ -1,6 +1,10 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { AlertTriangle, Plus, PackageSearch } from "lucide-react";
 
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getReceiptDailyGroups } from "@/lib/receipts/history";
+import { formatCurrency } from "@/lib/format";
+import { ListPagination } from "@/components/list-pagination";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -12,16 +16,57 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-export default function ReceiptsPage() {
+import { ReceiptHistoryFilters } from "./receipt-history-filters";
+
+const PAGE_SIZE = 10;
+
+function formatDateVN(iso: string) {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+async function getAllSuppliers() {
+  const supabase = createAdminClient();
+  const { data } = await supabase.from("suppliers").select("id, code, name").order("code");
+  return data ?? [];
+}
+
+export default async function ReceiptsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{
+    from?: string;
+    to?: string;
+    supplier?: string;
+    sku?: string;
+    name?: string;
+    page?: string;
+  }>;
+}) {
+  const params = await searchParams;
+  const fromDate = (params.from ?? "").trim();
+  const toDate = (params.to ?? "").trim();
+  const supplierId = (params.supplier ?? "").trim();
+  const sku = (params.sku ?? "").trim();
+  const productName = (params.name ?? "").trim();
+  const page = Math.max(1, Number(params.page) || 1);
+  const isProductFiltered = !!(sku || productName);
+
+  const [suppliers, { groups, totalGroups, error }] = await Promise.all([
+    getAllSuppliers(),
+    getReceiptDailyGroups({ fromDate, toDate, supplierId, sku, productName }, page, PAGE_SIZE),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(totalGroups / PAGE_SIZE));
+  const hasFilter = !!(fromDate || toDate || supplierId || sku || productName);
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">
-            Lịch sử hàng về
-          </h2>
+          <h2 className="text-2xl font-bold tracking-tight">Lịch sử hàng về</h2>
           <p className="text-muted-foreground">
-            Danh sách các phiếu nhập hàng đã ghi nhận.
+            Tổng hợp theo ngày và nhà cung cấp. Bấm &quot;Xem&quot; để xem chi tiết từng phiếu.
           </p>
         </div>
         <Button nativeButton={false} render={<Link href="/receipts/new" />}>
@@ -31,31 +76,113 @@ export default function ReceiptsPage() {
       </div>
 
       <Card>
+        <CardHeader className="flex-col items-start gap-4 space-y-0">
+          <CardTitle>Bộ lọc</CardTitle>
+          <ReceiptHistoryFilters
+            fromDate={fromDate}
+            toDate={toDate}
+            supplierId={supplierId}
+            sku={sku}
+            productName={productName}
+            suppliers={suppliers}
+          />
+        </CardHeader>
+      </Card>
+
+      <Card>
         <CardHeader>
-          <CardTitle>Phiếu nhập hàng</CardTitle>
+          <CardTitle>Phiếu nhập hàng theo ngày</CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mã phiếu</TableHead>
-                <TableHead>Ngày nhập</TableHead>
-                <TableHead>Nhà cung cấp</TableHead>
-                <TableHead>Số mặt hàng</TableHead>
-                <TableHead className="text-right">Tổng giá trị</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell
-                  colSpan={5}
-                  className="h-24 text-center text-muted-foreground"
-                >
-                  Chưa có dữ liệu.
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+          {isProductFiltered && (
+            <p className="mb-4 rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+              Đang lọc theo SKU/tên sản phẩm — số liệu mỗi dòng chỉ tính riêng sản phẩm phù hợp,
+              không phải tổng cả ngày.
+            </p>
+          )}
+          {error ? (
+            <div className="flex flex-col items-center gap-2 py-12 text-center">
+              <AlertTriangle className="size-8 text-destructive" />
+              <p className="font-medium">Đã xảy ra lỗi khi tải dữ liệu.</p>
+              <p className="text-sm text-muted-foreground">Vui lòng tải lại trang để thử lại.</p>
+            </div>
+          ) : groups.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 py-12 text-center">
+              <PackageSearch className="size-8 text-muted-foreground" />
+              <p className="font-medium">
+                {hasFilter ? "Không tìm thấy dữ liệu phù hợp." : "Chưa có phiếu nhập nào."}
+              </p>
+            </div>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Ngày</TableHead>
+                    <TableHead>Nhà cung cấp</TableHead>
+                    <TableHead>Số SKU</TableHead>
+                    <TableHead>Tổng SL giao</TableHead>
+                    <TableHead>Tổng SL nhận</TableHead>
+                    <TableHead>Chênh lệch</TableHead>
+                    <TableHead>Tổng tiền</TableHead>
+                    <TableHead>VAT 8%</TableHead>
+                    <TableHead>Tổng sau VAT</TableHead>
+                    <TableHead className="text-right">Thao tác</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {groups.map((g) => {
+                    const vat = Math.round(g.total_line_total * 0.08 * 100) / 100;
+                    const grandTotal = Math.round(g.total_line_total * 1.08 * 100) / 100;
+                    return (
+                      <TableRow key={`${g.receipt_date}-${g.supplier_id}`}>
+                        <TableCell className="font-medium">{formatDateVN(g.receipt_date)}</TableCell>
+                        <TableCell>
+                          {g.supplier_code} — {g.supplier_name}
+                        </TableCell>
+                        <TableCell>{g.sku_count}</TableCell>
+                        <TableCell>{g.total_delivered_qty}</TableCell>
+                        <TableCell>{g.total_received_qty}</TableCell>
+                        <TableCell
+                          className={g.total_difference_qty < 0 ? "text-destructive" : undefined}
+                        >
+                          {g.total_difference_qty}
+                        </TableCell>
+                        <TableCell>{formatCurrency(g.total_line_total)}</TableCell>
+                        <TableCell>{formatCurrency(vat)}</TableCell>
+                        <TableCell className="font-medium">{formatCurrency(grandTotal)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            nativeButton={false}
+                            render={<Link href={`/receipts/daily/${g.receipt_date}/${g.supplier_id}`} />}
+                          >
+                            Xem
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              <ListPagination
+                page={page}
+                totalPages={totalPages}
+                buildHref={(p) => {
+                  const qp = new URLSearchParams();
+                  if (fromDate) qp.set("from", fromDate);
+                  if (toDate) qp.set("to", toDate);
+                  if (supplierId) qp.set("supplier", supplierId);
+                  if (sku) qp.set("sku", sku);
+                  if (productName) qp.set("name", productName);
+                  if (p > 1) qp.set("page", String(p));
+                  const qs = qp.toString();
+                  return qs ? `/receipts?${qs}` : "/receipts";
+                }}
+              />
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

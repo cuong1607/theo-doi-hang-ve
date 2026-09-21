@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CalendarDays } from "lucide-react";
+import { ArrowLeft, CalendarDays, Pencil } from "lucide-react";
 
+import { canEditReceipts, getCurrentRole } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,8 @@ export default async function ReceiptDetailPage({
     notFound();
   }
 
+  const canEdit = canEditReceipts(getCurrentRole());
+
   const totalDelivered = receipt.receipt_items.reduce((sum, i) => sum + i.delivered_qty, 0);
   const totalReceived = receipt.receipt_items.reduce((sum, i) => sum + i.received_qty, 0);
   const totalDifference = receipt.receipt_items.reduce((sum, i) => sum + i.difference_qty, 0);
@@ -88,14 +91,26 @@ export default async function ReceiptDetailPage({
             <p className="text-muted-foreground">Chi tiết phiếu nhập hàng.</p>
           </div>
         </div>
-        <Button
-          variant="outline"
-          nativeButton={false}
-          render={<Link href={`/receipts/daily/${receipt.receipt_date}/${receipt.supplier_id}`} />}
-        >
-          <CalendarDays className="mr-2 size-4" />
-          Xem tổng hợp cả ngày
-        </Button>
+        <div className="flex gap-2">
+          {canEdit && (
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={<Link href={`/receipts/${receipt.id}/edit`} />}
+            >
+              <Pencil className="mr-2 size-4" />
+              Sửa phiếu
+            </Button>
+          )}
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href={`/receipts/daily/${receipt.receipt_date}/${receipt.supplier_id}`} />}
+          >
+            <CalendarDays className="mr-2 size-4" />
+            Xem tổng hợp cả ngày
+          </Button>
+        </div>
       </div>
 
       <Card>

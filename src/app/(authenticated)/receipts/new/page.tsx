@@ -4,7 +4,7 @@ import { canCreateReceipts, getCurrentRole } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 
-import { ReceiptForm } from "./receipt-form";
+import { ReceiptForm } from "@/components/receipts/receipt-form";
 
 // No dynamic API (cookies/headers/searchParams) is used here, so Next.js
 // would otherwise prerender this route once at build time and freeze the

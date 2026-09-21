@@ -25,3 +25,9 @@ export function canManageProducts(role: Role): boolean {
 export function canCreateReceipts(role: Role): boolean {
   return role === "admin" || role === "staff";
 }
+
+// No time-limited edit window exists yet (e.g. "only within 24h/7 days") —
+// per Phase 9A, don't invent one. admin/staff can always edit; viewer never.
+export function canEditReceipts(role: Role): boolean {
+  return role === "admin" || role === "staff";
+}

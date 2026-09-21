@@ -22,11 +22,17 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/format";
+import {
+  createReceipt,
+  getSupplierProducts,
+  updateReceipt,
+  type ReceiptFormState,
+  type SupplierProduct,
+} from "@/lib/receipts/actions";
 
-import { createReceipt, getSupplierProducts, type CreateReceiptState, type SupplierProduct } from "./actions";
 import { ReceiptItemRow } from "./receipt-item-row";
 
-const initialState: CreateReceiptState = { status: "idle" };
+const initialState: ReceiptFormState = { status: "idle" };
 
 const SHIFT_OPTIONS = [
   { label: "Ca sáng", value: "morning" },
@@ -35,6 +41,11 @@ const SHIFT_OPTIONS = [
 
 export type ReceiptItemState = {
   key: number;
+  // Present only for a row that already existed on the receipt before this
+  // edit session — sent back so updateReceipt can update it in place instead
+  // of deleting + reinserting (keeps the row's id, so any external
+  // reference to it stays valid).
+  id?: string;
   productId: string;
   sku: string;
   name: string;
@@ -42,6 +53,25 @@ export type ReceiptItemState = {
   unitPrice: string;
   deliveredQty: string;
   receivedQty: string;
+};
+
+export type ExistingReceipt = {
+  id: string;
+  receiptDate: string;
+  supplierId: string;
+  shift: "morning" | "afternoon";
+  receiverName: string;
+  note: string;
+  items: {
+    id: string;
+    productId: string;
+    sku: string;
+    name: string;
+    unit: string;
+    unitPrice: string;
+    deliveredQty: string;
+    receivedQty: string;
+  }[];
 };
 
 function todayLocalDateString() {
@@ -65,28 +95,70 @@ function emptyItem(key: number): ReceiptItemState {
   };
 }
 
+function snapshotOf(fields: {
+  receiptDate: string;
+  supplierId: string;
+  shift: string;
+  receiverName: string;
+  note: string;
+  items: ReceiptItemState[];
+}) {
+  return JSON.stringify({
+    ...fields,
+    items: fields.items.map(({ id, productId, unitPrice, deliveredQty, receivedQty }) => ({
+      id: id ?? null,
+      productId,
+      unitPrice,
+      deliveredQty,
+      receivedQty,
+    })),
+  });
+}
+
 export function ReceiptForm({
   suppliers,
+  receipt,
 }: {
   suppliers: { id: string; code: string; name: string }[];
+  receipt?: ExistingReceipt;
 }) {
+  const isEdit = !!receipt;
   const router = useRouter();
-  const nextKeyRef = useRef(1);
+  // Initial items (if any) are keyed by index — safe since this only runs
+  // once at mount, before nextKeyRef has generated any keys of its own.
+  const nextKeyRef = useRef((receipt?.items.length ?? 0) + 1);
 
-  const [receiptDate, setReceiptDate] = useState(todayLocalDateString());
-  const [supplierId, setSupplierId] = useState("");
-  const [shift, setShift] = useState("");
-  const [receiverName, setReceiverName] = useState("");
-  const [note, setNote] = useState("");
-  const [items, setItems] = useState<ReceiptItemState[]>([]);
+  const [receiptDate, setReceiptDate] = useState(receipt?.receiptDate ?? todayLocalDateString());
+  const [supplierId, setSupplierId] = useState(receipt?.supplierId ?? "");
+  const [shift, setShift] = useState<string>(receipt?.shift ?? "");
+  const [receiverName, setReceiverName] = useState(receipt?.receiverName ?? "");
+  const [note, setNote] = useState(receipt?.note ?? "");
+  const [items, setItems] = useState<ReceiptItemState[]>(
+    () =>
+      receipt?.items.map((i, index) => ({
+        key: index,
+        id: i.id,
+        productId: i.productId,
+        sku: i.sku,
+        name: i.name,
+        unit: i.unit,
+        unitPrice: i.unitPrice,
+        deliveredQty: i.deliveredQty,
+        receivedQty: i.receivedQty,
+      })) ?? []
+  );
 
   const [availableProducts, setAvailableProducts] = useState<SupplierProduct[]>([]);
   const [loadingProducts, startLoadingProducts] = useTransition();
 
-  const [state, submitReceipt, isPending] = useActionState(createReceipt, initialState);
+  const action = isEdit ? updateReceipt.bind(null, receipt.id) : createReceipt;
+  const [state, submitReceipt, isPending] = useActionState(action, initialState);
 
+  const [initialSnapshot] = useState(() =>
+    snapshotOf({ receiptDate, supplierId, shift, receiverName, note, items })
+  );
   const isDirty =
-    !!supplierId || !!shift || !!receiverName || !!note || items.length > 0;
+    snapshotOf({ receiptDate, supplierId, shift, receiverName, note, items }) !== initialSnapshot;
 
   // Warn on tab close/refresh when there's unsaved data. In-app navigation
   // via the sidebar isn't intercepted — Next.js App Router has no built-in
@@ -113,10 +185,17 @@ export function ReceiptForm({
     };
   }, [supplierId]);
 
-  // Switching supplier invalidates the previously loaded product list and
-  // any items picked from it — reset synchronously with the user's action
-  // rather than via an effect.
+  // Switching supplier invalidates the previously loaded product list — the
+  // current items may not belong to (or even exist for) the new supplier.
+  // Per spec: never silently keep a now-invalid item, so warn and clear
+  // rather than trying to guess which rows are still valid.
   function handleSupplierChange(value: string) {
+    if (items.length > 0) {
+      const confirmed = window.confirm(
+        "Đổi nhà cung cấp sẽ xóa danh sách sản phẩm hiện tại vì có thể không thuộc nhà cung cấp mới. Bạn có chắc muốn tiếp tục?"
+      );
+      if (!confirmed) return;
+    }
     setSupplierId(value);
     setAvailableProducts([]);
     setItems([]);
@@ -127,6 +206,25 @@ export function ReceiptForm({
       router.push(`/receipts/${state.receipt.id}`);
     }
   }, [state, router]);
+
+  // While the supplier hasn't changed from the receipt's original one, keep
+  // the originally-assigned products selectable in their own row even if
+  // they've since been deactivated — otherwise an existing row's SKU picker
+  // would render with no matching option for its current value.
+  const products = useMemo(() => {
+    if (!receipt || supplierId !== receipt.supplierId) return availableProducts;
+    const seen = new Set(availableProducts.map((p) => p.id));
+    const extra = receipt.items
+      .filter((i) => !seen.has(i.productId))
+      .map((i) => ({
+        id: i.productId,
+        sku: i.sku,
+        name: i.name,
+        unit: i.unit,
+        current_price: Number(i.unitPrice) || 0,
+      }));
+    return [...availableProducts, ...extra];
+  }, [availableProducts, receipt, supplierId]);
 
   const usedProductIds = useMemo(() => new Set(items.map((i) => i.productId).filter(Boolean)), [items]);
 
@@ -164,7 +262,7 @@ export function ReceiptForm({
     if (isDirty && !window.confirm("Dữ liệu chưa lưu sẽ bị mất. Bạn có chắc muốn rời trang?")) {
       return;
     }
-    router.push("/receipts");
+    router.push(isEdit ? `/receipts/${receipt.id}` : "/receipts");
   }
 
   const hasEmptyProductRow = items.some((item) => !item.productId);
@@ -182,6 +280,7 @@ export function ReceiptForm({
         receiverName,
         note,
         items: items.map((item) => ({
+          id: item.id,
           productId: item.productId,
           unitPrice: item.unitPrice,
           deliveredQty: item.deliveredQty,
@@ -235,11 +334,7 @@ export function ReceiptForm({
             <label htmlFor="shift" className="text-sm font-medium">
               Ca *
             </label>
-            <Select
-              value={shift || null}
-              onValueChange={(value) => setShift(String(value))}
-              items={SHIFT_OPTIONS}
-            >
+            <Select value={shift || null} onValueChange={(value) => setShift(String(value))} items={SHIFT_OPTIONS}>
               <SelectTrigger id="shift" className="w-full">
                 <SelectValue placeholder="Chọn ca" />
               </SelectTrigger>
@@ -294,7 +389,7 @@ export function ReceiptForm({
             </p>
           ) : loadingProducts ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Đang tải sản phẩm...</p>
-          ) : availableProducts.length === 0 ? (
+          ) : products.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Nhà cung cấp này chưa có sản phẩm đang hoạt động.
             </p>
@@ -319,7 +414,7 @@ export function ReceiptForm({
               </TableHeader>
               <TableBody>
                 {items.map((item) => {
-                  const rowProducts = availableProducts.filter(
+                  const rowProducts = products.filter(
                     (p) => p.id === item.productId || !usedProductIds.has(p.id)
                   );
                   return (
@@ -352,11 +447,7 @@ export function ReceiptForm({
           />
           <SummaryField label="Tổng tiền" value={formatCurrency(summary.totalAmount)} />
           <SummaryField label="VAT 8%" value={formatCurrency(summary.vatAmount)} />
-          <SummaryField
-            label="Tổng sau VAT"
-            value={formatCurrency(summary.grandTotal)}
-            strong
-          />
+          <SummaryField label="Tổng sau VAT" value={formatCurrency(summary.grandTotal)} strong />
         </CardContent>
       </Card>
 
@@ -369,7 +460,7 @@ export function ReceiptForm({
           Hủy
         </Button>
         <Button type="button" onClick={handleSubmit} disabled={!canSubmit || isPending}>
-          {isPending ? "Đang lưu..." : "Lưu phiếu nhập"}
+          {isPending ? "Đang lưu..." : isEdit ? "Lưu thay đổi" : "Lưu phiếu nhập"}
         </Button>
       </div>
     </div>
@@ -392,11 +483,7 @@ function SummaryField({
       <p className="text-muted-foreground">{label}</p>
       <p
         className={
-          strong
-            ? "text-base font-semibold"
-            : emphasis
-              ? "font-medium text-destructive"
-              : "font-medium"
+          strong ? "text-base font-semibold" : emphasis ? "font-medium text-destructive" : "font-medium"
         }
       >
         {value}
