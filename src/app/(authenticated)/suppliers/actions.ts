@@ -76,47 +76,26 @@ export async function createSupplier(
   _prevState: SupplierFormState,
   formData: FormData
 ): Promise<SupplierFormState> {
-  // Correlates the checkpoints for one invocation in the Vercel function log.
-  // TEMP: remove once the production create-supplier issue is confirmed fixed.
-  const reqId = Math.random().toString(36).slice(2, 8);
-  console.log(`[createSupplier:${reqId}] action started`, {
-    fields: Array.from(formData.keys()),
-    code: formData.get("code"),
-    name: formData.get("name"),
-  });
-
-  const role = getCurrentRole();
-  console.log(`[createSupplier:${reqId}] role resolved`, { role });
-
-  if (!canManageSuppliers(role)) {
-    console.log(`[createSupplier:${reqId}] returned early: permission denied`, { role });
+  if (!canManageSuppliers(getCurrentRole())) {
     return { status: "error", message: FORBIDDEN_MESSAGE };
   }
-  console.log(`[createSupplier:${reqId}] permission passed`);
 
   const parsed = parseSupplierForm(formData);
   if (!parsed.success) {
-    const fieldErrors = z.flattenError(parsed.error).fieldErrors;
-    console.log(`[createSupplier:${reqId}] returned early: validation failed`, {
-      fieldErrors,
-    });
     return {
       status: "error",
       message: "Vui lòng kiểm tra lại thông tin.",
-      fieldErrors,
+      fieldErrors: z.flattenError(parsed.error).fieldErrors,
       values: readSubmittedValues(formData),
     };
   }
-  console.log(`[createSupplier:${reqId}] validation passed`);
 
   const missingEnv = [
     !process.env.NEXT_PUBLIC_SUPABASE_URL && "NEXT_PUBLIC_SUPABASE_URL",
     !process.env.SUPABASE_SERVICE_ROLE_KEY && "SUPABASE_SERVICE_ROLE_KEY",
   ].filter(Boolean);
   if (missingEnv.length > 0) {
-    console.error(`[createSupplier:${reqId}] returned early: missing env vars`, {
-      missingEnv,
-    });
+    console.error("[createSupplier] missing env vars", { missingEnv });
     return {
       status: "error",
       message: "Lỗi cấu hình hệ thống. Vui lòng liên hệ quản trị viên.",
@@ -128,7 +107,7 @@ export async function createSupplier(
   try {
     supabase = createAdminClient();
   } catch (e) {
-    console.error(`[createSupplier:${reqId}] returned early: createAdminClient threw`, {
+    console.error("[createSupplier] createAdminClient threw", {
       message: e instanceof Error ? e.message : String(e),
     });
     return {
@@ -138,7 +117,6 @@ export async function createSupplier(
     };
   }
 
-  console.log(`[createSupplier:${reqId}] before Supabase insert`);
   const { error } = await supabase.from("suppliers").insert({
     code: parsed.data.code,
     name: parsed.data.name,
@@ -146,15 +124,12 @@ export async function createSupplier(
     address: parsed.data.address ?? null,
     note: parsed.data.note ?? null,
   });
-  console.log(`[createSupplier:${reqId}] after Supabase insert`, {
-    success: !error,
-    errorCode: error?.code ?? null,
-    errorMessage: error?.message ?? null,
-    errorDetails: error?.details ?? null,
-    errorHint: error?.hint ?? null,
-  });
 
   if (error) {
+    console.error("[createSupplier] insert failed", {
+      code: error.code,
+      message: error.message,
+    });
     if (error.code === "23505") {
       return {
         status: "error",
@@ -170,9 +145,7 @@ export async function createSupplier(
     };
   }
 
-  console.log(`[createSupplier:${reqId}] revalidate started`);
   revalidatePath("/suppliers");
-  console.log(`[createSupplier:${reqId}] action completed`, { status: "success" });
   return { status: "success", message: "Đã thêm nhà cung cấp." };
 }
 

@@ -31,3 +31,9 @@ export function canCreateReceipts(role: Role): boolean {
 export function canEditReceipts(role: Role): boolean {
   return role === "admin" || role === "staff";
 }
+
+// Mirrors canCreateReceipts: admin/staff can record supplier invoices,
+// viewer is read-only. Phase 11 only asks for create (no edit route yet).
+export function canCreateInvoices(role: Role): boolean {
+  return role === "admin" || role === "staff";
+}

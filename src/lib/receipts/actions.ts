@@ -4,39 +4,17 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 import { canCreateReceipts, canEditReceipts, getCurrentRole } from "@/lib/auth/role";
+import { getSupplierProducts, type SupplierProduct } from "@/lib/products/actions";
+import { validateSupplierAndItems } from "@/lib/products/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 const FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này.";
 
-export type SupplierProduct = {
-  id: string;
-  sku: string;
-  name: string;
-  unit: string;
-  current_price: number;
-};
-
-export async function getSupplierProducts(
-  supplierId: string
-): Promise<{ status: "success"; data: SupplierProduct[] } | { status: "error"; message: string }> {
-  if (!supplierId) {
-    return { status: "success", data: [] };
-  }
-
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from("products")
-    .select("id, sku, name, unit, current_price")
-    .eq("supplier_id", supplierId)
-    .eq("is_active", true)
-    .order("sku", { ascending: true });
-
-  if (error) {
-    return { status: "error", message: "Không thể tải danh sách sản phẩm." };
-  }
-
-  return { status: "success", data: data as SupplierProduct[] };
-}
+// Re-exported for existing imports (receipt-form.tsx, receipt-item-row.tsx).
+// getSupplierProducts must originate from a "use server" file (see
+// @/lib/products/actions) since these components call it directly — a plain
+// re-export here preserves that server-action reference correctly.
+export { getSupplierProducts, type SupplierProduct };
 
 // Some seed rows use hand-picked ids (e.g. a0000000-0000-0000-0000-000000000001)
 // that are valid Postgres uuid values but not RFC-4122-version-compliant, so
@@ -83,45 +61,6 @@ export type ReceiptFormState = {
   fieldErrors?: Record<string, string[]>;
   receipt?: { id: string; receiptNo: string };
 };
-
-// Shared by create and update: the chosen supplier must be active, and every
-// item's product must exist, belong to that supplier, and be active. This is
-// the server-side re-validation required even though the UI already limits
-// the pickers — a request could otherwise submit a stale/tampered selection
-// (e.g. a supplier changed to inactive between page load and submit).
-async function validateSupplierAndItems(
-  supabase: ReturnType<typeof createAdminClient>,
-  supplierId: string,
-  items: { productId: string }[]
-): Promise<string | null> {
-  const { data: supplier, error: supplierError } = await supabase
-    .from("suppliers")
-    .select("id, is_active")
-    .eq("id", supplierId)
-    .maybeSingle();
-
-  if (supplierError || !supplier) {
-    return "Nhà cung cấp không tồn tại.";
-  }
-  if (!supplier.is_active) {
-    return "Nhà cung cấp này đã ngừng hoạt động.";
-  }
-
-  const productIds = items.map((i) => i.productId);
-  const { data: products, error: productsError } = await supabase
-    .from("products")
-    .select("id, supplier_id, is_active")
-    .in("id", productIds);
-
-  if (productsError || !products || products.length !== productIds.length) {
-    return "Có sản phẩm không tồn tại trong hệ thống.";
-  }
-  const invalidProduct = products.find((p) => p.supplier_id !== supplierId || !p.is_active);
-  if (invalidProduct) {
-    return "Có sản phẩm không thuộc nhà cung cấp đã chọn hoặc đã ngừng kinh doanh.";
-  }
-  return null;
-}
 
 export async function createReceipt(
   _prevState: ReceiptFormState,
