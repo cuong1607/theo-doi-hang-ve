@@ -6,43 +6,71 @@ Hệ thống quản lý và theo dõi hàng về — giúp người dùng theo d
 
 ## Tech Stack
 
-| Layer       | Technology          |
-| ----------- | ------------------- |
+| Layer       | Technology              |
+| ----------- | ----------------------- |
 | Framework   | Next.js 16 (App Router) |
-| Language    | TypeScript          |
-| Styling     | Tailwind CSS 4      |
-| Linting     | ESLint 9            |
-| Runtime     | Node.js             |
-| Package Mgr | npm                 |
+| Language    | TypeScript              |
+| Styling     | Tailwind CSS 4          |
+| UI          | shadcn/ui (base-nova)   |
+| Database    | Supabase (PostgreSQL)   |
+| Auth        | Supabase Auth           |
+| Linting     | ESLint 9                |
+| Runtime     | Node.js                 |
+| Package Mgr | npm                     |
 
-## Cấu trúc thư mục
+## Thiết lập môi trường
 
-```
-theo-doi-hang-ve/
-├── src/
-│   └── app/
-│       ├── layout.tsx      # Root layout
-│       ├── page.tsx         # Trang chủ
-│       ├── globals.css      # Global styles + Tailwind
-│       └── favicon.ico
-├── public/                  # Static assets
-├── package.json
-├── tsconfig.json
-├── next.config.ts
-├── eslint.config.mjs
-└── postcss.config.mjs
-```
-
-## Chạy local
+### 1. Cài dependencies
 
 ```bash
-# Cài dependencies
 npm install
+```
 
-# Chạy development server
+### 2. Tạo file `.env.local`
+
+Copy file `.env.example` và điền thông tin Supabase project:
+
+```bash
+cp .env.example .env.local
+```
+
+Mở `.env.local` và điền giá trị:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
+```
+
+**Cách lấy giá trị:**
+1. Truy cập [Supabase Dashboard](https://supabase.com/dashboard)
+2. Chọn project của bạn
+3. Vào **Settings** → **API**
+4. Copy **Project URL** → `NEXT_PUBLIC_SUPABASE_URL`
+5. Copy **anon public** key → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+
+> ⚠️ **Không commit file `.env.local`** vào git. File này đã được thêm trong `.gitignore`.
+
+### 3. Kiểm tra kết nối Supabase
+
+Chạy dev server và truy cập health check:
+
+```bash
 npm run dev
+# Mở http://localhost:3000/api/health
+```
 
-# Mở trình duyệt tại http://localhost:3000
+Nếu thành công, bạn sẽ thấy:
+
+```json
+{
+  "status": "ok",
+  "message": "Supabase client khởi tạo thành công.",
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": true,
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": true
+  },
+  "supabaseUrl": "https://your-project-id.supabase.co"
+}
 ```
 
 ## Scripts
