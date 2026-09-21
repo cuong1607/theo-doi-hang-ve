@@ -2,6 +2,7 @@ import { AlertTriangle, PackageSearch } from "lucide-react";
 
 import { canManageSuppliers, getCurrentRole } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { escapeIlikeTerm } from "@/lib/supabase/search";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -12,11 +13,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ListPagination } from "@/components/list-pagination";
 
 import { CreateSupplierButton } from "./create-supplier-button";
 import { SearchInput } from "./search-input";
 import { SupplierRowActions } from "./supplier-row-actions";
-import { SuppliersPagination } from "./suppliers-pagination";
 
 const PAGE_SIZE = 10;
 
@@ -31,11 +32,11 @@ type SupplierListRow = {
   products: { count: number }[] | null;
 };
 
-// Escape characters that are meaningful to PostgREST's `.or()` filter syntax
-// (comma/parenthesis separate conditions) and to ILIKE wildcards, so search
-// input can't be used to smuggle extra filter conditions.
-function escapeSearchTerm(value: string) {
-  return value.replace(/[%_]/g, (m) => `\\${m}`).replace(/"/g, '\\"');
+// PostgREST's `.or()` filter syntax treats commas/parentheses as condition
+// separators; wrapping the value in double quotes (with `"` itself escaped)
+// keeps a raw search term from being interpreted as extra filter conditions.
+function escapeOrFilterTerm(value: string) {
+  return escapeIlikeTerm(value).replace(/"/g, '\\"');
 }
 
 async function getSuppliers(q: string, page: number) {
@@ -52,7 +53,7 @@ async function getSuppliers(q: string, page: number) {
     .range(from, to);
 
   if (q) {
-    const term = escapeSearchTerm(q);
+    const term = escapeOrFilterTerm(q);
     query = query.or(`code.ilike."%${term}%",name.ilike."%${term}%"`);
   }
 
@@ -145,7 +146,17 @@ export default async function SuppliersPage({
                   ))}
                 </TableBody>
               </Table>
-              <SuppliersPagination page={page} totalPages={totalPages} q={q} />
+              <ListPagination
+                page={page}
+                totalPages={totalPages}
+                buildHref={(p) => {
+                  const params = new URLSearchParams();
+                  if (q) params.set("q", q);
+                  if (p > 1) params.set("page", String(p));
+                  const qs = params.toString();
+                  return qs ? `/suppliers?${qs}` : "/suppliers";
+                }}
+              />
             </>
           )}
         </CardContent>

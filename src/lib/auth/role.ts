@@ -17,3 +17,7 @@ export function getCurrentRole(): Role {
 export function canManageSuppliers(role: Role): boolean {
   return role === "admin";
 }
+
+export function canManageProducts(role: Role): boolean {
+  return role === "admin";
+}
