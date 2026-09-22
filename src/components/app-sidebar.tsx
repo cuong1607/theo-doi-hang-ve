@@ -11,6 +11,7 @@ import {
   Box,
   Truck,
   Users,
+  Wallet,
 } from "lucide-react";
 
 import {
@@ -63,6 +64,11 @@ const navGroups = [
         title: "Theo dõi hàng còn phải về",
         href: "/outstanding",
         icon: PackageSearch,
+      },
+      {
+        title: "Công nợ NCC",
+        href: "/debts",
+        icon: Wallet,
       },
     ],
   },
