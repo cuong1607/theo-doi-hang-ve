@@ -1,0 +1,3815 @@
+{
+  "productResult": {
+    "inserted": 0,
+    "skus": []
+  },
+  "receiptOutcomes": [
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-03-16:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260316-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-03-23:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260323-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-03-24:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260324-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-03-25:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260325-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-03-25:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260325-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-03-27:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260327-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-03-27:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260327-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-03-28:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260328-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-03-30:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260330-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-03-30:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260330-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-03-30:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260330-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-03-31:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260331-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-01:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260401-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-01:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260401-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-01:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260401-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-02:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260402-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-02:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260402-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-03:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260403-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-04:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260404-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-05:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260405-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-05:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260405-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-06:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260406-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-06:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260406-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-07:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260407-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-07:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260407-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-08:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260408-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-08:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260408-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-08:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260408-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-09:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260409-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-09:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260409-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-09:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260409-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-10:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260410-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-10:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260410-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-10:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260410-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-11:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260411-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-11:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260411-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-11:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260411-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-12:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260412-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-12:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260412-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-13:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260413-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-13:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260413-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-14:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260414-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-15:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260415-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-15:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260415-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-15:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260415-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-16:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260416-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-16:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260416-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-17:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260417-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-17:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260417-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-18:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260418-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-18:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260418-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-20:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260420-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-20:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260420-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-21:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260421-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-22:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260422-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-22:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260422-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-22:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260422-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-23:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260423-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-23:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260423-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-24:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260424-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-24:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260424-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-24:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260424-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-25:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260425-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-25:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260425-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-27:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260427-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-27:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260427-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-27:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260427-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-28:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260428-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-29:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260429-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-29:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260429-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-04-29:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260429-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-02:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260502-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-02:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260502-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-02:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260502-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-02:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260502-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-03:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260503-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-03:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260503-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-04:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260504-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-04:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260504-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-04:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260504-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-04:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260504-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-05:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260505-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-05:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260505-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-05:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260505-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-05:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260505-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-06:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260506-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-06:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260506-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-06:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260506-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-06:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260506-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-07:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260507-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-07:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260507-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-07:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260507-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-07:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260507-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-08:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260508-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-08:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260508-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-08:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260508-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-09:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260509-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-10:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260510-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-10:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260510-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-11:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260511-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-11:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260511-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-12:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260512-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-12:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260512-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-12:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260512-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-12:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260512-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-13:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260513-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-13:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260513-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-14:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260514-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-14:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260514-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-14:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260514-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-15:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260515-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-15:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260515-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-15:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260515-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-16:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260516-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-16:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260516-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-16:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260516-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-17:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260517-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-18:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260518-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-18:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260518-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-18:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260518-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-18:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260518-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-19:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260519-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-19:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260519-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-20:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260520-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-20:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260520-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-20:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260520-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-21:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260521-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-21:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260521-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-21:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260521-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-21:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260521-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-22:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260522-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-22:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260522-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-22:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260522-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-23:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260523-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-23:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260523-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-24:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260524-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-24:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260524-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-24:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260524-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-25:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260525-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-25:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260525-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-25:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260525-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-26:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260526-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-26:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260526-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-26:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260526-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-26:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260526-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-27:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260527-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-27:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260527-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-28:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260528-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-28:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260528-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-29:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260529-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-29:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260529-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-29:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260529-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-29:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260529-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-30:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260530-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-30:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260530-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-05-31:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260531-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-01:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260601-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-01:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260601-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-01:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260601-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-01:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260601-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-01:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260601-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-02:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260602-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-02:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260602-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-02:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260602-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-03:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260603-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-03:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260603-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-03:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260603-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-03:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260603-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-04:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260604-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-04:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260604-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-04:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260604-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-04:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260604-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-04:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260604-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-05:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260605-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-05:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260605-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-05:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260605-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-05:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260605-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-06:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260606-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-06:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260606-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-06:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260606-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-06:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260606-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-06:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260606-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-07:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260607-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-07:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260607-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-07:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260607-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-08:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260608-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-08:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260608-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-08:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260608-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-08:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260608-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-09:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260609-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-09:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260609-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-09:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260609-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-09:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260609-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-10:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260610-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-10:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260610-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-10:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260610-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-10:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260610-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-10:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260610-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-10:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260610-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-11:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260611-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-11:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260611-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-11:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260611-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-11:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260611-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-11:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260611-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-12:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260612-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-12:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260612-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-12:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260612-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-12:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260612-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-12:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260612-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-13:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260613-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-13:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260613-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-13:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260613-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-14:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260614-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-14:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260614-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-14:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260614-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-15:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260615-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-15:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260615-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-15:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260615-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-15:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260615-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-16:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260616-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-16:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260616-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-16:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260616-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-16:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260616-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-17:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260617-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-17:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260617-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-17:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260617-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-17:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260617-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-17:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260617-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-18:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260618-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-18:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260618-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-18:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260618-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-19:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260619-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-19:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260619-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-19:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260619-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-19:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260619-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-19:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260619-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-20:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260620-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-20:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260620-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-20:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260620-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-20:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260620-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-20:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260620-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-21:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260621-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-21:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260621-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-21:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260621-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-22:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260622-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-22:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260622-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-22:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260622-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-22:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260622-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-22:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260622-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-23:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260623-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-23:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260623-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-23:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260623-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-23:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260623-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-23:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260623-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-24:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260624-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-24:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260624-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-24:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260624-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-24:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260624-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-24:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260624-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-25:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260625-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-25:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260625-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-25:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260625-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-25:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260625-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-25:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260625-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-26:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260626-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-26:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260626-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-26:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260626-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-26:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260626-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-27:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260627-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-27:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260627-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-27:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260627-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-27:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260627-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-27:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260627-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-27:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260627-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-28:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260628-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-28:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260628-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-29:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260629-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-29:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260629-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-29:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260629-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-29:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260629-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-30:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260630-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-30:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260630-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-30:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260630-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-30:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260630-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-30:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260630-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-06-30:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260630-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-01:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260701-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-01:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260701-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-01:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260701-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-01:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260701-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-02:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260702-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-02:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260702-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-02:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260702-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-02:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260702-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-02:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260702-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-03:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260703-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-03:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260703-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-03:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260703-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-03:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260703-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-04:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260704-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-04:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260704-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-04:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260704-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-04:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260704-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-04:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260704-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-05:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260705-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-05:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260705-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-06:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260706-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-06:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260706-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-06:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260706-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-06:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260706-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-06:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260706-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-07:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260707-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-07:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260707-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-07:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260707-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-07:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260707-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-07:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260707-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-07:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260707-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-08:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260708-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-08:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260708-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-08:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260708-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-08:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260708-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-08:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260708-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-09:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260709-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-09:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260709-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-09:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260709-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-09:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260709-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-09:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260709-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-09:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260709-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-10:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260710-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-10:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260710-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-10:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260710-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-10:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260710-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-10:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260710-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-11:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260711-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-11:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260711-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-11:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260711-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-11:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260711-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-11:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260711-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-11:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260711-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-12:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260712-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-12:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260712-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-13:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260713-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-13:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260713-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-13:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260713-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-13:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260713-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-14:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260714-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-14:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260714-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-14:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260714-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-14:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260714-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-14:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260714-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-15:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260715-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-15:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260715-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-15:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260715-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-15:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260715-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-15:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260715-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-15:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260715-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-16:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260716-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-16:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260716-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-16:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260716-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-16:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260716-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-17:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260717-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-17:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260717-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-17:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260717-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-17:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260717-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-17:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260717-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-18:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260718-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-18:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260718-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-18:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260718-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-18:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260718-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-18:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260718-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-19:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260719-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-19:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260719-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-19:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260719-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-20:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260720-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-20:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260720-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-20:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260720-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-20:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260720-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-21:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260721-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-21:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260721-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-21:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260721-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-21:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260721-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-21:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260721-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-21:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260721-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-22:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260722-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-22:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260722-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-22:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260722-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-22:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260722-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-22:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260722-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-22:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260722-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-23:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260723-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-23:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260723-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-23:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260723-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-23:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260723-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-23:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260723-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-24:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260724-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-24:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260724-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-24:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260724-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-24:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260724-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-25:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260725-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-25:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260725-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-25:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260725-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-25:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260725-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-25:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260725-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-25:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260725-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-26:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260726-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-26:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260726-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-26:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260726-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-27:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260727-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-27:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260727-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-27:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260727-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-27:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260727-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-27:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260727-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-28:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260728-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-28:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260728-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-28:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260728-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-28:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260728-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-29:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260729-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-29:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260729-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-29:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260729-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-29:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260729-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-29:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260729-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-30:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260730-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-30:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260730-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-30:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260730-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-30:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260730-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-30:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260730-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-30:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260730-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-31:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260731-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-31:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260731-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-31:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260731-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-31:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260731-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-31:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260731-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-07-31:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260731-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-01:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260801-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-01:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260801-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-01:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260801-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-01:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260801-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-01:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260801-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-02:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260802-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-02:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260802-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-02:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260802-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-03:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260803-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-03:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260803-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-03:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260803-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-03:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260803-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-04:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260804-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-04:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260804-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-04:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260804-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-04:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260804-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-04:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260804-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-04:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260804-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-05:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260805-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-05:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260805-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-05:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260805-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-05:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260805-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-05:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260805-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-06:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260806-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-06:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260806-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-06:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260806-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-06:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260806-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-06:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260806-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-07:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260807-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-07:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260807-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-07:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260807-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-07:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260807-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-07:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260807-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-07:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260807-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-08:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260808-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-08:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260808-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-08:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260808-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-08:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260808-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-08:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260808-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-08:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260808-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-09:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260809-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-09:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260809-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-09:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260809-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-10:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260810-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-10:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260810-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-10:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260810-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-10:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260810-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-10:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260810-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-11:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260811-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-11:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260811-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-11:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260811-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-11:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260811-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-12:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260812-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-12:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260812-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-12:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260812-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-12:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260812-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-12:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260812-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-13:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260813-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-13:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260813-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-13:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260813-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-13:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260813-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-13:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260813-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-13:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260813-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-14:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260814-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-14:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260814-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-14:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260814-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-14:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260814-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-14:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260814-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-14:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260814-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-15:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260815-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-15:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260815-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-15:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260815-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-15:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260815-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-15:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260815-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-15:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260815-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-16:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260816-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-16:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260816-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-17:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260817-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-17:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260817-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-17:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260817-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-17:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260817-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-17:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260817-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-17:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260817-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-18:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260818-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-18:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260818-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-18:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260818-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-18:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260818-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-18:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260818-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-18:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260818-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-19:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260819-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-19:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260819-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-19:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260819-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-19:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260819-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-19:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260819-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-20:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260820-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-20:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260820-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-20:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260820-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-20:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260820-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-20:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260820-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-21:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260821-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-21:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260821-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-21:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260821-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-21:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260821-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-21:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260821-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-21:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260821-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-22:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260822-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-22:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260822-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-22:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260822-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-22:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260822-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-22:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260822-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-24:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260824-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-24:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260824-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-24:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260824-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-24:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260824-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-24:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260824-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-24:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260824-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-25:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260825-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-25:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260825-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-25:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260825-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-25:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260825-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-25:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260825-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-26:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260826-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-26:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260826-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-26:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260826-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-26:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260826-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-27:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260827-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-27:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260827-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-27:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260827-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-27:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260827-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-27:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260827-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-27:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260827-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-28:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260828-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-28:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260828-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-28:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260828-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-28:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260828-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-28:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260828-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-29:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260829-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-29:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260829-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-29:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260829-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-29:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260829-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-29:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260829-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-29:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260829-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-31:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260831-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-31:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260831-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-31:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260831-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-31:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260831-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-31:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260831-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-08-31:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260831-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-01:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260901-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-01:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260901-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-01:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260901-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-01:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260901-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-01:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260901-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-01:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260901-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-01:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260901-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-01:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260901-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-01:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260901-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-03:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260903-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-03:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260903-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-03:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260903-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-03:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260903-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-03:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260903-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-03:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260903-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-03:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260903-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-03:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260903-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-03:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260903-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-03:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260903-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-04:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260904-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-04:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260904-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-04:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260904-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-04:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260904-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-04:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260904-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-04:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260904-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-04:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260904-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-04:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260904-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-04:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260904-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-04:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260904-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-05:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260905-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-05:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260905-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-05:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260905-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-05:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260905-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-05:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260905-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-05:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260905-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-05:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260905-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-05:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260905-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-05:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260905-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-05:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260905-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-06:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260906-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-06:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260906-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-06:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260906-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-06:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260906-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-06:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260906-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-07:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260907-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-07:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260907-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-07:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260907-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-07:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260907-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-07:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260907-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-07:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260907-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-07:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260907-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-07:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260907-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-07:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260907-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-07:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260907-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-08:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260908-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-08:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260908-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-08:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260908-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-08:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260908-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-08:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260908-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-08:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260908-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-08:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260908-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-08:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260908-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-08:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260908-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-08:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260908-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-09:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260909-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-09:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260909-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-09:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260909-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-09:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260909-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-09:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260909-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-09:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260909-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-09:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260909-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-09:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260909-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-09:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260909-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-09:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260909-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-10:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260910-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-10:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260910-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-10:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260910-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-10:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260910-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-10:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260910-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-10:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260910-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-10:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260910-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-10:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260910-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-10:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260910-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-11:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260911-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-11:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260911-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-11:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260911-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-11:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260911-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-11:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260911-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-11:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260911-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-11:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260911-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-11:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260911-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-11:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260911-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-11:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260911-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-12:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260912-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-12:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260912-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-12:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260912-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-12:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260912-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-12:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260912-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-12:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260912-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-12:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260912-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-12:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260912-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-12:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260912-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-12:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260912-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-13:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260913-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-13:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260913-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-13:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260913-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-13:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260913-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-13:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260913-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-14:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260914-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-14:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260914-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-14:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260914-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-14:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260914-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-14:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260914-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-14:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260914-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-14:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260914-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-14:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260914-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-14:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260914-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-14:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260914-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-15:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260915-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-15:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260915-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-15:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260915-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-15:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260915-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-15:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260915-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-15:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260915-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-15:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260915-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-15:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260915-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-15:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260915-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-15:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260915-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-16:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260916-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-16:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260916-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-16:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260916-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-16:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260916-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-16:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260916-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-16:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260916-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-16:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260916-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-16:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260916-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-16:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260916-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-16:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260916-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-17:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260917-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-17:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260917-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-17:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260917-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-17:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260917-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-17:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260917-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-17:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260917-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-17:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260917-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-17:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260917-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-17:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260917-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-17:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260917-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-18:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260918-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-18:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260918-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-18:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260918-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-18:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260918-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-18:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260918-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-18:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260918-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-18:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260918-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-18:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260918-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-18:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260918-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-19:afternoon:NCC01",
+      "receiptNo": "LEGACY-PN-20260919-C-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-19:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260919-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-19:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260919-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-19:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260919-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-19:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260919-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-19:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260919-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-19:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260919-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-19:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260919-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-19:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260919-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-19:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260919-S-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-21:afternoon:NCC02",
+      "receiptNo": "LEGACY-PN-20260921-C-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-21:afternoon:NCC03",
+      "receiptNo": "LEGACY-PN-20260921-C-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-21:afternoon:NCC04",
+      "receiptNo": "LEGACY-PN-20260921-C-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-21:afternoon:NCC05",
+      "receiptNo": "LEGACY-PN-20260921-C-NCC05",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-21:morning:NCC01",
+      "receiptNo": "LEGACY-PN-20260921-S-NCC01",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-21:morning:NCC02",
+      "receiptNo": "LEGACY-PN-20260921-S-NCC02",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-21:morning:NCC03",
+      "receiptNo": "LEGACY-PN-20260921-S-NCC03",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-21:morning:NCC04",
+      "receiptNo": "LEGACY-PN-20260921-S-NCC04",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:RECEIPT:2026-09-21:morning:NCC05",
+      "receiptNo": "LEGACY-PN-20260921-S-NCC05",
+      "inserted": true
+    }
+  ],
+  "invoiceOutcomes": [
+    {
+      "legacyRef": "LEGACY:INVOICE:2026-09-19T17:35:15.874Z",
+      "invoiceNo": "LEGACY-HD-20260914-NCC05-1735",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:INVOICE:2026-09-19T17:37:50.218Z",
+      "invoiceNo": "LEGACY-HD-20260916-NCC04-1737",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:INVOICE:2026-09-22T09:47:08.521Z",
+      "invoiceNo": "LEGACY-HD-20260921-NCC01-0947",
+      "inserted": true
+    },
+    {
+      "legacyRef": "LEGACY:INVOICE:2026-09-22T09:49:47.182Z",
+      "invoiceNo": "LEGACY-HD-20260921-NCC01-0949",
+      "inserted": true
+    }
+  ]
+}

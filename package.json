@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "npx eslint ."
+    "lint": "npx eslint .",
+    "import:legacy:preview": "node --env-file=.env.local scripts/legacy-import/run.ts preview",
+    "import:legacy:run": "node --env-file=.env.local scripts/legacy-import/run.ts import"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

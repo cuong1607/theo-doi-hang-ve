@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# legacy source data (already imported into Supabase, not tracked)
+src/THEO DOI HANG VE.xlsx
