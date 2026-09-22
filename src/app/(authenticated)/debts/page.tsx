@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, FileClock, Receipt, Wallet } from "lucide-react";
 
+import { canCreatePayments, getCurrentRole } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getDebtOverview } from "@/lib/debt/overview";
 import { getInvoiceDebtList, type PaymentStatus } from "@/lib/debt/invoice-debt";
@@ -71,6 +72,7 @@ export default async function DebtsPage({
   const page = Math.max(1, Number(params.page) || 1);
 
   const filters = { fromDate, toDate, supplierId: supplierId || undefined, paymentStatus, search };
+  const canPay = canCreatePayments(getCurrentRole());
 
   const [
     suppliers,
@@ -215,7 +217,7 @@ export default async function DebtsPage({
               <CardTitle>Chi tiết hóa đơn công nợ</CardTitle>
             </CardHeader>
             <CardContent>
-              <DebtInvoiceSelection rows={invoiceRows} />
+              <DebtInvoiceSelection rows={invoiceRows} canPay={canPay} />
               {invoiceRows.length > 0 && (
                 <ListPagination
                   page={page}

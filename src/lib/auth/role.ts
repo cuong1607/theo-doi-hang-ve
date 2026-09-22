@@ -37,3 +37,9 @@ export function canEditReceipts(role: Role): boolean {
 export function canCreateInvoices(role: Role): boolean {
   return role === "admin" || role === "staff";
 }
+
+// Mirrors canCreateInvoices: admin/staff can record a payment against
+// invoices, viewer can only read debt/payment history (Phase CN3 spec).
+export function canCreatePayments(role: Role): boolean {
+  return role === "admin" || role === "staff";
+}

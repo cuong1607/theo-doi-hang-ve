@@ -12,6 +12,7 @@ import {
   Truck,
   Users,
   Wallet,
+  Receipt,
 } from "lucide-react";
 
 import {
@@ -69,6 +70,11 @@ const navGroups = [
         title: "Công nợ NCC",
         href: "/debts",
         icon: Wallet,
+      },
+      {
+        title: "Lịch sử thanh toán",
+        href: "/payments",
+        icon: Receipt,
       },
     ],
   },

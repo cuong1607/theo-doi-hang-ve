@@ -13,25 +13,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const STATUS_OPTIONS = [
-  { label: "Tất cả trạng thái", value: "all" },
-  { label: "Chưa thanh toán", value: "unpaid" },
-  { label: "Thanh toán một phần", value: "partial" },
-  { label: "Đã thanh toán", value: "paid" },
-];
-
-export function DebtFilters({
+export function PaymentFilters({
   fromDate,
   toDate,
   supplierId,
-  status,
   search,
   suppliers,
 }: {
   fromDate: string;
   toDate: string;
   supplierId: string;
-  status: string;
   search: string;
   suppliers: { id: string; code: string; name: string }[];
 }) {
@@ -48,11 +39,6 @@ export function DebtFilters({
       params.delete(key);
     }
     params.delete("page");
-    // Any filter change dismisses the "just paid" banner from the last
-    // payment — it's tied to the invoice list that was on screen then, not
-    // to whatever the new filter is about to show.
-    params.delete("paidCount");
-    params.delete("paidTotal");
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname);
   }
@@ -70,11 +56,11 @@ export function DebtFilters({
   return (
     <div className="flex flex-wrap items-end gap-2">
       <div className="space-y-1.5">
-        <label htmlFor="debtFrom" className="text-xs font-medium text-muted-foreground">
+        <label htmlFor="payFrom" className="text-xs font-medium text-muted-foreground">
           Từ ngày
         </label>
         <Input
-          id="debtFrom"
+          id="payFrom"
           type="date"
           defaultValue={fromDate}
           onChange={(e) => updateParam("from", e.target.value)}
@@ -82,11 +68,11 @@ export function DebtFilters({
         />
       </div>
       <div className="space-y-1.5">
-        <label htmlFor="debtTo" className="text-xs font-medium text-muted-foreground">
+        <label htmlFor="payTo" className="text-xs font-medium text-muted-foreground">
           Đến ngày
         </label>
         <Input
-          id="debtTo"
+          id="payTo"
           type="date"
           defaultValue={toDate}
           onChange={(e) => updateParam("to", e.target.value)}
@@ -94,7 +80,7 @@ export function DebtFilters({
         />
       </div>
       <div className="space-y-1.5">
-        <label htmlFor="debtSupplier" className="text-xs font-medium text-muted-foreground">
+        <label htmlFor="paySupplier" className="text-xs font-medium text-muted-foreground">
           Nhà cung cấp
         </label>
         <Select
@@ -102,7 +88,7 @@ export function DebtFilters({
           onValueChange={(value) => updateParam("supplier", value === "all" ? "" : String(value))}
           items={supplierItems}
         >
-          <SelectTrigger id="debtSupplier" className="w-[220px]">
+          <SelectTrigger id="paySupplier" className="w-[220px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -116,37 +102,16 @@ export function DebtFilters({
         </Select>
       </div>
       <div className="space-y-1.5">
-        <label htmlFor="debtStatus" className="text-xs font-medium text-muted-foreground">
-          Trạng thái
-        </label>
-        <Select
-          value={status || "all"}
-          onValueChange={(value) => updateParam("status", value === "all" ? "" : String(value))}
-          items={STATUS_OPTIONS}
-        >
-          <SelectTrigger id="debtStatus" className="w-[190px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((opt) => (
-              <SelectItem key={opt.value} value={opt.value}>
-                {opt.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-1.5">
-        <label htmlFor="debtSearch" className="text-xs font-medium text-muted-foreground">
+        <label htmlFor="paySearch" className="text-xs font-medium text-muted-foreground">
           Tìm kiếm
         </label>
-        <div className="relative w-[200px]">
+        <div className="relative w-[220px]">
           <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            id="debtSearch"
+            id="paySearch"
             defaultValue={search}
             onChange={(e) => updateParamDebounced("q", e.target.value)}
-            placeholder="Tìm số hóa đơn..."
+            placeholder="Số HĐ, NCC, ghi chú..."
             className="pl-8"
           />
         </div>
