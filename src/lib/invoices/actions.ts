@@ -6,6 +6,7 @@ import { z } from "zod";
 import { canCreateInvoices, getCurrentRole } from "@/lib/auth/role";
 import { validateSupplierAndItems } from "@/lib/products/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { calculateInvoiceFinancials, type SupplierType } from "@/lib/invoices/financials";
 
 const FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này.";
 
@@ -28,6 +29,12 @@ const invoiceSchema = z.object({
   invoiceNo: z.string().trim().min(1, "Số hóa đơn là bắt buộc.").max(100, "Số hóa đơn tối đa 100 ký tự."),
   invoiceDate: z.string().min(1, "Vui lòng chọn ngày hóa đơn."),
   note: z.string().trim().max(1000).optional(),
+  // Financial inputs only — the client never sends (and this schema never
+  // accepts) subtotal/discount_amount/vat_amount/final_amount. Those are
+  // always derived server-side by calculateInvoiceFinancials below.
+  discountType: z.enum(["percent", "fixed_amount"]).nullable().optional(),
+  discountValue: z.coerce.number().nullable().optional(),
+  vatRate: z.coerce.number().nullable().optional(),
   items: z
     .array(invoiceItemSchema)
     .min(1, "Hóa đơn phải có ít nhất 1 sản phẩm.")
@@ -74,6 +81,32 @@ export async function createInvoice(
     return { status: "error", message: validationError };
   }
 
+  // supplier_type is the source of truth for which financial rules apply —
+  // always read fresh from the DB, never trusted from client input.
+  const { data: supplierRow, error: supplierError } = await supabase
+    .from("suppliers")
+    .select("supplier_type")
+    .eq("id", parsed.data.supplierId)
+    .maybeSingle();
+  if (supplierError || !supplierRow) {
+    return { status: "error", message: "Nhà cung cấp không tồn tại." };
+  }
+
+  const financials = calculateInvoiceFinancials({
+    supplierType: supplierRow.supplier_type as SupplierType,
+    items: parsed.data.items.map((i) => ({ quantity: i.quantity, unitPrice: i.unitPrice })),
+    discountType: parsed.data.discountType ?? null,
+    discountValue: parsed.data.discountValue ?? null,
+    vatRate: parsed.data.vatRate ?? null,
+  });
+  if (!financials.ok) {
+    return {
+      status: "error",
+      message: financials.error,
+      fieldErrors: financials.field ? { [financials.field]: [financials.error] } : undefined,
+    };
+  }
+
   const { data, error } = await supabase.rpc("create_invoice", {
     p_supplier_id: parsed.data.supplierId,
     p_invoice_no: parsed.data.invoiceNo,
@@ -85,6 +118,13 @@ export async function createInvoice(
       unit_price: i.unitPrice,
       quantity: i.quantity,
     })),
+    p_subtotal: financials.data.subtotal,
+    p_discount_type: financials.data.discountType,
+    p_discount_value: financials.data.discountValue,
+    p_discount_amount: financials.data.discountAmount,
+    p_vat_rate: financials.data.vatRate,
+    p_vat_amount: financials.data.vatAmount,
+    p_final_amount: financials.data.finalAmount,
   });
 
   if (error) {

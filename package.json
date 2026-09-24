@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "npx eslint .",
+    "test": "node --env-file=.env.local --test src/lib/invoices/financials.test.ts src/lib/invoices/snapshot.integration.test.ts",
     "import:legacy:preview": "node --env-file=.env.local scripts/legacy-import/run.ts preview",
     "import:legacy:run": "node --env-file=.env.local scripts/legacy-import/run.ts import"
   },

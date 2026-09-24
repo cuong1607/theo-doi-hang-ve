@@ -15,7 +15,7 @@ async function getActiveSuppliers() {
   const supabase = createAdminClient();
   const { data } = await supabase
     .from("suppliers")
-    .select("id, code, name")
+    .select("id, code, name, supplier_type")
     .eq("is_active", true)
     .order("code", { ascending: true });
   return data ?? [];

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { useFormStatus } from "react-dom";
 
 import { Button } from "@/components/ui/button";
@@ -13,10 +13,22 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import { createSupplier, updateSupplier, type SupplierFormState } from "./actions";
 
 const initialState: SupplierFormState = { status: "idle" };
+
+const SUPPLIER_TYPE_OPTIONS = [
+  { label: "Hộ kinh doanh", value: "business_household" },
+  { label: "Công ty", value: "company" },
+];
 
 export type SupplierRecord = {
   id: string;
@@ -25,6 +37,7 @@ export type SupplierRecord = {
   phone: string | null;
   address: string | null;
   note: string | null;
+  supplier_type: string;
 };
 
 function SubmitButton({ label, pendingLabel }: { label: string; pendingLabel: string }) {
@@ -48,6 +61,12 @@ export function SupplierFormDialog({
   const isEdit = !!supplier;
   const action = isEdit ? updateSupplier.bind(null, supplier.id) : createSupplier;
   const [state, formAction] = useActionState(action, initialState);
+
+  // Select is a controlled component; keep it outside the form's remounting
+  // key so the current pick survives a failed submit.
+  const [supplierType, setSupplierType] = useState(
+    state.values?.supplierType || supplier?.supplier_type || "business_household"
+  );
 
   // Closes the dialog once the action succeeds. Relies on the parent
   // remounting this component (e.g. via a `key` bumped on every open) each
@@ -107,6 +126,32 @@ export function SupplierFormDialog({
             />
             {state.fieldErrors?.name && (
               <p className="text-xs text-destructive">{state.fieldErrors.name[0]}</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <label htmlFor="supplierType" className="text-sm font-medium">
+              Loại nhà cung cấp *
+            </label>
+            <Select
+              name="supplierType"
+              required
+              value={supplierType}
+              onValueChange={(value) => setSupplierType(String(value))}
+              items={SUPPLIER_TYPE_OPTIONS}
+            >
+              <SelectTrigger id="supplierType" className="w-full">
+                <SelectValue placeholder="Chọn loại nhà cung cấp" />
+              </SelectTrigger>
+              <SelectContent>
+                {SUPPLIER_TYPE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {state.fieldErrors?.supplierType && (
+              <p className="text-xs text-destructive">{state.fieldErrors.supplierType[0]}</p>
             )}
           </div>
           <div className="space-y-1.5">

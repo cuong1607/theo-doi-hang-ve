@@ -22,6 +22,13 @@ type InvoiceDetail = {
   note: string | null;
   supplier_id: string;
   suppliers: { code: string; name: string } | null;
+  subtotal: number;
+  discount_type: string | null;
+  discount_value: number | null;
+  discount_amount: number;
+  vat_rate: number;
+  vat_amount: number;
+  final_amount: number;
   invoice_items: {
     id: string;
     unit_price: number;
@@ -36,7 +43,7 @@ async function getInvoice(id: string) {
   const { data } = await supabase
     .from("invoices")
     .select(
-      "id, invoice_no, invoice_date, note, supplier_id, suppliers(code, name), invoice_items(id, unit_price, quantity, line_total, products(sku, name, unit))"
+      "id, invoice_no, invoice_date, note, supplier_id, suppliers(code, name), subtotal, discount_type, discount_value, discount_amount, vat_rate, vat_amount, final_amount, invoice_items(id, unit_price, quantity, line_total, products(sku, name, unit))"
     )
     .eq("id", id)
     .maybeSingle();
@@ -56,7 +63,12 @@ export default async function InvoiceDetailPage({
   }
 
   const totalQuantity = invoice.invoice_items.reduce((sum, i) => sum + i.quantity, 0);
-  const totalAmount = invoice.invoice_items.reduce((sum, i) => sum + i.line_total, 0);
+  const discountLabel =
+    invoice.discount_type === "percent"
+      ? `Chiết khấu (${invoice.discount_value}%)`
+      : invoice.discount_type === "fixed_amount"
+        ? "Chiết khấu (số tiền)"
+        : "Chiết khấu";
 
   return (
     <div className="space-y-6">
@@ -122,7 +134,10 @@ export default async function InvoiceDetailPage({
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-3">
           <InfoField label="Tổng SL" value={String(totalQuantity)} />
-          <InfoField label="Tổng tiền" value={formatCurrency(totalAmount)} strong />
+          <InfoField label="Tạm tính" value={formatCurrency(invoice.subtotal)} />
+          <InfoField label={discountLabel} value={formatCurrency(invoice.discount_amount)} />
+          <InfoField label={`VAT (${invoice.vat_rate}%)`} value={formatCurrency(invoice.vat_amount)} />
+          <InfoField label="Thành tiền" value={formatCurrency(invoice.final_amount)} strong />
         </CardContent>
       </Card>
     </div>

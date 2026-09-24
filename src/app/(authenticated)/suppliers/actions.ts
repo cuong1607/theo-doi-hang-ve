@@ -12,6 +12,7 @@ export type SupplierFormValues = {
   phone: string;
   address: string;
   note: string;
+  supplierType: string;
 };
 
 export type SupplierFormState = {
@@ -31,6 +32,11 @@ export type SupplierActionResult = {
 
 const FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này.";
 
+function readOptionalField(value: FormDataEntryValue | null) {
+  const s = (value ?? "").toString().trim();
+  return s.length ? s : undefined;
+}
+
 const supplierSchema = z.object({
   code: z
     .string()
@@ -45,12 +51,10 @@ const supplierSchema = z.object({
   phone: z.string().trim().max(30, "Số điện thoại tối đa 30 ký tự.").optional(),
   address: z.string().trim().max(500, "Địa chỉ tối đa 500 ký tự.").optional(),
   note: z.string().trim().max(1000, "Ghi chú tối đa 1000 ký tự.").optional(),
+  supplierType: z.enum(["business_household", "company"], {
+    error: "Vui lòng chọn loại nhà cung cấp.",
+  }),
 });
-
-function readOptionalField(value: FormDataEntryValue | null) {
-  const s = (value ?? "").toString().trim();
-  return s.length ? s : undefined;
-}
 
 function parseSupplierForm(formData: FormData) {
   return supplierSchema.safeParse({
@@ -59,6 +63,7 @@ function parseSupplierForm(formData: FormData) {
     phone: readOptionalField(formData.get("phone")),
     address: readOptionalField(formData.get("address")),
     note: readOptionalField(formData.get("note")),
+    supplierType: formData.get("supplierType"),
   });
 }
 
@@ -69,6 +74,7 @@ function readSubmittedValues(formData: FormData): SupplierFormValues {
     phone: (formData.get("phone") ?? "").toString(),
     address: (formData.get("address") ?? "").toString(),
     note: (formData.get("note") ?? "").toString(),
+    supplierType: (formData.get("supplierType") ?? "").toString(),
   };
 }
 
@@ -123,6 +129,7 @@ export async function createSupplier(
     phone: parsed.data.phone ?? null,
     address: parsed.data.address ?? null,
     note: parsed.data.note ?? null,
+    supplier_type: parsed.data.supplierType,
   });
 
   if (error) {
@@ -177,6 +184,7 @@ export async function updateSupplier(
       phone: parsed.data.phone ?? null,
       address: parsed.data.address ?? null,
       note: parsed.data.note ?? null,
+      supplier_type: parsed.data.supplierType,
     })
     .eq("id", id);
 

@@ -29,7 +29,13 @@ type SupplierListRow = {
   address: string | null;
   note: string | null;
   is_active: boolean;
+  supplier_type: string;
   products: { count: number }[] | null;
+};
+
+const SUPPLIER_TYPE_LABELS: Record<string, string> = {
+  business_household: "Hộ kinh doanh",
+  company: "Công ty",
 };
 
 // PostgREST's `.or()` filter syntax treats commas/parentheses as condition
@@ -46,7 +52,7 @@ async function getSuppliers(q: string, page: number) {
 
   let query = supabase
     .from("suppliers")
-    .select("id, code, name, phone, address, note, is_active, products(count)", {
+    .select("id, code, name, phone, address, note, is_active, supplier_type, products(count)", {
       count: "exact",
     })
     .order("code", { ascending: true })
@@ -117,6 +123,7 @@ export default async function SuppliersPage({
                   <TableRow>
                     <TableHead>Mã NCC</TableHead>
                     <TableHead>Tên NCC</TableHead>
+                    <TableHead>Loại NCC</TableHead>
                     <TableHead>Điện thoại</TableHead>
                     <TableHead>Số sản phẩm</TableHead>
                     <TableHead>Trạng thái</TableHead>
@@ -128,6 +135,9 @@ export default async function SuppliersPage({
                     <TableRow key={supplier.id}>
                       <TableCell className="font-medium">{supplier.code}</TableCell>
                       <TableCell>{supplier.name}</TableCell>
+                      <TableCell>
+                        {SUPPLIER_TYPE_LABELS[supplier.supplier_type] ?? supplier.supplier_type}
+                      </TableCell>
                       <TableCell>{supplier.phone || "—"}</TableCell>
                       <TableCell>{supplier.products?.[0]?.count ?? 0}</TableCell>
                       <TableCell>

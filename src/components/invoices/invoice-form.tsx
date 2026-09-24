@@ -24,10 +24,17 @@ import {
 import { formatCurrency } from "@/lib/format";
 import { getSupplierProducts, type SupplierProduct } from "@/lib/products/actions";
 import { createInvoice, type InvoiceFormState } from "@/lib/invoices/actions";
+import { calculateInvoiceFinancials, type SupplierType } from "@/lib/invoices/financials";
 
 import { InvoiceItemRow } from "./invoice-item-row";
 
 const initialState: InvoiceFormState = { status: "idle" };
+
+const DISCOUNT_TYPE_OPTIONS = [
+  { label: "Không áp dụng", value: "none" },
+  { label: "Phần trăm (%)", value: "percent" },
+  { label: "Số tiền cố định", value: "fixed_amount" },
+];
 
 export type InvoiceItemState = {
   key: number;
@@ -37,6 +44,13 @@ export type InvoiceItemState = {
   unit: string;
   unitPrice: string;
   quantity: string;
+};
+
+export type InvoiceSupplierOption = {
+  id: string;
+  code: string;
+  name: string;
+  supplier_type: SupplierType;
 };
 
 function todayLocalDateString() {
@@ -51,11 +65,7 @@ function emptyItem(key: number): InvoiceItemState {
   return { key, productId: "", sku: "", name: "", unit: "", unitPrice: "", quantity: "" };
 }
 
-export function InvoiceForm({
-  suppliers,
-}: {
-  suppliers: { id: string; code: string; name: string }[];
-}) {
+export function InvoiceForm({ suppliers }: { suppliers: InvoiceSupplierOption[] }) {
   const router = useRouter();
   const nextKeyRef = useRef(1);
 
@@ -64,6 +74,13 @@ export function InvoiceForm({
   const [invoiceNo, setInvoiceNo] = useState("");
   const [note, setNote] = useState("");
   const [items, setItems] = useState<InvoiceItemState[]>([]);
+
+  // "none" is a UI-only sentinel for "no discount" — never sent as-is.
+  const [discountType, setDiscountType] = useState("none");
+  const [discountValue, setDiscountValue] = useState("");
+  const [vatRate, setVatRate] = useState("8");
+
+  const selectedSupplier = suppliers.find((s) => s.id === supplierId);
 
   const [availableProducts, setAvailableProducts] = useState<SupplierProduct[]>([]);
   const [loadingProducts, startLoadingProducts] = useTransition();
@@ -112,6 +129,9 @@ export function InvoiceForm({
     setSupplierId(value);
     setAvailableProducts([]);
     setItems([]);
+    setDiscountType("none");
+    setDiscountValue("");
+    setVatRate("8");
   }
 
   useEffect(() => {
@@ -122,17 +142,28 @@ export function InvoiceForm({
 
   const usedProductIds = useMemo(() => new Set(items.map((i) => i.productId).filter(Boolean)), [items]);
 
-  const summary = useMemo(() => {
-    let totalQuantity = 0;
-    let totalAmount = 0;
-    for (const item of items) {
-      const quantity = Number(item.quantity) || 0;
-      const unitPrice = Number(item.unitPrice) || 0;
-      totalQuantity += quantity;
-      totalAmount += quantity * unitPrice;
-    }
-    return { totalQuantity, totalAmount };
-  }, [items]);
+  const totalQuantity = useMemo(
+    () => items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0),
+    [items]
+  );
+
+  // Client-side preview only, using the very same formula the server will
+  // apply — but the server always recomputes independently from its own
+  // supplier_type lookup and never trusts this result. See
+  // src/lib/invoices/financials.ts.
+  const financialsPreview = useMemo(() => {
+    if (!selectedSupplier || items.length === 0) return null;
+    return calculateInvoiceFinancials({
+      supplierType: selectedSupplier.supplier_type,
+      items: items.map((item) => ({
+        quantity: Number(item.quantity) || 0,
+        unitPrice: Number(item.unitPrice) || 0,
+      })),
+      discountType: discountType === "none" ? null : (discountType as "percent" | "fixed_amount"),
+      discountValue: discountType === "none" ? null : Number(discountValue) || 0,
+      vatRate: selectedSupplier.supplier_type === "company" ? Number(vatRate) || 0 : null,
+    });
+  }, [selectedSupplier, items, discountType, discountValue, vatRate]);
 
   function handleAddItem() {
     setItems((prev) => [...prev, emptyItem(nextKeyRef.current++)]);
@@ -155,7 +186,12 @@ export function InvoiceForm({
 
   const hasEmptyProductRow = items.some((item) => !item.productId);
   const canSubmit =
-    !!invoiceDate && !!supplierId && !!invoiceNo.trim() && items.length > 0 && !hasEmptyProductRow;
+    !!invoiceDate &&
+    !!supplierId &&
+    !!invoiceNo.trim() &&
+    items.length > 0 &&
+    !hasEmptyProductRow &&
+    !!financialsPreview?.ok;
 
   function handleSubmit() {
     // useActionState's dispatch must run inside a transition when invoked
@@ -166,6 +202,9 @@ export function InvoiceForm({
         invoiceNo,
         invoiceDate,
         note,
+        discountType: discountType === "none" ? null : (discountType as "percent" | "fixed_amount"),
+        discountValue: discountType === "none" ? null : Number(discountValue) || 0,
+        vatRate: selectedSupplier?.supplier_type === "company" ? Number(vatRate) || 0 : null,
         items: items.map((item) => ({
           productId: item.productId,
           unitPrice: item.unitPrice,
@@ -305,13 +344,108 @@ export function InvoiceForm({
         </CardContent>
       </Card>
 
+      {selectedSupplier?.supplier_type === "business_household" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Chiết khấu</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-1.5">
+              <label htmlFor="discountType" className="text-sm font-medium">
+                Loại chiết khấu
+              </label>
+              <Select
+                value={discountType}
+                onValueChange={(value) => setDiscountType(String(value))}
+                items={DISCOUNT_TYPE_OPTIONS}
+              >
+                <SelectTrigger id="discountType" className="w-full">
+                  <SelectValue placeholder="Không áp dụng" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DISCOUNT_TYPE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {discountType !== "none" && (
+              <div className="space-y-1.5">
+                <label htmlFor="discountValue" className="text-sm font-medium">
+                  Giá trị chiết khấu {discountType === "percent" ? "(%)" : "(VNĐ)"} *
+                </label>
+                <Input
+                  id="discountValue"
+                  type="number"
+                  min={0}
+                  max={discountType === "percent" ? 100 : undefined}
+                  step="0.01"
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
+                />
+                {state.fieldErrors?.discountValue && (
+                  <p className="text-xs text-destructive">{state.fieldErrors.discountValue[0]}</p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {selectedSupplier?.supplier_type === "company" && (
+        <Card>
+          <CardHeader>
+            <CardTitle>VAT</CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-1.5">
+              <label htmlFor="vatRate" className="text-sm font-medium">
+                VAT (%)
+              </label>
+              <Input
+                id="vatRate"
+                type="number"
+                min={0}
+                step="0.01"
+                value={vatRate}
+                onChange={(e) => setVatRate(e.target.value)}
+              />
+              {state.fieldErrors?.vatRate && (
+                <p className="text-xs text-destructive">{state.fieldErrors.vatRate[0]}</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Tổng hợp</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-2 gap-x-8 gap-y-2 text-sm sm:grid-cols-3">
-          <SummaryField label="Tổng SL" value={String(summary.totalQuantity)} />
-          <SummaryField label="Tổng tiền" value={formatCurrency(summary.totalAmount)} strong />
+          <SummaryField label="Tổng SL" value={String(totalQuantity)} />
+          <SummaryField
+            label="Tạm tính"
+            value={formatCurrency(financialsPreview?.ok ? financialsPreview.data.subtotal : 0)}
+          />
+          <SummaryField
+            label="Chiết khấu"
+            value={formatCurrency(financialsPreview?.ok ? financialsPreview.data.discountAmount : 0)}
+          />
+          <SummaryField
+            label="VAT"
+            value={formatCurrency(financialsPreview?.ok ? financialsPreview.data.vatAmount : 0)}
+          />
+          <SummaryField
+            label="Thành tiền"
+            value={formatCurrency(financialsPreview?.ok ? financialsPreview.data.finalAmount : 0)}
+            strong
+          />
+          {financialsPreview && !financialsPreview.ok && (
+            <p className="col-span-full text-xs text-destructive">{financialsPreview.error}</p>
+          )}
         </CardContent>
       </Card>
 
