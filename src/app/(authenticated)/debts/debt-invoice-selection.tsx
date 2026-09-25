@@ -31,6 +31,11 @@ import {
 
 const initialPaymentState: PaymentFormState = { status: "idle" };
 
+const SUPPLIER_TYPE_LABELS: Record<string, string> = {
+  business_household: "Hộ kinh doanh",
+  company: "Công ty",
+};
+
 function formatDateVN(iso: string) {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
@@ -153,7 +158,11 @@ export function DebtInvoiceSelection({ rows, canPay }: { rows: InvoiceDebtRow[];
               <TableHead>Số HĐ</TableHead>
               <TableHead>Ngày HĐ</TableHead>
               <TableHead>NCC</TableHead>
-              <TableHead>Giá trị HĐ</TableHead>
+              <TableHead>Loại NCC</TableHead>
+              <TableHead>Tạm tính</TableHead>
+              <TableHead>Chiết khấu</TableHead>
+              <TableHead>VAT</TableHead>
+              <TableHead>Tổng phải trả</TableHead>
               <TableHead>Đã thanh toán</TableHead>
               <TableHead>Còn nợ</TableHead>
               <TableHead>Trạng thái</TableHead>
@@ -184,7 +193,11 @@ export function DebtInvoiceSelection({ rows, canPay }: { rows: InvoiceDebtRow[];
                   <TableCell>
                     {row.supplier_code} — {row.supplier_name}
                   </TableCell>
-                  <TableCell>{formatCurrency(row.invoice_total)}</TableCell>
+                  <TableCell>{SUPPLIER_TYPE_LABELS[row.supplier_type] ?? row.supplier_type}</TableCell>
+                  <TableCell>{formatCurrency(row.subtotal)}</TableCell>
+                  <TableCell>{formatCurrency(row.discount_amount)}</TableCell>
+                  <TableCell>{formatCurrency(row.vat_amount)}</TableCell>
+                  <TableCell className="font-medium">{formatCurrency(row.final_amount)}</TableCell>
                   <TableCell>{formatCurrency(row.paid_amount)}</TableCell>
                   <TableCell className={row.remaining_amount > 0 ? "font-medium text-destructive" : undefined}>
                     {formatCurrency(row.remaining_amount)}

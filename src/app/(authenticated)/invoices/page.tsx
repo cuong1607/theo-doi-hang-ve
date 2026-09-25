@@ -21,6 +21,11 @@ import { InvoiceFilters } from "./invoice-filters";
 
 const PAGE_SIZE = 10;
 
+const SUPPLIER_TYPE_LABELS: Record<string, string> = {
+  business_household: "Hộ kinh doanh",
+  company: "Công ty",
+};
+
 function formatDateVN(iso: string) {
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
@@ -28,7 +33,10 @@ function formatDateVN(iso: string) {
 
 async function getAllSuppliers() {
   const supabase = createAdminClient();
-  const { data } = await supabase.from("suppliers").select("id, code, name").order("code");
+  const { data } = await supabase
+    .from("suppliers")
+    .select("id, code, name, supplier_type")
+    .order("code");
   return data ?? [];
 }
 
@@ -63,6 +71,7 @@ export default async function InvoicesPage({
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hasFilter = !!(fromDate || toDate || supplierId || invoiceNo);
   const canCreate = canCreateInvoices(getCurrentRole());
+  const supplierTypeById = new Map(suppliers.map((s) => [s.id, s.supplier_type]));
 
   return (
     <div className="space-y-6">
@@ -118,9 +127,10 @@ export default async function InvoicesPage({
                     <TableHead>Mã hóa đơn</TableHead>
                     <TableHead>Ngày hóa đơn</TableHead>
                     <TableHead>NCC</TableHead>
+                    <TableHead>Loại NCC</TableHead>
                     <TableHead>Số SKU</TableHead>
                     <TableHead>Tổng SL</TableHead>
-                    <TableHead>Tổng tiền</TableHead>
+                    <TableHead>Tổng phải trả</TableHead>
                     <TableHead className="text-right">Thao tác</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -131,6 +141,9 @@ export default async function InvoicesPage({
                       <TableCell>{formatDateVN(row.invoice_date)}</TableCell>
                       <TableCell>
                         {row.supplier_code} — {row.supplier_name}
+                      </TableCell>
+                      <TableCell>
+                        {SUPPLIER_TYPE_LABELS[supplierTypeById.get(row.supplier_id) ?? ""] ?? "—"}
                       </TableCell>
                       <TableCell>{row.sku_count}</TableCell>
                       <TableCell>{row.total_quantity}</TableCell>

@@ -23,8 +23,12 @@ import {
 } from "@/components/ui/table";
 import { formatCurrency } from "@/lib/format";
 import { getSupplierProducts, type SupplierProduct } from "@/lib/products/actions";
-import { createInvoice, type InvoiceFormState } from "@/lib/invoices/actions";
-import { calculateInvoiceFinancials, type SupplierType } from "@/lib/invoices/financials";
+import { createInvoice, updateInvoice, type InvoiceFormState } from "@/lib/invoices/actions";
+import {
+  calculateInvoiceFinancials,
+  inferSnapshotSupplierType,
+  type SupplierType,
+} from "@/lib/invoices/financials";
 
 import { InvoiceItemRow } from "./invoice-item-row";
 
@@ -38,6 +42,10 @@ const DISCOUNT_TYPE_OPTIONS = [
 
 export type InvoiceItemState = {
   key: number;
+  // Present only for a row that already existed on the invoice before this
+  // edit session — sent back so updateInvoice can update it in place
+  // instead of deleting + reinserting.
+  id?: string;
   productId: string;
   sku: string;
   name: string;
@@ -53,6 +61,26 @@ export type InvoiceSupplierOption = {
   supplier_type: SupplierType;
 };
 
+export type ExistingInvoice = {
+  id: string;
+  supplierId: string;
+  invoiceNo: string;
+  invoiceDate: string;
+  note: string;
+  discountType: "percent" | "fixed_amount" | null;
+  discountValue: number | null;
+  vatRate: number;
+  items: {
+    id: string;
+    productId: string;
+    sku: string;
+    name: string;
+    unit: string;
+    unitPrice: string;
+    quantity: string;
+  }[];
+};
+
 function todayLocalDateString() {
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -65,31 +93,88 @@ function emptyItem(key: number): InvoiceItemState {
   return { key, productId: "", sku: "", name: "", unit: "", unitPrice: "", quantity: "" };
 }
 
-export function InvoiceForm({ suppliers }: { suppliers: InvoiceSupplierOption[] }) {
+export function InvoiceForm({
+  suppliers,
+  invoice,
+}: {
+  suppliers: InvoiceSupplierOption[];
+  invoice?: ExistingInvoice;
+}) {
+  const isEdit = !!invoice;
   const router = useRouter();
-  const nextKeyRef = useRef(1);
+  // Initial items (if any) are keyed by index — safe since this only runs
+  // once at mount, before nextKeyRef has generated any keys of its own.
+  const nextKeyRef = useRef((invoice?.items.length ?? 0) + 1);
 
-  const [invoiceDate, setInvoiceDate] = useState(todayLocalDateString());
-  const [supplierId, setSupplierId] = useState("");
-  const [invoiceNo, setInvoiceNo] = useState("");
-  const [note, setNote] = useState("");
-  const [items, setItems] = useState<InvoiceItemState[]>([]);
+  const [invoiceDate, setInvoiceDate] = useState(invoice?.invoiceDate ?? todayLocalDateString());
+  const [supplierId, setSupplierId] = useState(invoice?.supplierId ?? "");
+  const [invoiceNo, setInvoiceNo] = useState(invoice?.invoiceNo ?? "");
+  const [note, setNote] = useState(invoice?.note ?? "");
+  const [items, setItems] = useState<InvoiceItemState[]>(
+    () =>
+      invoice?.items.map((i, index) => ({
+        key: index,
+        id: i.id,
+        productId: i.productId,
+        sku: i.sku,
+        name: i.name,
+        unit: i.unit,
+        unitPrice: i.unitPrice,
+        quantity: i.quantity,
+      })) ?? []
+  );
 
   // "none" is a UI-only sentinel for "no discount" — never sent as-is.
-  const [discountType, setDiscountType] = useState("none");
-  const [discountValue, setDiscountValue] = useState("");
-  const [vatRate, setVatRate] = useState("8");
+  const [discountType, setDiscountType] = useState(invoice?.discountType ?? "none");
+  const [discountValue, setDiscountValue] = useState(
+    invoice?.discountValue != null ? String(invoice.discountValue) : ""
+  );
+  const [vatRate, setVatRate] = useState(invoice ? String(invoice.vatRate || 8) : "8");
 
-  const selectedSupplier = suppliers.find((s) => s.id === supplierId);
+  // Which financial block is showing right now. Create mode: unset until a
+  // supplier is picked. Edit mode: inferred from the invoice's own snapshot
+  // (see inferSnapshotType), NOT from suppliers.find(...).supplier_type —
+  // that's the live/current type, which this must ignore until the user
+  // actually changes the supplier.
+  const [activeFinancialType, setActiveFinancialType] = useState<SupplierType | "">(() => {
+    if (!invoice) return "";
+    const currentType = suppliers.find((s) => s.id === invoice.supplierId)?.supplier_type;
+    return inferSnapshotSupplierType(invoice, currentType);
+  });
 
   const [availableProducts, setAvailableProducts] = useState<SupplierProduct[]>([]);
   const [loadingProducts, startLoadingProducts] = useTransition();
 
-  const [state, submitInvoice, isPending] = useActionState(createInvoice, initialState);
+  const action = isEdit ? updateInvoice.bind(null, invoice.id) : createInvoice;
+  const [state, submitInvoice, isPending] = useActionState(action, initialState);
 
-  const [initialSnapshot] = useState(() => JSON.stringify({ invoiceDate, supplierId, invoiceNo, note, items }));
+  function snapshotOf(fields: {
+    invoiceDate: string;
+    supplierId: string;
+    invoiceNo: string;
+    note: string;
+    items: InvoiceItemState[];
+    discountType: string;
+    discountValue: string;
+    vatRate: string;
+  }) {
+    return JSON.stringify({
+      ...fields,
+      items: fields.items.map(({ id, productId, unitPrice, quantity }) => ({
+        id: id ?? null,
+        productId,
+        unitPrice,
+        quantity,
+      })),
+    });
+  }
+
+  const [initialSnapshot] = useState(() =>
+    snapshotOf({ invoiceDate, supplierId, invoiceNo, note, items, discountType, discountValue, vatRate })
+  );
   const isDirty =
-    JSON.stringify({ invoiceDate, supplierId, invoiceNo, note, items }) !== initialSnapshot;
+    snapshotOf({ invoiceDate, supplierId, invoiceNo, note, items, discountType, discountValue, vatRate }) !==
+    initialSnapshot;
 
   // Warn on tab close/refresh when there's unsaved data, same as receipts —
   // in-app navigation relies on the explicit "Hủy" button's confirm instead,
@@ -118,20 +203,39 @@ export function InvoiceForm({ suppliers }: { suppliers: InvoiceSupplierOption[] 
 
   // Switching supplier invalidates the previously loaded product list — per
   // spec, never silently keep a now-invalid item, so warn and clear rather
-  // than guessing which rows are still valid.
+  // than guessing which rows are still valid. On top of that, if the new
+  // supplier's type differs from the block currently showing, the
+  // discount/VAT policy no longer applies and must be reset — confirmed
+  // separately, since that's a distinct (financial, not just catalog) loss.
   function handleSupplierChange(value: string) {
+    const newSupplier = suppliers.find((s) => s.id === value);
+    if (!newSupplier) return;
+
     if (items.length > 0) {
       const confirmed = window.confirm(
         "Đổi nhà cung cấp sẽ xóa danh sách sản phẩm hiện tại vì có thể không thuộc nhà cung cấp mới. Bạn có chắc muốn tiếp tục?"
       );
       if (!confirmed) return;
     }
+
+    const willResetFinancials = !!activeFinancialType && activeFinancialType !== newSupplier.supplier_type;
+    if (willResetFinancials) {
+      const message =
+        newSupplier.supplier_type === "company"
+          ? "Nhà cung cấp mới là Công ty: chiết khấu hiện tại sẽ bị xóa, VAT mặc định 8% sẽ được áp dụng. Bạn có chắc muốn tiếp tục?"
+          : "Nhà cung cấp mới là Hộ kinh doanh: VAT sẽ được xóa (về 0). Bạn sẽ cần chọn lại chiết khấu (hoặc không áp dụng). Bạn có chắc muốn tiếp tục?";
+      if (!window.confirm(message)) return;
+    }
+
     setSupplierId(value);
     setAvailableProducts([]);
     setItems([]);
-    setDiscountType("none");
-    setDiscountValue("");
-    setVatRate("8");
+    setActiveFinancialType(newSupplier.supplier_type);
+    if (willResetFinancials) {
+      setDiscountType("none");
+      setDiscountValue("");
+      setVatRate("8");
+    }
   }
 
   useEffect(() => {
@@ -139,6 +243,25 @@ export function InvoiceForm({ suppliers }: { suppliers: InvoiceSupplierOption[] 
       router.push(`/invoices/${state.invoice.id}`);
     }
   }, [state, router]);
+
+  // While the supplier hasn't changed from the invoice's original one, keep
+  // the originally-assigned products selectable in their own row even if
+  // they've since been deactivated — otherwise an existing row's SKU picker
+  // would render with no matching option for its current value.
+  const products = useMemo(() => {
+    if (!invoice || supplierId !== invoice.supplierId) return availableProducts;
+    const seen = new Set(availableProducts.map((p) => p.id));
+    const extra = invoice.items
+      .filter((i) => !seen.has(i.productId))
+      .map((i) => ({
+        id: i.productId,
+        sku: i.sku,
+        name: i.name,
+        unit: i.unit,
+        current_price: Number(i.unitPrice) || 0,
+      }));
+    return [...availableProducts, ...extra];
+  }, [availableProducts, invoice, supplierId]);
 
   const usedProductIds = useMemo(() => new Set(items.map((i) => i.productId).filter(Boolean)), [items]);
 
@@ -152,18 +275,18 @@ export function InvoiceForm({ suppliers }: { suppliers: InvoiceSupplierOption[] 
   // supplier_type lookup and never trusts this result. See
   // src/lib/invoices/financials.ts.
   const financialsPreview = useMemo(() => {
-    if (!selectedSupplier || items.length === 0) return null;
+    if (!activeFinancialType || items.length === 0) return null;
     return calculateInvoiceFinancials({
-      supplierType: selectedSupplier.supplier_type,
+      supplierType: activeFinancialType,
       items: items.map((item) => ({
         quantity: Number(item.quantity) || 0,
         unitPrice: Number(item.unitPrice) || 0,
       })),
       discountType: discountType === "none" ? null : (discountType as "percent" | "fixed_amount"),
       discountValue: discountType === "none" ? null : Number(discountValue) || 0,
-      vatRate: selectedSupplier.supplier_type === "company" ? Number(vatRate) || 0 : null,
+      vatRate: activeFinancialType === "company" ? Number(vatRate) || 0 : null,
     });
-  }, [selectedSupplier, items, discountType, discountValue, vatRate]);
+  }, [activeFinancialType, items, discountType, discountValue, vatRate]);
 
   function handleAddItem() {
     setItems((prev) => [...prev, emptyItem(nextKeyRef.current++)]);
@@ -181,7 +304,7 @@ export function InvoiceForm({ suppliers }: { suppliers: InvoiceSupplierOption[] 
     if (isDirty && !window.confirm("Dữ liệu chưa lưu sẽ bị mất. Bạn có chắc muốn rời trang?")) {
       return;
     }
-    router.push("/invoices");
+    router.push(isEdit ? `/invoices/${invoice.id}` : "/invoices");
   }
 
   const hasEmptyProductRow = items.some((item) => !item.productId);
@@ -202,10 +325,17 @@ export function InvoiceForm({ suppliers }: { suppliers: InvoiceSupplierOption[] 
         invoiceNo,
         invoiceDate,
         note,
-        discountType: discountType === "none" ? null : (discountType as "percent" | "fixed_amount"),
-        discountValue: discountType === "none" ? null : Number(discountValue) || 0,
-        vatRate: selectedSupplier?.supplier_type === "company" ? Number(vatRate) || 0 : null,
+        discountType:
+          activeFinancialType === "business_household" && discountType !== "none"
+            ? (discountType as "percent" | "fixed_amount")
+            : null,
+        discountValue:
+          activeFinancialType === "business_household" && discountType !== "none"
+            ? Number(discountValue) || 0
+            : null,
+        vatRate: activeFinancialType === "company" ? Number(vatRate) || 0 : null,
         items: items.map((item) => ({
+          id: item.id,
           productId: item.productId,
           unitPrice: item.unitPrice,
           quantity: item.quantity,
@@ -302,7 +432,7 @@ export function InvoiceForm({ suppliers }: { suppliers: InvoiceSupplierOption[] 
             </p>
           ) : loadingProducts ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Đang tải sản phẩm...</p>
-          ) : availableProducts.length === 0 ? (
+          ) : products.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Nhà cung cấp này chưa có sản phẩm đang hoạt động.
             </p>
@@ -325,7 +455,7 @@ export function InvoiceForm({ suppliers }: { suppliers: InvoiceSupplierOption[] 
               </TableHeader>
               <TableBody>
                 {items.map((item) => {
-                  const rowProducts = availableProducts.filter(
+                  const rowProducts = products.filter(
                     (p) => p.id === item.productId || !usedProductIds.has(p.id)
                   );
                   return (
@@ -344,7 +474,7 @@ export function InvoiceForm({ suppliers }: { suppliers: InvoiceSupplierOption[] 
         </CardContent>
       </Card>
 
-      {selectedSupplier?.supplier_type === "business_household" && (
+      {activeFinancialType === "business_household" && (
         <Card>
           <CardHeader>
             <CardTitle>Chiết khấu</CardTitle>
@@ -394,7 +524,7 @@ export function InvoiceForm({ suppliers }: { suppliers: InvoiceSupplierOption[] 
         </Card>
       )}
 
-      {selectedSupplier?.supplier_type === "company" && (
+      {activeFinancialType === "company" && (
         <Card>
           <CardHeader>
             <CardTitle>VAT</CardTitle>
@@ -439,7 +569,7 @@ export function InvoiceForm({ suppliers }: { suppliers: InvoiceSupplierOption[] 
             value={formatCurrency(financialsPreview?.ok ? financialsPreview.data.vatAmount : 0)}
           />
           <SummaryField
-            label="Thành tiền"
+            label="Tổng phải trả"
             value={formatCurrency(financialsPreview?.ok ? financialsPreview.data.finalAmount : 0)}
             strong
           />
@@ -458,7 +588,7 @@ export function InvoiceForm({ suppliers }: { suppliers: InvoiceSupplierOption[] 
           Hủy
         </Button>
         <Button type="button" onClick={handleSubmit} disabled={!canSubmit || isPending}>
-          {isPending ? "Đang lưu..." : "Lưu hóa đơn"}
+          {isPending ? "Đang lưu..." : isEdit ? "Lưu thay đổi" : "Lưu hóa đơn"}
         </Button>
       </div>
     </div>

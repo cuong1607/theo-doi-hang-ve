@@ -16,6 +16,9 @@ import { formatCurrency } from "@/lib/format";
 import { isRangePreset, resolveDateRange, type RangePreset } from "@/lib/dashboard/date-range";
 import {
   getDashboardDailySeries,
+  getDashboardFinancialSummary,
+  getDashboardFinancialSupplierBreakdown,
+  getDashboardFinancialTypeBreakdown,
   getDashboardOutstandingSummary,
   getDashboardSummary,
   getDashboardSupplierTotals,
@@ -23,6 +26,7 @@ import {
   getRecentReceipts,
   getTopOutstanding,
 } from "@/lib/dashboard/queries";
+import type { SupplierType } from "@/lib/debt/invoice-debt";
 import { STATUS_BADGE_VARIANT, STATUS_LABELS } from "@/lib/outstanding/status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +46,13 @@ const SHIFT_LABELS: Record<string, string> = {
   morning: "Ca sáng",
   afternoon: "Ca chiều",
 };
+
+const SUPPLIER_TYPE_LABELS: Record<string, string> = {
+  business_household: "Hộ kinh doanh",
+  company: "Công ty",
+};
+
+const VALID_SUPPLIER_TYPES: SupplierType[] = ["business_household", "company"];
 
 const TOP_OUTSTANDING_LIMIT = 5;
 const RECENT_LIMIT = 8;
@@ -70,13 +81,19 @@ export default async function DashboardPage({
     from?: string;
     to?: string;
     supplier?: string;
+    supplierType?: string;
   }>;
 }) {
   const params = await searchParams;
   const range: RangePreset = isRangePreset(params.range ?? "") ? (params.range as RangePreset) : "today";
   const supplierId = (params.supplier ?? "").trim();
+  const supplierTypeParam = (params.supplierType ?? "").trim();
+  const supplierType = VALID_SUPPLIER_TYPES.includes(supplierTypeParam as SupplierType)
+    ? (supplierTypeParam as SupplierType)
+    : undefined;
   const { from: fromDate, to: toDate } = resolveDateRange(range, params.from, params.to);
   const filters = { fromDate, toDate, supplierId: supplierId || undefined };
+  const financialFilters = { ...filters, supplierType };
 
   const [
     suppliers,
@@ -88,6 +105,9 @@ export default async function DashboardPage({
     { data: topNeedMakeup, error: topNeedMakeupError },
     { data: recentDailySummaries, error: recentDailyError },
     { data: recentReceipts, error: recentReceiptsError },
+    { data: financialSummary, error: financialSummaryError },
+    { data: financialSupplierRows, error: financialSupplierError },
+    { data: financialTypeRows, error: financialTypeError },
   ] = await Promise.all([
     getAllSuppliers(),
     getDashboardSummary(filters),
@@ -98,6 +118,9 @@ export default async function DashboardPage({
     getTopOutstanding(filters, "need_makeup", TOP_OUTSTANDING_LIMIT),
     getRecentDailySummaries(filters, RECENT_LIMIT),
     getRecentReceipts(filters, RECENT_LIMIT),
+    getDashboardFinancialSummary(financialFilters),
+    getDashboardFinancialSupplierBreakdown(financialFilters),
+    getDashboardFinancialTypeBreakdown(financialFilters),
   ]);
 
   const hasError =
@@ -108,7 +131,10 @@ export default async function DashboardPage({
     topLowError ||
     topNeedMakeupError ||
     recentDailyError ||
-    recentReceiptsError;
+    recentReceiptsError ||
+    financialSummaryError ||
+    financialSupplierError ||
+    financialTypeError;
 
   if (hasError) {
     return (
@@ -146,6 +172,7 @@ export default async function DashboardPage({
             customFrom={params.from ?? ""}
             customTo={params.to ?? ""}
             supplierId={supplierId}
+            supplierType={supplierType ?? ""}
             suppliers={suppliers}
           />
         </CardHeader>
@@ -217,6 +244,141 @@ export default async function DashboardPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* PHASE UP5: Financial report — invoice/discount/VAT/debt metrics,
+          separate from the receipt-based cards above. Ưu tiên Tổng phải trả /
+          Đã thanh toán / Còn nợ; chiết khấu + VAT xuống hàng phụ, cùng cách
+          bố cục với /debts (Phase UP4). */}
+      <div>
+        <h3 className="text-lg font-semibold tracking-tight">Báo cáo tài chính hóa đơn</h3>
+        <p className="text-sm text-muted-foreground">
+          Số liệu hóa đơn/chiết khấu/VAT/công nợ theo bộ lọc ở trên (theo ngày hóa đơn).
+        </p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard
+          title="Tổng phải trả"
+          description="Tổng final_amount các hóa đơn trong khoảng lọc"
+          value={formatCurrency(financialSummary?.total_final_amount ?? 0)}
+          icon={Wallet}
+        />
+        <StatCard
+          title="Tổng đã thanh toán"
+          description="Tổng số tiền đã thanh toán cho các hóa đơn trên"
+          value={formatCurrency(financialSummary?.total_paid_amount ?? 0)}
+          icon={Wallet}
+        />
+        <StatCard
+          title="Tổng còn nợ"
+          description="Tổng phải trả trừ đã thanh toán"
+          value={formatCurrency(financialSummary?.total_remaining_amount ?? 0)}
+          icon={Wallet}
+          emphasis={(financialSummary?.total_remaining_amount ?? 0) > 0}
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <SubStatCard
+          title="Tổng giá trị trước điều chỉnh"
+          value={formatCurrency(financialSummary?.total_subtotal_amount ?? 0)}
+        />
+        <SubStatCard
+          title="Tổng chiết khấu được hưởng"
+          value={formatCurrency(financialSummary?.total_discount_amount ?? 0)}
+        />
+        <SubStatCard title="Tổng VAT phải chịu" value={formatCurrency(financialSummary?.total_vat_amount ?? 0)} />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Theo nhà cung cấp</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!financialSupplierRows || financialSupplierRows.length === 0 ? (
+            <EmptyState text="Chưa có hóa đơn trong khoảng thời gian này." />
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>NCC</TableHead>
+                    <TableHead>Loại NCC</TableHead>
+                    <TableHead>Tạm tính</TableHead>
+                    <TableHead>Chiết khấu</TableHead>
+                    <TableHead>VAT</TableHead>
+                    <TableHead>Tổng phải trả</TableHead>
+                    <TableHead>Đã thanh toán</TableHead>
+                    <TableHead>Còn nợ</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {financialSupplierRows.map((s) => (
+                    <TableRow key={s.supplier_id}>
+                      <TableCell className="font-medium">
+                        {s.supplier_code} — {s.supplier_name}
+                      </TableCell>
+                      <TableCell>{SUPPLIER_TYPE_LABELS[s.supplier_type] ?? s.supplier_type}</TableCell>
+                      <TableCell>{formatCurrency(s.subtotal_total)}</TableCell>
+                      <TableCell>{formatCurrency(s.discount_total)}</TableCell>
+                      <TableCell>{formatCurrency(s.vat_total)}</TableCell>
+                      <TableCell className="font-medium">{formatCurrency(s.final_total)}</TableCell>
+                      <TableCell>{formatCurrency(s.paid_total)}</TableCell>
+                      <TableCell className={s.remaining_total > 0 ? "font-medium text-destructive" : undefined}>
+                        {formatCurrency(s.remaining_total)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Theo loại nhà cung cấp</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!financialTypeRows || financialTypeRows.length === 0 ? (
+            <EmptyState text="Chưa có hóa đơn trong khoảng thời gian này." />
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Loại NCC</TableHead>
+                    <TableHead>Tạm tính</TableHead>
+                    <TableHead>Chiết khấu</TableHead>
+                    <TableHead>VAT</TableHead>
+                    <TableHead>Tổng phải trả</TableHead>
+                    <TableHead>Đã thanh toán</TableHead>
+                    <TableHead>Còn nợ</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {financialTypeRows.map((t) => (
+                    <TableRow key={t.supplier_type}>
+                      <TableCell className="font-medium">
+                        {SUPPLIER_TYPE_LABELS[t.supplier_type] ?? t.supplier_type}
+                      </TableCell>
+                      <TableCell>{formatCurrency(t.subtotal_total)}</TableCell>
+                      <TableCell>{formatCurrency(t.discount_total)}</TableCell>
+                      <TableCell>{formatCurrency(t.vat_total)}</TableCell>
+                      <TableCell className="font-medium">{formatCurrency(t.final_total)}</TableCell>
+                      <TableCell>{formatCurrency(t.paid_total)}</TableCell>
+                      <TableCell className={t.remaining_total > 0 ? "font-medium text-destructive" : undefined}>
+                        {formatCurrency(t.remaining_total)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Section 1 + 2: side by side */}
       <div className="grid gap-4 lg:grid-cols-2">
@@ -413,6 +575,19 @@ function StatCard({
           {value}
         </div>
         <p className="text-xs text-muted-foreground">{description}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SubStatCard({ title, value }: { title: string; value: string }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-xs font-normal text-muted-foreground">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="text-lg font-semibold">{value}</div>
       </CardContent>
     </Card>
   );

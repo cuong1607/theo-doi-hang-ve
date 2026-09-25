@@ -23,6 +23,10 @@ import { DebtInvoiceSelection } from "./debt-invoice-selection";
 
 const PAGE_SIZE = 20;
 const VALID_STATUSES: PaymentStatus[] = ["unpaid", "partial", "paid"];
+const SUPPLIER_TYPE_LABELS: Record<string, string> = {
+  business_household: "Hộ kinh doanh",
+  company: "Công ty",
+};
 // No real lower bound on the workbook's data — "hiển thị tất cả" by default
 // unless the user narrows the range, per CN2's plain Từ ngày/Đến ngày filter
 // (no preset buttons, unlike the dashboard).
@@ -131,11 +135,13 @@ export default async function DebtsPage({
         </Card>
       ) : (
         <>
-          {/* Phần 2 — Tổng quan */}
+          {/* Phần 2 — Tổng quan. Ưu tiên Tổng phải trả / Đã thanh toán / Còn nợ;
+              chiết khấu + VAT chỉ là thông tin phụ để giải thích vì sao "Tổng
+              phải trả" khác "Tạm tính", nên xuống một dòng phụ nhỏ hơn. */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
-              title="Tổng giá trị hóa đơn"
-              value={formatCurrency(overview?.total_invoice_amount ?? 0)}
+              title="Tổng phải trả"
+              value={formatCurrency(overview?.total_final_amount ?? 0)}
               icon={Receipt}
             />
             <StatCard
@@ -156,6 +162,12 @@ export default async function DebtsPage({
             />
           </div>
 
+          <div className="grid gap-4 sm:grid-cols-3">
+            <SubStatCard title="Tổng giá trị trước điều chỉnh" value={formatCurrency(overview?.total_subtotal_amount ?? 0)} />
+            <SubStatCard title="Tổng chiết khấu" value={formatCurrency(overview?.total_discount_amount ?? 0)} />
+            <SubStatCard title="Tổng VAT" value={formatCurrency(overview?.total_vat_amount ?? 0)} />
+          </div>
+
           {/* Phần 3 — Tổng hợp theo nhà cung cấp */}
           <Card>
             <CardHeader>
@@ -170,7 +182,11 @@ export default async function DebtsPage({
                     <TableHeader>
                       <TableRow>
                         <TableHead>NCC</TableHead>
-                        <TableHead>Tổng giá trị HĐ</TableHead>
+                        <TableHead>Loại NCC</TableHead>
+                        <TableHead>Tạm tính</TableHead>
+                        <TableHead>Chiết khấu</TableHead>
+                        <TableHead>VAT</TableHead>
+                        <TableHead>Tổng phải trả</TableHead>
                         <TableHead>Đã thanh toán</TableHead>
                         <TableHead>Còn nợ</TableHead>
                         <TableHead>Số HĐ còn nợ</TableHead>
@@ -190,7 +206,11 @@ export default async function DebtsPage({
                             <TableCell className="font-medium">
                               {s.supplier_code} — {s.supplier_name}
                             </TableCell>
-                            <TableCell>{formatCurrency(s.supplier_invoice_total)}</TableCell>
+                            <TableCell>{SUPPLIER_TYPE_LABELS[s.supplier_type] ?? s.supplier_type}</TableCell>
+                            <TableCell>{formatCurrency(s.supplier_subtotal_total)}</TableCell>
+                            <TableCell>{formatCurrency(s.supplier_discount_total)}</TableCell>
+                            <TableCell>{formatCurrency(s.supplier_vat_total)}</TableCell>
+                            <TableCell className="font-medium">{formatCurrency(s.supplier_final_total)}</TableCell>
                             <TableCell>{formatCurrency(s.supplier_paid_total)}</TableCell>
                             <TableCell className={s.supplier_remaining_total > 0 ? "font-medium text-destructive" : undefined}>
                               {formatCurrency(s.supplier_remaining_total)}
@@ -261,6 +281,19 @@ function StatCard({
       </CardHeader>
       <CardContent>
         <div className={emphasis ? "text-2xl font-bold text-destructive" : "text-2xl font-bold"}>{value}</div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function SubStatCard({ title, value }: { title: string; value: string }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-xs font-normal text-muted-foreground">{title}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="text-lg font-semibold">{value}</div>
       </CardContent>
     </Card>
   );

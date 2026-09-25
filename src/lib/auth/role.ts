@@ -33,8 +33,14 @@ export function canEditReceipts(role: Role): boolean {
 }
 
 // Mirrors canCreateReceipts: admin/staff can record supplier invoices,
-// viewer is read-only. Phase 11 only asks for create (no edit route yet).
+// viewer is read-only.
 export function canCreateInvoices(role: Role): boolean {
+  return role === "admin" || role === "staff";
+}
+
+// Mirrors canEditReceipts: no time-limited edit window, admin/staff can
+// always edit, viewer never. Added in Phase UP3 alongside the edit route.
+export function canEditInvoices(role: Role): boolean {
   return role === "admin" || role === "staff";
 }
 

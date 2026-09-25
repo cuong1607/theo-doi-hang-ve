@@ -2,7 +2,10 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import type { DebtScreenFilters } from "./supplier-debt";
 
 export type DebtOverview = {
-  total_invoice_amount: number;
+  total_subtotal_amount: number;
+  total_discount_amount: number;
+  total_vat_amount: number;
+  total_final_amount: number;
   total_paid_amount: number;
   total_remaining_amount: number;
   open_invoice_count: number;

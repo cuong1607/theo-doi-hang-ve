@@ -4,6 +4,8 @@ import { escapeIlikeTerm } from "@/lib/supabase/search";
 // Kept in sync with the CASE expression in v_invoice_debt (migration 00017).
 export type PaymentStatus = "unpaid" | "partial" | "paid";
 
+export type SupplierType = "business_household" | "company";
+
 export type InvoiceDebtRow = {
   invoice_id: string;
   invoice_no: string;
@@ -11,7 +13,11 @@ export type InvoiceDebtRow = {
   supplier_id: string;
   supplier_code: string;
   supplier_name: string;
-  invoice_total: number;
+  supplier_type: SupplierType;
+  subtotal: number;
+  discount_amount: number;
+  vat_amount: number;
+  final_amount: number;
   paid_amount: number;
   remaining_amount: number;
   payment_status: PaymentStatus;
@@ -25,9 +31,10 @@ export type InvoiceDebtFilters = {
   search?: string;
 };
 
-// invoice_total / paid_amount / remaining_amount / payment_status are all
-// computed in the v_invoice_debt SQL view — this is a plain filtered,
-// paginated read, no per-row math in the app layer.
+// subtotal / discount_amount / vat_amount / final_amount / paid_amount /
+// remaining_amount / payment_status are all computed in the v_invoice_debt
+// SQL view — this is a plain filtered, paginated read, no per-row math in
+// the app layer.
 export async function getInvoiceDebtList(
   filters: InvoiceDebtFilters,
   page: number,

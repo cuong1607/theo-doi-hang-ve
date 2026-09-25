@@ -156,3 +156,23 @@ export function calculateInvoiceFinancials(
     finalAmount,
   });
 }
+
+// ============================================================
+// PHASE UP3: Edit-flow support
+//
+// Which financial block an edit screen should show initially. Driven by
+// the invoice's OWN saved snapshot — never by the supplier's *current*
+// supplier_type, which may have drifted since the invoice was created.
+// Only when the snapshot itself is ambiguous (no discount AND vat_rate=0 —
+// exactly what both branches produce when nothing was applied) do we fall
+// back to the supplier's current type, which is safe precisely because
+// every amount involved is already zero either way.
+// ============================================================
+export function inferSnapshotSupplierType(
+  snapshot: { discountType: DiscountType | null; vatRate: number },
+  currentSupplierType: SupplierType | undefined
+): SupplierType {
+  if (snapshot.discountType != null) return "business_household";
+  if (snapshot.vatRate > 0) return "company";
+  return currentSupplierType ?? "business_household";
+}

@@ -9,7 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { calculateInvoiceFinancials } from "./financials.ts";
+import { calculateInvoiceFinancials, inferSnapshotSupplierType } from "./financials.ts";
 
 const oneItem = (quantity: number, unitPrice: number) => [{ quantity, unitPrice }];
 
@@ -180,6 +180,27 @@ test("server always re-derives independently — a tampered preview cannot influ
 test("items must be non-empty", () => {
   const result = calculateInvoiceFinancials({ supplierType: "company", items: [] });
   assert.equal(result.ok, false);
+});
+
+// PHASE UP3 — edit screen must show the block matching the invoice's OWN
+// snapshot, not the supplier's live/current type.
+test("inferSnapshotSupplierType: household snapshot (has discount_type) wins even if supplier is now company", () => {
+  const type = inferSnapshotSupplierType({ discountType: "percent", vatRate: 0 }, "company");
+  assert.equal(type, "business_household");
+});
+
+test("inferSnapshotSupplierType: company snapshot (vat_rate > 0) wins even if supplier is now household", () => {
+  const type = inferSnapshotSupplierType({ discountType: null, vatRate: 8 }, "business_household");
+  assert.equal(type, "company");
+});
+
+test("inferSnapshotSupplierType: ambiguous snapshot (no discount, vat 0) falls back to current supplier type", () => {
+  assert.equal(inferSnapshotSupplierType({ discountType: null, vatRate: 0 }, "company"), "company");
+  assert.equal(
+    inferSnapshotSupplierType({ discountType: null, vatRate: 0 }, "business_household"),
+    "business_household"
+  );
+  assert.equal(inferSnapshotSupplierType({ discountType: null, vatRate: 0 }, undefined), "business_household");
 });
 
 test("rounding matches numeric(15,2) — no drift across many small lines", () => {

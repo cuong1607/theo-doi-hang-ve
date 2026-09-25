@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 
+import { canEditInvoices, getCurrentRole } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -15,13 +16,18 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
+const SUPPLIER_TYPE_LABELS: Record<string, string> = {
+  business_household: "Hộ kinh doanh",
+  company: "Công ty",
+};
+
 type InvoiceDetail = {
   id: string;
   invoice_no: string;
   invoice_date: string;
   note: string | null;
   supplier_id: string;
-  suppliers: { code: string; name: string } | null;
+  suppliers: { code: string; name: string; supplier_type: string } | null;
   subtotal: number;
   discount_type: string | null;
   discount_value: number | null;
@@ -43,7 +49,7 @@ async function getInvoice(id: string) {
   const { data } = await supabase
     .from("invoices")
     .select(
-      "id, invoice_no, invoice_date, note, supplier_id, suppliers(code, name), subtotal, discount_type, discount_value, discount_amount, vat_rate, vat_amount, final_amount, invoice_items(id, unit_price, quantity, line_total, products(sku, name, unit))"
+      "id, invoice_no, invoice_date, note, supplier_id, suppliers(code, name, supplier_type), subtotal, discount_type, discount_value, discount_amount, vat_rate, vat_amount, final_amount, invoice_items(id, unit_price, quantity, line_total, products(sku, name, unit))"
     )
     .eq("id", id)
     .maybeSingle();
@@ -62,6 +68,7 @@ export default async function InvoiceDetailPage({
     notFound();
   }
 
+  const canEdit = canEditInvoices(getCurrentRole());
   const totalQuantity = invoice.invoice_items.reduce((sum, i) => sum + i.quantity, 0);
   const discountLabel =
     invoice.discount_type === "percent"
@@ -72,14 +79,22 @@ export default async function InvoiceDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon-sm" nativeButton={false} render={<Link href="/invoices" />}>
-          <ArrowLeft />
-        </Button>
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">{invoice.invoice_no}</h2>
-          <p className="text-muted-foreground">Chi tiết hóa đơn nhà cung cấp.</p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon-sm" nativeButton={false} render={<Link href="/invoices" />}>
+            <ArrowLeft />
+          </Button>
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">{invoice.invoice_no}</h2>
+            <p className="text-muted-foreground">Chi tiết hóa đơn nhà cung cấp.</p>
+          </div>
         </div>
+        {canEdit && (
+          <Button variant="outline" nativeButton={false} render={<Link href={`/invoices/${invoice.id}/edit`} />}>
+            <Pencil className="mr-2 size-4" />
+            Sửa hóa đơn
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -91,6 +106,12 @@ export default async function InvoiceDetailPage({
           <InfoField
             label="Nhà cung cấp"
             value={invoice.suppliers ? `${invoice.suppliers.code} — ${invoice.suppliers.name}` : "—"}
+          />
+          <InfoField
+            label="Loại NCC"
+            value={
+              invoice.suppliers ? SUPPLIER_TYPE_LABELS[invoice.suppliers.supplier_type] ?? "—" : "—"
+            }
           />
           <InfoField label="Ghi chú" value={invoice.note || "—"} />
         </CardContent>
@@ -137,7 +158,7 @@ export default async function InvoiceDetailPage({
           <InfoField label="Tạm tính" value={formatCurrency(invoice.subtotal)} />
           <InfoField label={discountLabel} value={formatCurrency(invoice.discount_amount)} />
           <InfoField label={`VAT (${invoice.vat_rate}%)`} value={formatCurrency(invoice.vat_amount)} />
-          <InfoField label="Thành tiền" value={formatCurrency(invoice.final_amount)} strong />
+          <InfoField label="Tổng phải trả" value={formatCurrency(invoice.final_amount)} strong />
         </CardContent>
       </Card>
     </div>

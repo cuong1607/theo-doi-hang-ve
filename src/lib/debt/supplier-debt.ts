@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { PaymentStatus } from "./invoice-debt";
+import type { PaymentStatus, SupplierType } from "./invoice-debt";
 
 export type DebtScreenFilters = {
   fromDate: string;
@@ -13,7 +13,11 @@ export type SupplierDebtSummaryRow = {
   supplier_id: string;
   supplier_code: string;
   supplier_name: string;
-  supplier_invoice_total: number;
+  supplier_type: SupplierType;
+  supplier_subtotal_total: number;
+  supplier_discount_total: number;
+  supplier_vat_total: number;
+  supplier_final_total: number;
   supplier_paid_total: number;
   supplier_remaining_total: number;
   supplier_open_invoice_count: number;

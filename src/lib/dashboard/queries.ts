@@ -1,10 +1,17 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { OutstandingRow, OutstandingStatus } from "@/lib/outstanding/list";
+import type { SupplierType } from "@/lib/debt/invoice-debt";
 
 export type DashboardFilters = {
   fromDate: string;
   toDate: string;
   supplierId?: string;
+};
+
+// Financial (invoice/discount/VAT/debt) metrics accept an extra
+// supplierType dimension the receipt-based metrics above don't have.
+export type DashboardFinancialFilters = DashboardFilters & {
+  supplierType?: SupplierType;
 };
 
 export type DashboardSummary = {
@@ -189,4 +196,85 @@ export async function getRecentReceipts(
     })),
     error: !!error,
   };
+}
+
+// ============================================================
+// PHASE UP5: Financial (invoice/discount/VAT/debt) dashboard metrics.
+// Built on v_invoice_debt via dedicated aggregate RPCs (migration 00026) —
+// same single-aggregate-query convention as everything above, no raw-row
+// fetch summed client-side.
+// ============================================================
+
+export type DashboardFinancialSummary = {
+  total_subtotal_amount: number;
+  total_discount_amount: number;
+  total_vat_amount: number;
+  total_final_amount: number;
+  total_paid_amount: number;
+  total_remaining_amount: number;
+};
+
+export async function getDashboardFinancialSummary(f: DashboardFinancialFilters): Promise<{
+  data: DashboardFinancialSummary | null;
+  error: boolean;
+}> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase
+    .rpc("get_dashboard_financial_summary", {
+      p_from_date: f.fromDate,
+      p_to_date: f.toDate,
+      p_supplier_id: f.supplierId || null,
+      p_supplier_type: f.supplierType || null,
+    })
+    .maybeSingle();
+  return { data: (data as DashboardFinancialSummary) ?? null, error: !!error };
+}
+
+export type DashboardFinancialSupplierRow = {
+  supplier_id: string;
+  supplier_code: string;
+  supplier_name: string;
+  supplier_type: SupplierType;
+  subtotal_total: number;
+  discount_total: number;
+  vat_total: number;
+  final_total: number;
+  paid_total: number;
+  remaining_total: number;
+};
+
+export async function getDashboardFinancialSupplierBreakdown(
+  f: DashboardFinancialFilters
+): Promise<{ data: DashboardFinancialSupplierRow[]; error: boolean }> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("get_dashboard_financial_supplier_breakdown", {
+    p_from_date: f.fromDate,
+    p_to_date: f.toDate,
+    p_supplier_id: f.supplierId || null,
+    p_supplier_type: f.supplierType || null,
+  });
+  return { data: (data ?? []) as DashboardFinancialSupplierRow[], error: !!error };
+}
+
+export type DashboardFinancialTypeRow = {
+  supplier_type: SupplierType;
+  subtotal_total: number;
+  discount_total: number;
+  vat_total: number;
+  final_total: number;
+  paid_total: number;
+  remaining_total: number;
+};
+
+export async function getDashboardFinancialTypeBreakdown(
+  f: DashboardFinancialFilters
+): Promise<{ data: DashboardFinancialTypeRow[]; error: boolean }> {
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.rpc("get_dashboard_financial_type_breakdown", {
+    p_from_date: f.fromDate,
+    p_to_date: f.toDate,
+    p_supplier_id: f.supplierId || null,
+    p_supplier_type: f.supplierType || null,
+  });
+  return { data: (data ?? []) as DashboardFinancialTypeRow[], error: !!error };
 }

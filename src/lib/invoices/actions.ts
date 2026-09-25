@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { canCreateInvoices, getCurrentRole } from "@/lib/auth/role";
+import { canCreateInvoices, canEditInvoices, getCurrentRole } from "@/lib/auth/role";
 import { validateSupplierAndItems } from "@/lib/products/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { calculateInvoiceFinancials, type SupplierType } from "@/lib/invoices/financials";
@@ -17,6 +17,10 @@ const uuidLike = (message: string) =>
   z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i, message);
 
 const invoiceItemSchema = z.object({
+  // Present + a real id => this row already exists on the invoice (update in
+  // place). Absent => a new row added during this edit. Only used by
+  // updateInvoice; createInvoice ignores it since nothing exists yet.
+  id: uuidLike("ID dòng hàng không hợp lệ.").optional(),
   productId: uuidLike("Sản phẩm không hợp lệ."),
   unitPrice: z.coerce.number({ error: "Đơn giá phải là số." }).min(0, "Đơn giá phải >= 0."),
   quantity: z.coerce
@@ -52,25 +56,31 @@ export type InvoiceFormState = {
   invoice?: { id: string; invoiceNo: string };
 };
 
-export async function createInvoice(
-  _prevState: InvoiceFormState,
-  payload: InvoiceFormPayload
-): Promise<InvoiceFormState> {
-  if (!canCreateInvoices(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
-  }
+type InvoiceParsed = z.infer<typeof invoiceSchema>;
 
+// Shared by createInvoice and updateInvoice: validate the payload, re-check
+// supplier/items server-side, and compute the authoritative financial
+// snapshot from the supplier's CURRENT supplier_type (never trusted from
+// client input) via calculateInvoiceFinancials — the single formula owner.
+async function resolveInvoiceFinancials(
+  supabase: ReturnType<typeof createAdminClient>,
+  payload: InvoiceFormPayload
+): Promise<
+  | { ok: false; state: InvoiceFormState }
+  | { ok: true; parsed: InvoiceParsed; financials: ReturnType<typeof calculateInvoiceFinancials> & { ok: true } }
+> {
   const parsed = invoiceSchema.safeParse(payload);
   if (!parsed.success) {
     const flattened = z.flattenError(parsed.error);
     return {
-      status: "error",
-      message: flattened.formErrors[0] ?? "Vui lòng kiểm tra lại thông tin.",
-      fieldErrors: flattened.fieldErrors as Record<string, string[]>,
+      ok: false,
+      state: {
+        status: "error",
+        message: flattened.formErrors[0] ?? "Vui lòng kiểm tra lại thông tin.",
+        fieldErrors: flattened.fieldErrors as Record<string, string[]>,
+      },
     };
   }
-
-  const supabase = createAdminClient();
 
   const validationError = await validateSupplierAndItems(
     supabase,
@@ -78,7 +88,7 @@ export async function createInvoice(
     parsed.data.items
   );
   if (validationError) {
-    return { status: "error", message: validationError };
+    return { ok: false, state: { status: "error", message: validationError } };
   }
 
   // supplier_type is the source of truth for which financial rules apply —
@@ -89,7 +99,7 @@ export async function createInvoice(
     .eq("id", parsed.data.supplierId)
     .maybeSingle();
   if (supplierError || !supplierRow) {
-    return { status: "error", message: "Nhà cung cấp không tồn tại." };
+    return { ok: false, state: { status: "error", message: "Nhà cung cấp không tồn tại." } };
   }
 
   const financials = calculateInvoiceFinancials({
@@ -101,19 +111,39 @@ export async function createInvoice(
   });
   if (!financials.ok) {
     return {
-      status: "error",
-      message: financials.error,
-      fieldErrors: financials.field ? { [financials.field]: [financials.error] } : undefined,
+      ok: false,
+      state: {
+        status: "error",
+        message: financials.error,
+        fieldErrors: financials.field ? { [financials.field]: [financials.error] } : undefined,
+      },
     };
   }
 
+  return { ok: true, parsed: parsed.data, financials };
+}
+
+export async function createInvoice(
+  _prevState: InvoiceFormState,
+  payload: InvoiceFormPayload
+): Promise<InvoiceFormState> {
+  if (!canCreateInvoices(getCurrentRole())) {
+    return { status: "error", message: FORBIDDEN_MESSAGE };
+  }
+
+  const supabase = createAdminClient();
+
+  const resolved = await resolveInvoiceFinancials(supabase, payload);
+  if (!resolved.ok) return resolved.state;
+  const { parsed, financials } = resolved;
+
   const { data, error } = await supabase.rpc("create_invoice", {
-    p_supplier_id: parsed.data.supplierId,
-    p_invoice_no: parsed.data.invoiceNo,
-    p_invoice_date: parsed.data.invoiceDate,
-    p_note: parsed.data.note || null,
+    p_supplier_id: parsed.supplierId,
+    p_invoice_no: parsed.invoiceNo,
+    p_invoice_date: parsed.invoiceDate,
+    p_note: parsed.note || null,
     p_created_by: null,
-    p_items: parsed.data.items.map((i) => ({
+    p_items: parsed.items.map((i) => ({
       product_id: i.productId,
       unit_price: i.unitPrice,
       quantity: i.quantity,
@@ -152,6 +182,91 @@ export async function createInvoice(
   return {
     status: "success",
     message: `Đã lưu hóa đơn ${result.invoice_no}.`,
+    invoice: { id: result.invoice_id, invoiceNo: result.invoice_no },
+  };
+}
+
+export async function updateInvoice(
+  invoiceId: string,
+  _prevState: InvoiceFormState,
+  payload: InvoiceFormPayload
+): Promise<InvoiceFormState> {
+  if (!canEditInvoices(getCurrentRole())) {
+    return { status: "error", message: FORBIDDEN_MESSAGE };
+  }
+
+  const supabase = createAdminClient();
+
+  const { data: original } = await supabase
+    .from("invoices")
+    .select("id")
+    .eq("id", invoiceId)
+    .maybeSingle();
+  if (!original) {
+    return { status: "error", message: "Không tìm thấy hóa đơn." };
+  }
+
+  // Re-derives the full snapshot from scratch every time, using whatever
+  // supplier_type the (possibly just-changed) supplier currently has — this
+  // is intentional and correct: an edit that keeps the same supplier just
+  // reproduces the same numbers, and an edit that switches supplier is
+  // exactly when the policy SHOULD change. What must never happen is the
+  // opposite: an edit that touches unrelated fields silently drifting an
+  // untouched invoice's old snapshot — that can't happen here because the
+  // client always re-sends its current discountType/discountValue/vatRate
+  // (pre-filled from the existing snapshot by the edit form), never omits
+  // them expecting a stale value to persist.
+  const resolved = await resolveInvoiceFinancials(supabase, payload);
+  if (!resolved.ok) return resolved.state;
+  const { parsed, financials } = resolved;
+
+  const { data, error } = await supabase.rpc("update_invoice", {
+    p_invoice_id: invoiceId,
+    p_supplier_id: parsed.supplierId,
+    p_invoice_no: parsed.invoiceNo,
+    p_invoice_date: parsed.invoiceDate,
+    p_note: parsed.note || null,
+    p_items: parsed.items.map((i) => ({
+      id: i.id ?? null,
+      product_id: i.productId,
+      unit_price: i.unitPrice,
+      quantity: i.quantity,
+    })),
+    p_subtotal: financials.data.subtotal,
+    p_discount_type: financials.data.discountType,
+    p_discount_value: financials.data.discountValue,
+    p_discount_amount: financials.data.discountAmount,
+    p_vat_rate: financials.data.vatRate,
+    p_vat_amount: financials.data.vatAmount,
+    p_final_amount: financials.data.finalAmount,
+  });
+
+  if (error) {
+    if (error.code === "23505") {
+      return {
+        status: "error",
+        message: "Số hóa đơn này đã tồn tại cho nhà cung cấp đã chọn.",
+        fieldErrors: { invoiceNo: ["Số hóa đơn đã tồn tại cho nhà cung cấp này."] },
+      };
+    }
+    return {
+      status: "error",
+      message: "Không thể lưu thay đổi. Vui lòng thử lại.",
+    };
+  }
+  if (!data || data.length === 0) {
+    return {
+      status: "error",
+      message: "Không thể lưu thay đổi. Vui lòng thử lại.",
+    };
+  }
+
+  const result = data[0] as { invoice_id: string; invoice_no: string };
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+  return {
+    status: "success",
+    message: `Đã lưu thay đổi hóa đơn ${result.invoice_no}.`,
     invoice: { id: result.invoice_id, invoiceNo: result.invoice_no },
   };
 }

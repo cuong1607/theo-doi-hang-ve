@@ -13,17 +13,25 @@ import {
 } from "@/components/ui/select";
 import { RANGE_PRESETS, type RangePreset } from "@/lib/dashboard/date-range";
 
+const SUPPLIER_TYPE_OPTIONS = [
+  { label: "Tất cả loại NCC", value: "all" },
+  { label: "Hộ kinh doanh", value: "business_household" },
+  { label: "Công ty", value: "company" },
+];
+
 export function DashboardFilters({
   range,
   customFrom,
   customTo,
   supplierId,
+  supplierType,
   suppliers,
 }: {
   range: RangePreset;
   customFrom: string;
   customTo: string;
   supplierId: string;
+  supplierType: string;
   suppliers: { id: string; code: string; name: string }[];
 }) {
   const router = useRouter();
@@ -107,6 +115,28 @@ export function DashboardFilters({
             {suppliers.map((s) => (
               <SelectItem key={s.id} value={s.id}>
                 {s.code} — {s.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1.5">
+        <label htmlFor="dashSupplierType" className="text-xs font-medium text-muted-foreground">
+          Loại NCC
+        </label>
+        <Select
+          value={supplierType || "all"}
+          onValueChange={(value) => updateParams({ supplierType: value === "all" ? "" : String(value) })}
+          items={SUPPLIER_TYPE_OPTIONS}
+        >
+          <SelectTrigger id="dashSupplierType" className="w-[190px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SUPPLIER_TYPE_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
               </SelectItem>
             ))}
           </SelectContent>
