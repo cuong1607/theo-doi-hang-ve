@@ -13,6 +13,7 @@ import {
   Users,
   Wallet,
   Receipt,
+  Bell,
 } from "lucide-react";
 
 import {
@@ -100,6 +101,11 @@ const navGroups = [
         title: "Người dùng",
         href: "/users",
         icon: Users,
+      },
+      {
+        title: "Cài đặt thông báo",
+        href: "/settings/notifications",
+        icon: Bell,
       },
     ],
   },

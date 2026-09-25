@@ -49,3 +49,10 @@ export function canEditInvoices(role: Role): boolean {
 export function canCreatePayments(role: Role): boolean {
   return role === "admin" || role === "staff";
 }
+
+// Phase ZL1: connecting/testing the Zalo OA integration is a system-level
+// config action (like managing suppliers/products) — admin only, unlike the
+// day-to-day staff actions above.
+export function canManageIntegrations(role: Role): boolean {
+  return role === "admin";
+}
