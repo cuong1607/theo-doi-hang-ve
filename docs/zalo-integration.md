@@ -1,9 +1,18 @@
-# Zalo OA Integration — Phase ZL1 (OAuth foundation + test message)
+# Zalo OA Integration — Phase ZL1 + ZL2
 
 Phase ZL1 chỉ làm: OAuth start/callback, token exchange, refresh foundation,
-lưu token server-side, và gửi 1 tin nhắn test. Không có cron, không có
-business-event notifications (daily receipt/low stock/payment) — những cái
-đó là các phase sau.
+lưu token server-side, và gửi 1 tin nhắn test (tới `ZALO_TEST_RECIPIENT_ID`).
+
+Phase ZL2 xây phần lõi thông báo dùng chung, nằm trên nền ZL1: bảng người
+nhận (`notification_recipients`), bảng log gửi (`notification_logs`),
+notification service (`sendNotification`, `retryFailedNotification`), cơ chế
+chống gửi trùng (dedupe), và UI quản lý người nhận + xem lịch sử gửi.
+
+Cả hai phase đều **không có**: cron, business-event notifications thật
+(daily receipt summary/low stock/payment summary — các phase sau sẽ gọi
+`sendNotification()` cho các event này), broadcast, ZBS Template Message,
+hay phân quyền người nhận theo từng loại event (hiện tại: mọi người nhận
+active đều nhận mọi thông báo như nhau).
 
 ## 1. Architecture
 
@@ -260,3 +269,150 @@ Có rate limit cơ bản (3 lần/phút/process — xem mục 11).
   auto-refresh.
 - Rate limit test-message là in-memory, không phân tán (xem bảng trên).
 - Mã hóa token là app-layer nhẹ, không phải secrets-manager thật (mục 5).
+
+---
+
+# Phase ZL2 — Notification core, recipients, delivery logs
+
+## 11. Notification architecture
+
+```
+Business event (phase sau — chưa implement)          Admin UI (đã có, ZL2)
+  vd: hàng về trong ngày, SKU sắp hết                 "Gửi tin thử cho tất cả"
+        |                                                     |
+        v                                                     v
+              sendNotification({ eventType, message, dedupeKey?, entityType?, entityId? })
+                  (src/lib/notifications/service.ts — ĐIỂM DUY NHẤT mọi nơi phải gọi qua)
+                                    |
+                    1. getActiveNotificationRecipients()
+                    2. với mỗi recipient (độc lập, lỗi 1 người không chặn người khác):
+                         a. có dedupeKey? hasNotificationBeenSent() -> true: ghi log 'skipped', bỏ qua
+                         b. INSERT notification_logs (status='pending')
+                         c. sendZaloTextMessage({ recipientId: zaloUid, text: message })  <-- từ ZL1
+                         d. UPDATE log -> 'sent' (+ provider_message_id) | 'failed' (+ provider_error_*)
+                    3. trả về { success, totalRecipients, sentCount, failedCount, skippedCount, results[] }
+```
+
+Không route/component nào khác được gọi `sendZaloTextMessage()` trực tiếp
+cho một notification tới nhiều người — luôn đi qua `sendNotification()` để
+dedupe/log/error-isolation không bị lặp lại rải rác ở nhiều nơi (Phần 6 của
+spec ZL2).
+
+`src/lib/notifications/`:
+
+| File | Vai trò |
+| --- | --- |
+| `recipients.ts` | `getActiveNotificationRecipients()` (dùng bởi service), `getAllNotificationRecipients()` (dùng bởi UI, gồm cả inactive) |
+| `dedupe.ts` | `hasNotificationBeenSent({eventType, recipientId, dedupeKey})` |
+| `logs.ts` | `getRecentNotificationLogs(limit)` — cho bảng "Lịch sử gửi gần đây" |
+| `service.ts` | `sendNotification(...)`, `retryFailedNotification(logId)` — cả hai `import "server-only"` |
+
+## 12. Recipients model
+
+Bảng `notification_recipients` (migration `00029_notification_recipients_and_logs.sql`):
+`id`, `name` (không rỗng — CHECK), `zalo_uid` (UNIQUE), `is_active`,
+`created_at`, `updated_at`. Không còn đọc recipient từ env nữa (ngoại trừ
+`ZALO_TEST_RECIPIENT_ID` của ZL1, vẫn giữ nguyên cho việc test kết nối OA cơ
+bản, tách biệt với danh sách người nhận thật ở đây).
+
+RLS: khác với `zalo_connections` (không cấp quyền `authenticated` nào, vì nó
+lưu token), bảng này lưu dữ liệu nghiệp vụ thường (tên + Zalo UID) nên theo
+đúng quy ước chung của app: cấp CRUD cho `authenticated`, chặn ở app layer
+bằng `canManageNotificationRecipients` (admin-only; staff/viewer chỉ xem —
+đúng theo spec "staff/viewer: read nếu cần"), chờ Phase 5 (Authentication)
+làm RLS theo role thật.
+
+Quản lý qua `/settings/notifications` (mục "Người nhận thông báo Zalo"):
+thêm, sửa tên/UID, bật/tắt active, xóa. Xóa là xóa thật (không phải soft
+delete) — nhưng lịch sử gửi cũ của người đó vẫn giữ nguyên vì
+`notification_logs.recipient_id` là `ON DELETE SET NULL` và
+`recipient_zalo_uid` được lưu kèm (denormalized) ngay trên mỗi dòng log.
+
+## 13. Notification logs
+
+Bảng `notification_logs`: mỗi dòng = một lần thử gửi tới MỘT người nhận
+(không phải một lần gọi `sendNotification()`— nếu gửi cho 3 người thì tạo 3
+dòng log). `status` chỉ nhận `pending | sent | failed | skipped`. Index trên
+`event_type`, `created_at`, `status`, `recipient_id`, `dedupe_key` — dùng
+cho các phase sau khi cần lọc/báo cáo theo các chiều này.
+
+UI "Lịch sử gửi gần đây" chỉ lấy 20 dòng mới nhất, không phân trang/báo cáo
+đầy đủ (đúng phạm vi ZL2).
+
+## 14. Dedupe strategy
+
+Chỉ áp dụng khi `sendNotification()` được gọi kèm `dedupeKey`. Khóa dedupe
+thực tế là bộ ba **`event_type` + `recipient_id` + `dedupe_key`** — nghĩa là
+mỗi người nhận được dedupe độc lập (ví dụ: chị Hương đã nhận
+`DAILY_RECEIPT_SUMMARY:2026-09-25` không có nghĩa anh Tuấn cũng bị coi là đã
+nhận).
+
+Hai lớp bảo vệ:
+1. **App layer** (`hasNotificationBeenSent()`): SELECT xem có dòng log
+   `status='sent'` nào khớp cả 3 điều kiện chưa — nếu có, `sendNotification()`
+   ghi một dòng log `status='skipped'` cho người đó (để còn thấy trong lịch
+   sử là "đã bị chặn vì trùng", không phải im lặng bỏ qua) và **không** gọi
+   Zalo.
+2. **DB layer** (unique index `idx_notification_logs_dedupe_sent_unique`,
+   partial trên `WHERE dedupe_key IS NOT NULL AND status = 'sent'`): backstop
+   cứng — dù app layer có bug/race condition, DB vẫn từ chối một dòng `sent`
+   thứ hai cho cùng bộ ba đó. Index này **không** chặn dòng `pending`/`failed`
+   /`skipped` trùng khóa, nên một lần gửi thất bại luôn có thể thử lại (retry)
+   mà không bị unique constraint cản.
+
+Ví dụ khóa cho các event tương lai (chưa implement ở ZL2, chỉ chuẩn bị cơ chế):
+`DAILY_RECEIPT_SUMMARY:2026-09-25`, `LOW_STOCK:<invoice_item_id>:NEAR_EMPTY:<state_version>`,
+`DAILY_PAYMENT_SUMMARY:2026-09-25`.
+
+## 15. Retry strategy
+
+`retryFailedNotification(logId)`: chỉ retry log đang `status='failed'` (log
+khác trạng thái → trả lỗi `not_retryable`, log không tồn tại → `not_found`).
+Gửi lại tới `recipient_zalo_uid` **lưu sẵn trên chính dòng log** (không cần
+join lại `notification_recipients` — vẫn hoạt động đúng dù recipient đã bị
+xóa), rồi cập nhật **cùng một dòng log** đó (`sent`/`failed` mới), không tạo
+dòng log mới. Không auto-retry lặp lại, không background worker/queue — đây
+là "foundation" đúng như spec yêu cầu, **chưa có nút bấm "Thử lại" trên UI**
+ở phase này (UI của ZL2 chỉ yêu cầu xem lịch sử, không yêu cầu action retry
+trên bảng) — sẵn sàng để một phase sau gắn nút gọi hàm này.
+
+## 16. Cách thêm 2-3 người nhận
+
+1. Lấy Zalo UID thật của từng người theo đúng cách ở mục 8 (KHÔNG tự đoán) —
+   UID phải đã tương tác/quan tâm OA "Homies".
+2. Vào `/settings/notifications` (admin), mục "Người nhận thông báo Zalo" →
+   bấm **"Thêm người nhận"** → nhập Tên + Zalo UID → Lưu. Lặp lại cho từng
+   người (2-3 người theo bối cảnh phase này).
+3. Trùng UID sẽ bị từ chối ngay với thông báo lỗi rõ ràng (UNIQUE constraint
+   ở DB + hiển thị lỗi ở form).
+4. Dùng nút bật/tắt (⋮ → Tắt/Bật lại) nếu muốn tạm ngưng một người mà không
+   xóa hẳn.
+
+## 17. Cách gửi test cho tất cả
+
+Trên `/settings/notifications`, mục "Người nhận thông báo Zalo" → bấm
+**"Gửi tin thử cho tất cả"** (chỉ hiện khi có ít nhất 1 người nhận active).
+Gọi `POST /api/notifications/test-all` (admin-only), nội dung cố định
+`"Test thông báo hệ thống Theo dõi hàng về"`, đi qua đúng
+`sendNotification()` (không gọi Zalo trực tiếp từ UI). Kết quả hiển thị ngay
+dạng "Đã gửi: N thành công, M thất bại" kèm nút xem chi tiết từng người; bảng
+"Lịch sử gửi gần đây" tự làm mới theo sau.
+
+Lưu ý phân biệt với nút **"Gửi tin nhắn thử"** ở mục "Kết nối Zalo OA" (ZL1):
+nút đó chỉ gửi 1 tin tới `ZALO_TEST_RECIPIENT_ID` (kiểm tra kết nối OA cơ
+bản), không liên quan tới bảng `notification_recipients`.
+
+### Giới hạn còn lại của Phase ZL2
+
+- Chưa test được một lần gửi **thành công thật** hay kịch bản **"1 người
+  thành công, 1 người lỗi"** (test case 6/7 trong spec) vì môi trường code
+  hóa này chỉ có Zalo credentials giả — mọi recipient dùng chung 1 access
+  token giả nên luôn cùng thất bại (không thể tạo kết quả trộn thành
+  công/thất bại mà không có ít nhất 1 credential Zalo thật). Đã verify đầy đủ
+  bằng thực nghiệm: 0 recipient, 1 recipient, 3 recipient (có 1 inactive),
+  cô lập lỗi từng người (mỗi người có dòng log riêng), dedupe (cả app-layer
+  check và DB backstop), và guard của retry. Cần chủ hệ thống tự xác nhận
+  kịch bản thành công/trộn sau khi OAuth thật đã kết nối (mục 4).
+- `retryFailedNotification` chưa có nút bấm trên UI (xem mục 15).
+- Không có phân quyền người nhận theo từng event — mọi người active nhận mọi
+  thông báo như nhau (đúng phạm vi ZL2, để dành cho phase sau nếu cần).

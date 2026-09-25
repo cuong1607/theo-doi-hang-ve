@@ -1,12 +1,51 @@
-import { AlertTriangle, CheckCircle2, MessageCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, MessageCircle, Users } from "lucide-react";
 
-import { canManageIntegrations, getCurrentRole } from "@/lib/auth/role";
+import { canManageIntegrations, canManageNotificationRecipients, getCurrentRole } from "@/lib/auth/role";
 import { getZaloConnectionStatus } from "@/lib/zalo/token";
+import { getAllNotificationRecipients } from "@/lib/notifications/recipients";
+import { getRecentNotificationLogs } from "@/lib/notifications/logs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 import { SendTestMessageButton } from "./send-test-message-button";
+import { CreateRecipientButton } from "./create-recipient-button";
+import { RecipientRowActions } from "./recipient-row-actions";
+import { SendTestAllButton } from "./send-test-all-button";
+
+const RECENT_LOGS_LIMIT = 20;
+
+const LOG_STATUS_LABELS: Record<string, string> = {
+  pending: "Đang gửi",
+  sent: "Thành công",
+  failed: "Thất bại",
+  skipped: "Bỏ qua",
+};
+
+const LOG_STATUS_BADGE_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
+  pending: "secondary",
+  sent: "outline",
+  failed: "destructive",
+  skipped: "secondary",
+};
+
+function formatDateTimeVN(iso: string) {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function truncate(text: string, max: number) {
+  return text.length > max ? `${text.slice(0, max)}…` : text;
+}
 
 // Shows enough of an OA id to recognize it without fully exposing it —
 // e.g. an id like "1234567890123" renders as "12•••••••123". Never renders
@@ -43,12 +82,20 @@ export default async function NotificationSettingsPage({
   searchParams: Promise<{ zalo?: string; reason?: string }>;
 }) {
   const params = await searchParams;
-  const canManage = canManageIntegrations(getCurrentRole());
+  const role = getCurrentRole();
+  const canManage = canManageIntegrations(role);
+  const canManageRecipients = canManageNotificationRecipients(role);
   const status = await getZaloConnectionStatus();
   // A manual ZALO_ACCESS_TOKEN (Phần 3/6 test bootstrap) also lets the test
   // button work even before OAuth has ever completed — see
   // getValidZaloAccessToken()'s fallback in src/lib/zalo/token.ts.
   const canSendTest = status.connected || !!process.env.ZALO_ACCESS_TOKEN;
+
+  const [{ rows: recipients, error: recipientsError }, { rows: logs, error: logsError }] = await Promise.all([
+    getAllNotificationRecipients(),
+    getRecentNotificationLogs(RECENT_LOGS_LIMIT),
+  ]);
+  const hasActiveRecipient = recipients.some((r) => r.isActive);
 
   return (
     <div className="space-y-6">
@@ -98,11 +145,133 @@ export default async function NotificationSettingsPage({
           )}
 
           {canManage && (
-            <div className="flex flex-wrap gap-2">
-              <Button nativeButton={false} render={<a href="/api/zalo/oauth/start" />}>
-                Kết nối Zalo
-              </Button>
-              <SendTestMessageButton disabled={!canSendTest} />
+            <div className="space-y-1">
+              <div className="flex flex-wrap gap-2">
+                <Button nativeButton={false} render={<a href="/api/zalo/oauth/start" />}>
+                  Kết nối Zalo
+                </Button>
+                <SendTestMessageButton disabled={!canSendTest} />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                &quot;Gửi tin nhắn thử&quot; ở trên chỉ kiểm tra kết nối OA (gửi tới{" "}
+                <code className="font-mono">ZALO_TEST_RECIPIENT_ID</code>). Để gửi cho danh sách người nhận thật, dùng
+                &quot;Gửi tin thử cho tất cả&quot; ở mục bên dưới.
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="size-4" />
+            Người nhận thông báo Zalo
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">
+              Tất cả người nhận đang hoạt động sẽ nhận cùng một thông báo khi hệ thống gửi tin.
+            </p>
+            {canManageRecipients && <CreateRecipientButton />}
+          </div>
+
+          {recipientsError ? (
+            <div className="flex flex-col items-center gap-2 py-8 text-center">
+              <AlertTriangle className="size-6 text-destructive" />
+              <p className="text-sm">Đã xảy ra lỗi khi tải danh sách người nhận.</p>
+            </div>
+          ) : recipients.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Chưa có người nhận nào.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Tên</TableHead>
+                    <TableHead>Zalo UID</TableHead>
+                    <TableHead>Trạng thái</TableHead>
+                    {canManageRecipients && <TableHead className="text-right">Thao tác</TableHead>}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recipients.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="font-medium">{r.name}</TableCell>
+                      <TableCell className="font-mono text-xs">{r.zaloUid}</TableCell>
+                      <TableCell>
+                        <Badge variant={r.isActive ? "outline" : "secondary"}>
+                          {r.isActive ? "Đang hoạt động" : "Đã tắt"}
+                        </Badge>
+                      </TableCell>
+                      {canManageRecipients && (
+                        <TableCell className="text-right">
+                          <RecipientRowActions recipient={r} />
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          {canManageRecipients && (
+            <div className="border-t pt-4">
+              <SendTestAllButton disabled={!hasActiveRecipient} />
+              {!hasActiveRecipient && (
+                <p className="mt-1 text-xs text-muted-foreground">Thêm ít nhất 1 người nhận đang hoạt động để gửi thử.</p>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Lịch sử gửi gần đây</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {logsError ? (
+            <div className="flex flex-col items-center gap-2 py-8 text-center">
+              <AlertTriangle className="size-6 text-destructive" />
+              <p className="text-sm">Đã xảy ra lỗi khi tải lịch sử gửi.</p>
+            </div>
+          ) : logs.length === 0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">Chưa có thông báo nào được gửi.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Thời gian</TableHead>
+                    <TableHead>Event</TableHead>
+                    <TableHead>Người nhận</TableHead>
+                    <TableHead>Nội dung</TableHead>
+                    <TableHead>Trạng thái</TableHead>
+                    <TableHead>Lỗi</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {logs.map((log) => (
+                    <TableRow key={log.id}>
+                      <TableCell className="whitespace-nowrap text-sm">{formatDateTimeVN(log.createdAt)}</TableCell>
+                      <TableCell className="text-sm">{log.eventType}</TableCell>
+                      <TableCell className="text-sm">{log.recipientName ?? log.recipientZaloUid}</TableCell>
+                      <TableCell className="max-w-[240px] text-sm">{truncate(log.messageText, 60)}</TableCell>
+                      <TableCell>
+                        <Badge variant={LOG_STATUS_BADGE_VARIANT[log.status]}>
+                          {LOG_STATUS_LABELS[log.status] ?? log.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="max-w-[200px] text-xs text-destructive">
+                        {log.providerErrorMessage ? truncate(log.providerErrorMessage, 60) : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )}
         </CardContent>

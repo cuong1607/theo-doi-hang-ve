@@ -56,3 +56,11 @@ export function canCreatePayments(role: Role): boolean {
 export function canManageIntegrations(role: Role): boolean {
   return role === "admin";
 }
+
+// Phase ZL2: who receives Zalo notifications is system-level config, same
+// tier as canManageIntegrations — admin manages the recipient list and can
+// trigger a test send; staff/viewer can only view (per the phase spec,
+// "staff/viewer: read nếu cần").
+export function canManageNotificationRecipients(role: Role): boolean {
+  return role === "admin";
+}
