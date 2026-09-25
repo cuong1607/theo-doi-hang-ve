@@ -65,3 +65,34 @@ export async function getOutstandingList(
 
   return { rows: (data ?? []) as OutstandingRow[], total: count ?? 0, error: false };
 }
+
+export type OutstandingSummary = {
+  total_invoice_amount: number;
+  total_received_amount: number;
+  total_remaining_amount: number;
+};
+
+// Single SQL aggregate (get_outstanding_summary, migration 00027) over the
+// WHOLE filtered set — never a sum of a paginated page's rows. invoice_value/
+// received_value/remaining_value already account for VAT (công ty) /
+// chiết khấu (hộ kinh doanh) via v_outstanding's per-invoice allocation.
+export async function getOutstandingSummary(
+  filters: OutstandingFilters
+): Promise<{ data: OutstandingSummary | null; error: boolean }> {
+  const supabase = createAdminClient();
+
+  const { data, error } = await supabase
+    .rpc("get_outstanding_summary", {
+      p_supplier_id: filters.supplierId || null,
+      p_invoice_date: filters.invoiceDate || null,
+      p_sku: filters.sku || null,
+      p_status: filters.status || null,
+    })
+    .maybeSingle();
+
+  if (error) {
+    return { data: null, error: true };
+  }
+
+  return { data: (data as OutstandingSummary) ?? null, error: false };
+}

@@ -1,8 +1,8 @@
 import Link from "next/link";
-import { AlertTriangle, PackageSearch } from "lucide-react";
+import { AlertTriangle, PackageSearch, Wallet } from "lucide-react";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getOutstandingList, type OutstandingStatus } from "@/lib/outstanding/list";
+import { getOutstandingList, getOutstandingSummary, type OutstandingStatus } from "@/lib/outstanding/list";
 import { STATUS_BADGE_VARIANT, STATUS_LABELS } from "@/lib/outstanding/status";
 import { formatCurrency } from "@/lib/format";
 import { ListPagination } from "@/components/list-pagination";
@@ -60,9 +60,12 @@ export default async function OutstandingPage({
     : undefined;
   const page = Math.max(1, Number(params.page) || 1);
 
-  const [suppliers, { rows, total, error }] = await Promise.all([
+  const filters = { supplierId, invoiceDate, sku, status };
+
+  const [suppliers, { rows, total, error }, { data: summary, error: summaryError }] = await Promise.all([
     getAllSuppliers(),
-    getOutstandingList({ supplierId, invoiceDate, sku, status }, page, PAGE_SIZE),
+    getOutstandingList(filters, page, PAGE_SIZE),
+    getOutstandingSummary(filters),
   ]);
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -78,14 +81,46 @@ export default async function OutstandingPage({
       </div>
 
       <Card>
-        <CardContent className="text-sm text-muted-foreground">
-          Lưu ý: số &quot;Đã nhận&quot; cộng dồn mọi phiếu nhập cùng NCC + SKU có ngày nhận từ
-          ngày hóa đơn trở đi. Nếu một NCC + SKU có nhiều hóa đơn với khoảng thời gian chồng lấn
-          nhau, cùng một phiếu nhập có thể được tính vào &quot;Đã nhận&quot; của nhiều hóa đơn
-          (double-count) — đây là hành vi giống hệt bảng Excel hiện tại, phase này chưa xây dựng
-          engine phân bổ (allocation) để tách riêng từng phiếu về đúng 1 hóa đơn.
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>
+            Lưu ý: số &quot;Đã nhận&quot; cộng dồn mọi phiếu nhập cùng NCC + SKU có ngày nhận từ
+            ngày hóa đơn trở đi. Nếu một NCC + SKU có nhiều hóa đơn với khoảng thời gian chồng lấn
+            nhau, cùng một phiếu nhập có thể được tính vào &quot;Đã nhận&quot; của nhiều hóa đơn
+            (double-count) — đây là hành vi giống hệt bảng Excel hiện tại, phase này chưa xây dựng
+            engine phân bổ (allocation) để tách riêng từng phiếu về đúng 1 hóa đơn.
+          </p>
+          <p>
+            Giá trị tiền đã bao gồm VAT đối với Công ty và đã trừ chiết khấu đối với Hộ kinh doanh.
+          </p>
         </CardContent>
       </Card>
+
+      {/* PHẦN 3: 3 summary cards, tính aggregate ở DB trên toàn bộ filtered
+          set (get_outstanding_summary, migration 00027) — không reduce trên
+          rows đã phân trang. */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard
+          title="Tổng tiền hóa đơn"
+          value={formatCurrency(summary?.total_invoice_amount ?? 0)}
+          icon={Wallet}
+        />
+        <StatCard
+          title="Tổng tiền đã nhận"
+          value={formatCurrency(summary?.total_received_amount ?? 0)}
+          icon={Wallet}
+        />
+        <StatCard
+          title="Tổng tiền còn lại"
+          value={formatCurrency(summary?.total_remaining_amount ?? 0)}
+          icon={Wallet}
+          emphasis={(summary?.total_remaining_amount ?? 0) < 0}
+        />
+      </div>
+      {summaryError && (
+        <p className="text-xs text-muted-foreground">
+          Không thể tải số liệu tổng hợp — số liệu trên có thể chưa chính xác, vui lòng tải lại trang.
+        </p>
+      )}
 
       <Card>
         <CardHeader className="flex-col items-start gap-4 space-y-0">
@@ -198,5 +233,29 @@ export default async function OutstandingPage({
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function StatCard({
+  title,
+  value,
+  icon: Icon,
+  emphasis,
+}: {
+  title: string;
+  value: string;
+  icon: typeof Wallet;
+  emphasis?: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+        <Icon className="size-4 text-muted-foreground" />
+      </CardHeader>
+      <CardContent>
+        <div className={emphasis ? "text-2xl font-bold text-destructive" : "text-2xl font-bold"}>{value}</div>
+      </CardContent>
+    </Card>
   );
 }
