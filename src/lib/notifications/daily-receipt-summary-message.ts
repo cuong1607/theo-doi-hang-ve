@@ -1,9 +1,15 @@
 // Pure calculation-free helpers for the DAILY_RECEIPT_SUMMARY event: the
-// summary shape, "today in Asia/Ho_Chi_Minh", and message formatting. Kept
-// in its own file with zero DB/"@/" imports so it can run under plain
-// `node --test` (unlike buildDailyReceiptSummary in ./daily-receipt-summary.ts,
-// which touches the real DB via the "@/lib/supabase/admin" alias that only
-// Next's bundler — not plain Node — knows how to resolve).
+// summary shape and message formatting. Kept in its own file with zero
+// DB/"@/" imports so it can run under plain `node --test` (unlike
+// buildDailyReceiptSummary in ./daily-receipt-summary.ts, which touches the
+// real DB via the "@/lib/supabase/admin" alias that only Next's bundler —
+// not plain Node — knows how to resolve).
+
+// Re-exported for backward compatibility — existing imports
+// (daily-receipt-summary.ts, its test file, the API route) still pull
+// getTodayDateVN from here. New code should import it from ./date-vn
+// directly, same as daily-payment-summary-message.ts (ZL5) does.
+export { getTodayDateVN } from "./date-vn.ts";
 
 export type DailyReceiptSupplierBreakdown = {
   supplierId: string;
@@ -25,21 +31,6 @@ export type DailyReceiptSummary = {
   totalAmount: number;
   suppliers: DailyReceiptSupplierBreakdown[];
 };
-
-// "Ngày tính theo Asia/Ho_Chi_Minh" — computed via Intl so it's correct
-// regardless of the server process's own TZ (e.g. Vercel runs UTC, which is
-// 7h behind and would otherwise roll over to the wrong calendar day for part
-// of the evening).
-export function getTodayDateVN(): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Ho_Chi_Minh",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const get = (type: string) => parts.find((p) => p.type === type)!.value;
-  return `${get("year")}-${get("month")}-${get("day")}`;
-}
 
 function formatDateVN(iso: string): string {
   const [y, m, d] = iso.split("-");

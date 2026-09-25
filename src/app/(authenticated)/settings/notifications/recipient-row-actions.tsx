@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { MoreHorizontal, Pencil, Power, PowerOff, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Power, PowerOff, Send, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +31,40 @@ export function RecipientRowActions({ recipient }: { recipient: Recipient }) {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const [testResultOpen, setTestResultOpen] = useState(false);
+  const [testPending, setTestPending] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+
+  // ZL7 Phần 7 — "test 1 recipient": same route as "Gửi tin thử cho tất
+  // cả" (ZL2), scoped to just this recipient via the request body.
+  async function handleTestSend() {
+    setTestResultOpen(true);
+    setTestPending(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/notifications/test-all", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recipientId: recipient.id }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        const outcome = data.results?.[0];
+        setTestResult(
+          outcome?.status === "sent"
+            ? "Đã gửi thành công."
+            : `Gửi thất bại${outcome?.errorCode ? ` (mã lỗi: ${outcome.errorCode})` : ""}.`
+        );
+      } else {
+        setTestResult(data.errorMessage ?? "Gửi thử thất bại.");
+      }
+    } catch {
+      setTestResult("Không thể gọi API gửi thử.");
+    } finally {
+      setTestPending(false);
+    }
+  }
 
   function handleToggleActive() {
     setError(null);
@@ -76,6 +110,11 @@ export function RecipientRowActions({ recipient }: { recipient: Recipient }) {
             {recipient.isActive ? <PowerOff /> : <Power />}
             {recipient.isActive ? "Tắt" : "Bật lại"}
           </DropdownMenuItem>
+          {recipient.isActive && (
+            <DropdownMenuItem onClick={handleTestSend}>
+              <Send /> Gửi thử
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem variant="destructive" onClick={() => setDeleteConfirmOpen(true)}>
             <Trash2 /> Xóa
           </DropdownMenuItem>
@@ -134,6 +173,20 @@ export function RecipientRowActions({ recipient }: { recipient: Recipient }) {
             </Button>
             <Button type="button" variant="destructive" onClick={handleDelete} disabled={isPending}>
               {isPending ? "Đang xóa..." : "Xóa"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={testResultOpen} onOpenChange={setTestResultOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Gửi thử tới &quot;{recipient.name}&quot;</DialogTitle>
+            <DialogDescription>{testPending ? "Đang gửi..." : (testResult ?? "")}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" onClick={() => setTestResultOpen(false)}>
+              Đóng
             </Button>
           </DialogFooter>
         </DialogContent>

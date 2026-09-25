@@ -22,6 +22,10 @@ export type SendNotificationInput = {
   // for a one-off/manual send (e.g. the "gửi test cho tất cả" button) that
   // should always go through.
   dedupeKey?: string;
+  // PHẦN 7 (ZL7) — "test 1 recipient": when set, only these (still must be
+  // active) recipients are notified instead of every active recipient.
+  // Omit entirely for the normal "everyone active" fan-out.
+  recipientIds?: string[];
 };
 
 export type NotificationRecipientResult = {
@@ -80,7 +84,15 @@ async function insertLog(
 // where the 2nd fails still yields sentCount=2, failedCount=1, not a
 // rolled-back all-or-nothing result.
 export async function sendNotification(input: SendNotificationInput): Promise<SendNotificationResult> {
-  const recipients = await getActiveNotificationRecipients();
+  const allActiveRecipients = await getActiveNotificationRecipients();
+  const recipients = input.recipientIds
+    ? allActiveRecipients.filter((r) => input.recipientIds!.includes(r.id))
+    : allActiveRecipients;
+
+  // PHẦN 6 (ZL7) — OBSERVABILITY: event generated + recipients found, on
+  // every call site (not just the cron routes' own start/completed logs
+  // from ZL6). Never logs the message text or any token.
+  console.log(`[notify] event=${input.eventType} recipientsFound=${recipients.length}`);
 
   if (recipients.length === 0) {
     // Not an error — there's simply nothing configured to notify yet.
@@ -93,6 +105,11 @@ export async function sendNotification(input: SendNotificationInput): Promise<Se
   let failedCount = 0;
   let skippedCount = 0;
 
+  // PHẦN 5 (ZL7) — RATE LIMIT / SEND CONTROL: deliberately sequential (one
+  // `await` per recipient, never Promise.all/allSettled). With only 2-3
+  // recipients a queue is overkill, but firing every send in parallel would
+  // still be N uncontrolled concurrent requests to Zalo's API per
+  // notification — this keeps it to at most 1 in flight at a time.
   for (const recipient of recipients) {
     if (input.dedupeKey) {
       const alreadySent = await hasNotificationBeenSent({
@@ -189,6 +206,10 @@ export async function sendNotification(input: SendNotificationInput): Promise<Se
     }
   }
 
+  console.log(
+    `[notify] event=${input.eventType} completed sent=${sentCount} failed=${failedCount} skipped=${skippedCount}`
+  );
+
   return { success: true, totalRecipients: recipients.length, sentCount, failedCount, skippedCount, results };
 }
 
@@ -203,6 +224,10 @@ export type RetryNotificationResult =
 // if the recipient was deleted afterward.
 export async function retryFailedNotification(logId: string): Promise<RetryNotificationResult> {
   const supabase = createAdminClient();
+
+  // PHẦN 6 (ZL7) — OBSERVABILITY, same convention as sendNotification():
+  // logId only, never the message text.
+  console.log(`[notify] retry logId=${logId}`);
 
   const { data: log, error: fetchError } = await supabase
     .from("notification_logs")
@@ -244,6 +269,7 @@ export async function retryFailedNotification(logId: string): Promise<RetryNotif
         provider_error_message: null,
       })
       .eq("id", logId);
+    console.log(`[notify] retry logId=${logId} completed status=sent`);
     return { success: true, status: "sent", providerMessageId: sendResult.providerMessageId };
   }
 
@@ -255,5 +281,6 @@ export async function retryFailedNotification(logId: string): Promise<RetryNotif
       provider_error_message: sendResult.errorMessage ?? null,
     })
     .eq("id", logId);
+  console.log(`[notify] retry logId=${logId} completed status=failed errorCode=${sendResult.errorCode}`);
   return { success: false, status: "failed", errorCode: sendResult.errorCode, errorMessage: sendResult.errorMessage };
 }

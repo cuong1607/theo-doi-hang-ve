@@ -1,9 +1,11 @@
-import { AlertTriangle, CheckCircle2, MessageCircle, Users } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Eye, MessageCircle, Users } from "lucide-react";
 
 import { canManageIntegrations, canManageNotificationRecipients, getCurrentRole } from "@/lib/auth/role";
-import { getZaloConnectionStatus } from "@/lib/zalo/token";
+import { getZaloConnectionStatus, type ZaloTokenStatus } from "@/lib/zalo/token";
+import { categorizeZaloError, ZALO_ERROR_CATEGORY_LABELS } from "@/lib/zalo/error-category";
 import { getAllNotificationRecipients } from "@/lib/notifications/recipients";
-import { getRecentNotificationLogs } from "@/lib/notifications/logs";
+import { getNotificationLogs, type NotificationLogStatus } from "@/lib/notifications/logs";
+import { previewLowStockAlerts } from "@/lib/notifications/outstanding-alert-preview";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,8 +23,11 @@ import { CreateRecipientButton } from "./create-recipient-button";
 import { RecipientRowActions } from "./recipient-row-actions";
 import { SendTestAllButton } from "./send-test-all-button";
 import { SendDailySummaryButton } from "./send-daily-summary-button";
+import { SendDailyPaymentSummaryButton } from "./send-daily-payment-summary-button";
+import { LogFilters } from "./log-filters";
+import { RetryLogButton } from "./retry-log-button";
 
-const RECENT_LOGS_LIMIT = 20;
+const RECENT_LOGS_LIMIT = 50;
 
 const LOG_STATUS_LABELS: Record<string, string> = {
   pending: "Đang gửi",
@@ -36,6 +41,20 @@ const LOG_STATUS_BADGE_VARIANT: Record<string, "default" | "secondary" | "destru
   sent: "outline",
   failed: "destructive",
   skipped: "secondary",
+};
+
+const TOKEN_STATUS_LABELS: Record<ZaloTokenStatus, string> = {
+  valid: "Valid",
+  expired: "Expired",
+  refresh_failed: "Refresh failed",
+  not_connected: "—",
+};
+
+const TOKEN_STATUS_BADGE_VARIANT: Record<ZaloTokenStatus, "default" | "secondary" | "destructive" | "outline"> = {
+  valid: "outline",
+  expired: "destructive",
+  refresh_failed: "destructive",
+  not_connected: "secondary",
 };
 
 function formatDateTimeVN(iso: string) {
@@ -80,7 +99,14 @@ export const dynamic = "force-dynamic";
 export default async function NotificationSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ zalo?: string; reason?: string }>;
+  searchParams: Promise<{
+    zalo?: string;
+    reason?: string;
+    logDate?: string;
+    logEvent?: string;
+    logRecipient?: string;
+    logStatus?: string;
+  }>;
 }) {
   const params = await searchParams;
   const role = getCurrentRole();
@@ -92,9 +118,18 @@ export default async function NotificationSettingsPage({
   // getValidZaloAccessToken()'s fallback in src/lib/zalo/token.ts.
   const canSendTest = status.connected || !!process.env.ZALO_ACCESS_TOKEN;
 
-  const [{ rows: recipients, error: recipientsError }, { rows: logs, error: logsError }] = await Promise.all([
+  const [{ rows: recipients, error: recipientsError }, { rows: logs, error: logsError }, lowStockPreview] = await Promise.all([
     getAllNotificationRecipients(),
-    getRecentNotificationLogs(RECENT_LOGS_LIMIT),
+    getNotificationLogs(
+      {
+        date: params.logDate,
+        eventType: params.logEvent,
+        recipientId: params.logRecipient,
+        status: params.logStatus as NotificationLogStatus | undefined,
+      },
+      RECENT_LOGS_LIMIT
+    ),
+    previewLowStockAlerts(),
   ]);
   const hasActiveRecipient = recipients.some((r) => r.isActive);
 
@@ -126,18 +161,33 @@ export default async function NotificationSettingsPage({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-0.5">
-              <p className="text-muted-foreground">Trạng thái kết nối</p>
-              <Badge variant={status.connected ? "outline" : "destructive"}>
-                {status.connected ? "Đã kết nối" : "Chưa kết nối"}
+              <p className="text-muted-foreground">Zalo OA</p>
+              <Badge variant={status.connectionHealth === "connected" ? "outline" : "destructive"}>
+                {status.connectionHealth === "not_connected" ? "Chưa kết nối" : status.connectionHealth === "connected" ? "Đã kết nối" : "Cần kết nối lại"}
               </Badge>
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-muted-foreground">Token</p>
+              <Badge variant={TOKEN_STATUS_BADGE_VARIANT[status.tokenStatus]}>{TOKEN_STATUS_LABELS[status.tokenStatus]}</Badge>
             </div>
             <div className="space-y-0.5">
               <p className="text-muted-foreground">OA ID</p>
               <p className="font-mono font-medium">{status.oaId ? maskId(status.oaId) : "—"}</p>
             </div>
+            <div className="space-y-0.5">
+              <p className="text-muted-foreground">Lần làm mới token gần nhất</p>
+              <p className="font-medium">{status.lastRefreshAt ? formatDateTimeVN(status.lastRefreshAt) : "—"}</p>
+            </div>
           </div>
+
+          {status.tokenStatus === "refresh_failed" && status.lastRefreshErrorMessage && (
+            <p className="text-xs text-destructive">
+              Lần làm mới token gần nhất thất bại{status.lastRefreshErrorCode ? ` (mã lỗi: ${status.lastRefreshErrorCode})` : ""}:{" "}
+              {status.lastRefreshErrorMessage}
+            </p>
+          )}
 
           {!canManage && (
             <p className="text-sm text-muted-foreground">
@@ -173,7 +223,8 @@ export default async function NotificationSettingsPage({
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm text-muted-foreground">
-              Tất cả người nhận đang hoạt động sẽ nhận cùng một thông báo khi hệ thống gửi tin.
+              Tất cả người nhận đang hoạt động sẽ nhận cùng một thông báo khi hệ thống gửi tin. Dùng &quot;Gửi
+              thử&quot; ở menu thao tác để test riêng 1 người.
             </p>
             {canManageRecipients && <CreateRecipientButton />}
           </div>
@@ -233,23 +284,71 @@ export default async function NotificationSettingsPage({
                   test thủ công trước khi có cron tự động.
                 </p>
               </div>
+              <div>
+                <SendDailyPaymentSummaryButton disabled={!hasActiveRecipient} />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Tổng hợp thanh toán hôm nay (theo giờ Việt Nam) và gửi cho tất cả người nhận đang hoạt động — dùng để
+                  test thủ công trước khi có cron tự động.
+                </p>
+              </div>
             </div>
           )}
         </CardContent>
       </Card>
 
+      {canManageRecipients && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Eye className="size-4" />
+              Xem trước cảnh báo hàng còn phải về
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Xem trước nội dung sẽ được gửi nếu có SKU đang ở trạng thái &quot;Sắp hết&quot;/&quot;Cần xuất bù&quot;
+              ngay bây giờ — chỉ đọc, không gửi tin thật và không thay đổi dữ liệu.
+            </p>
+            {lowStockPreview.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                Hiện không có SKU nào cần cảnh báo (mọi SKU đang ở trạng thái bình thường).
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {lowStockPreview.map((p) => (
+                  <div key={p.supplierId} className="rounded-md border p-3">
+                    <p className="mb-2 text-xs text-muted-foreground">
+                      {p.supplierName} — {p.itemCount} SKU
+                    </p>
+                    <pre className="overflow-x-auto rounded bg-muted p-2 text-xs whitespace-pre-wrap">{p.message}</pre>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Lịch sử gửi gần đây</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <LogFilters
+            date={params.logDate ?? ""}
+            eventType={params.logEvent ?? ""}
+            recipientId={params.logRecipient ?? ""}
+            status={params.logStatus ?? ""}
+            recipients={recipients.map((r) => ({ id: r.id, name: r.name }))}
+          />
+
           {logsError ? (
             <div className="flex flex-col items-center gap-2 py-8 text-center">
               <AlertTriangle className="size-6 text-destructive" />
               <p className="text-sm">Đã xảy ra lỗi khi tải lịch sử gửi.</p>
             </div>
           ) : logs.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Chưa có thông báo nào được gửi.</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">Không có thông báo nào khớp bộ lọc.</p>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -258,9 +357,11 @@ export default async function NotificationSettingsPage({
                     <TableHead>Thời gian</TableHead>
                     <TableHead>Event</TableHead>
                     <TableHead>Người nhận</TableHead>
-                    <TableHead>Nội dung</TableHead>
                     <TableHead>Trạng thái</TableHead>
-                    <TableHead>Lỗi</TableHead>
+                    <TableHead>Nội dung</TableHead>
+                    <TableHead>Error code</TableHead>
+                    <TableHead>Error message</TableHead>
+                    {canManageRecipients && <TableHead className="text-right">Thao tác</TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -269,15 +370,27 @@ export default async function NotificationSettingsPage({
                       <TableCell className="whitespace-nowrap text-sm">{formatDateTimeVN(log.createdAt)}</TableCell>
                       <TableCell className="text-sm">{log.eventType}</TableCell>
                       <TableCell className="text-sm">{log.recipientName ?? log.recipientZaloUid}</TableCell>
-                      <TableCell className="max-w-[240px] text-sm">{truncate(log.messageText, 60)}</TableCell>
                       <TableCell>
                         <Badge variant={LOG_STATUS_BADGE_VARIANT[log.status]}>
                           {LOG_STATUS_LABELS[log.status] ?? log.status}
                         </Badge>
                       </TableCell>
+                      <TableCell className="max-w-[240px] text-sm">{truncate(log.messageText, 60)}</TableCell>
+                      <TableCell className="text-xs">
+                        {log.providerErrorCode ? (
+                          <span title={ZALO_ERROR_CATEGORY_LABELS[categorizeZaloError(log.providerErrorCode)]}>
+                            {log.providerErrorCode}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
                       <TableCell className="max-w-[200px] text-xs text-destructive">
                         {log.providerErrorMessage ? truncate(log.providerErrorMessage, 60) : "—"}
                       </TableCell>
+                      {canManageRecipients && (
+                        <TableCell className="text-right">{log.status === "failed" && <RetryLogButton logId={log.id} />}</TableCell>
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>

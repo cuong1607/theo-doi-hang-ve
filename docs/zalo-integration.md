@@ -1,4 +1,10 @@
-# Zalo OA Integration — Phase ZL1 + ZL2 + ZL3 + ZL4
+# Zalo OA Integration — Phase ZL1 + ZL2 + ZL3 + ZL4 + ZL5 + ZL6 + ZL7
+
+Phase ZL7 là **production hardening** — không thêm business event mới, chỉ
+làm module hiện có ổn định hơn: log UI có filter + retry, health status cho
+token, token refresh an toàn khi có nhiều request đồng thời, lỗi được phân
+loại có cấu trúc, observability logging, và test 1 recipient/preview
+low-stock. Xem mục 40 để tra cứu nhanh theo từng hạng mục ZL7 yêu cầu.
 
 Phase ZL1 chỉ làm: OAuth start/callback, token exchange, refresh foundation,
 lưu token server-side, và gửi 1 tin nhắn test (tới `ZALO_TEST_RECIPIENT_ID`).
@@ -19,12 +25,22 @@ thái (không phải cứ ở trạng thái xấu là spam liên tục). Khác Z
 yêu cầu thủ công/cron), ZL4 tự động chạy sau mỗi lần tạo/sửa phiếu nhận hoặc
 hóa đơn — không có nút bấm thủ công, không có cron, không có DB trigger.
 
-Cả 4 phase đều **không có**: cron thật (ZL3 chỉ có nút test thủ công), DB
-trigger gọi Zalo trực tiếp (ZL4 gọi từ server action, không phải
-trigger/function trong Postgres), broadcast, ZBS Template Message, hay phân
-quyền người nhận theo từng loại event (hiện tại: mọi người nhận active đều
-nhận mọi thông báo như nhau). `payment summary` — business event còn lại
-được nhắc tới trong bối cảnh ZL2 — vẫn chưa được xây.
+Phase ZL5 là business event thứ ba, cùng dạng "tổng hợp trong ngày, nút test
+thủ công" như ZL3 nhưng cho thanh toán: `DAILY_PAYMENT_SUMMARY` — tổng hợp
+`payments`/`payment_items` trong ngày, breakdown theo NCC rồi theo từng hóa
+đơn.
+
+Phase ZL6 thêm **cron thật** trên Vercel cho 2 trong 3 business event
+"tổng hợp trong ngày" (daily receipt summary, daily payment summary — ZL4
+low stock alert không chạy theo cron, nó chạy ngay sau mỗi receipt/invoice
+như đã thiết kế từ ZL4). Cron chỉ là một entry point mới gọi lại đúng
+`sendDailyReceiptSummary`/`sendDailyPaymentSummary` đã có từ ZL3/ZL5 —
+không có logic tính toán nào mới.
+
+Cả 6 phase đều **không có**: DB trigger gọi Zalo trực tiếp (ZL4 gọi từ
+server action, không phải trigger/function trong Postgres), broadcast, ZBS
+Template Message, hay phân quyền người nhận theo từng loại event (hiện tại:
+mọi người nhận active đều nhận mọi thông báo như nhau).
 
 ## 1. Architecture
 
@@ -676,3 +692,513 @@ nếu có thời gian.
 - `notification_event_states` không có FK tới `invoice_items` — nếu 1
   invoice_item bị xóa (sửa hóa đơn xóa dòng), row state cũ nằm lại vô hại
   (không bao giờ được đọc lại nữa) chứ không tự dọn.
+
+
+# Phase ZL5 — Daily Payment Summary Notification
+
+## 28. Kiến trúc
+
+```
+payments + payment_items + invoices + suppliers (ngày X)
+        │
+        ▼
+get_daily_payment_summary_by_invoice(p_date)   [SQL RPC, migration 00032]
+GROUP BY (supplier, invoice) — amount_paid = SUM(payment_items.amount)
+        │
+        ▼
+buildDailyPaymentSummary(date)                 [daily-payment-summary.ts]
+gom các dòng theo supplier lại thành supplierTotal + TỔNG THANH TOÁN;
+đếm payment_count bằng 1 query COUNT(*) riêng (không suy ra được từ
+breakdown theo invoice, vì 1 payment có thể trải trên nhiều hóa đơn)
+        │
+        ▼
+formatDailyPaymentSummaryMessage(summary)      [daily-payment-summary-message.ts — pure]
+        │
+        ▼
+sendDailyPaymentSummary(date)                  [send-daily-payment-summary.ts]
+paymentCount === 0 ? → skip, không gửi
+                     → sendNotification({ eventType: "DAILY_PAYMENT_SUMMARY",
+                         dedupeKey: `DAILY_PAYMENT_SUMMARY:${date}`, ... })
+        │
+        ▼
+POST /api/notifications/daily-payment-summary  [admin-only, luôn "hôm nay" giờ VN]
+```
+
+Cùng cấu trúc tách file như ZL3 (`*-message.ts` thuần/test được,
+`*.ts` đụng DB). `getTodayDateVN()` giờ nằm ở file dùng chung
+`src/lib/notifications/date-vn.ts` (tách ra khỏi
+`daily-receipt-summary-message.ts` khi làm ZL5, vẫn re-export lại ở đó để
+không phá import cũ) — cả ZL3 và ZL5 cùng dùng 1 định nghĩa "hôm nay theo
+giờ VN".
+
+## 29. Group theo invoice, không chỉ theo supplier
+
+Khác ZL3 (chỉ cần tổng theo supplier), tin nhắn ZL5 cần liệt kê từng **hóa
+đơn** trong mỗi NCC ("HĐ 001: 10.000.000 đ"), nên SQL group theo
+`(supplier, invoice)` chứ không dừng ở supplier. Nếu 2 payment khác nhau
+cùng trả cho 1 hóa đơn trong cùng 1 ngày, số tiền được **cộng gộp vào 1
+dòng** cho hóa đơn đó (đã verify: payment 10 triệu + payment 5 triệu cho
+cùng HĐ trong ngày → hiển thị đúng 1 dòng 15 triệu, không phải 2 dòng).
+
+## 30. Test
+
+```
+node --env-file=.env.local --test src/lib/notifications/daily-payment-summary.test.ts
+```
+
+5 test case cho `formatDailyPaymentSummaryMessage` (pure) — đúng ví dụ mẫu
+trong spec, 1 payment/1 hóa đơn, 1 payment/nhiều hóa đơn, format VND, và
+trường hợp không có supplier nào.
+
+`buildDailyPaymentSummary`/`sendDailyPaymentSummary` đụng DB thật — verify
+bằng 2 script thực nghiệm tạm thời (đã xoá sau khi dùng):
+
+- Script 1 (dữ liệu giả trên ngày `2030-03-15`, tạo/xoá 3 payment cho 2 NCC
+  + 3 hóa đơn test): xác nhận đúng cả 6 test case tính toán — không có
+  payment, 1 payment/1 hóa đơn, 1 payment/nhiều hóa đơn, nhiều payment cùng
+  NCC (cộng gộp đúng vào cùng 1 hóa đơn), nhiều NCC, và `payment_count`
+  đúng bằng số dòng `payments` thực tế (không lẫn với `invoice_count`).
+- Script 2 (gọi thật `POST /api/notifications/daily-payment-summary` trên
+  dev server + 2 payment test thật dán vào "hôm nay"): xác nhận gửi không
+  skip khi có payment thật, fan-out đúng số người nhận active hiện tại (2
+  người: anh Công, Cường), và dedupe đúng theo từng người (seed 1 log
+  `sent` giả — cùng kỹ thuật ZL3/ZL4 vì môi trường không có Zalo credentials
+  thật). Đã dọn sạch toàn bộ payment/log do script tạo.
+
+## 31. Sample message
+
+```
+THANH TOÁN 25/09/2026
+
+Tuấn Hậu
+- HĐ 001: 10.000.000 đ
+- HĐ 002: 20.000.000 đ
+Tổng NCC: 30.000.000 đ
+
+Minh Hoa
+- HĐ MH-125: 15.500.000 đ
+Tổng NCC: 15.500.000 đ
+
+TỔNG THANH TOÁN:
+45.500.000 đ
+```
+
+(Tái tạo chính xác byte-cho-byte trong unit test — xem mục 30.)
+
+## 32. Giới hạn còn lại của Phase ZL5
+
+- Không hiển thị `payment_count`/`invoice_count` trong nội dung tin nhắn —
+  2 số này được tính và trả về trong `DailyPaymentSummary` (đúng yêu cầu
+  CALCULATION của spec) nhưng ví dụ tin nhắn trong spec không hiển thị
+  chúng, nên `formatDailyPaymentSummaryMessage` cũng không thêm dòng nào
+  cho chúng.
+- Cùng giới hạn với ZL2/ZL3/ZL4: chưa chứng minh được 1 lần gửi Zalo
+  **thành công thật** (không có Zalo credentials thật trong môi trường
+  này).
+- Chưa có cron — nút "Gửi báo cáo thanh toán hôm nay" là cách duy nhất để
+  trigger, đúng phạm vi spec. **Đã có cron từ ZL6, xem bên dưới.**
+
+
+# Phase ZL6 — Notification Scheduling with Vercel Cron
+
+## 33. Cron routes
+
+```
+GET /api/cron/daily-receipt-summary   -> sendDailyReceiptSummary(getTodayDateVN())
+GET /api/cron/daily-payment-summary   -> sendDailyPaymentSummary(getTodayDateVN())
+```
+
+Không có logic tính toán riêng cho cron — cả 2 route chỉ làm 3 việc: (1)
+kiểm tra `CRON_SECRET`, (2) tính "hôm nay" theo giờ VN, (3) gọi ĐÚNG service
+mà nút test thủ công trên `/settings/notifications` (ZL3/ZL5) đã dùng. Cron
+và nút bấm thủ công dùng chung 100% code tính toán/gửi — không có bản sao
+nào khác.
+
+## 34. Lịch chạy — UTC tương ứng giờ Việt Nam
+
+Việt Nam dùng UTC+7 quanh năm, **không có DST** (không lùi/tiến giờ theo
+mùa) — nên phép quy đổi dưới đây đúng mọi ngày trong năm, không cần bảng
+quy đổi theo mùa như timezone có DST.
+
+| Job | Giờ VN mong muốn | Giờ UTC (VN − 7h) | `vercel.json` schedule |
+|---|---|---|---|
+| `daily-receipt-summary` | 18:00 | 11:00 | `0 11 * * *` |
+| `daily-payment-summary` | 19:00 | 12:00 | `0 12 * * *` |
+
+```json
+// vercel.json
+{
+  "crons": [
+    { "path": "/api/cron/daily-receipt-summary", "schedule": "0 11 * * *" },
+    { "path": "/api/cron/daily-payment-summary", "schedule": "0 12 * * *" }
+  ]
+}
+```
+
+Cron chỉ quyết định **khi nào route được gọi** — route tự tính lại "hôm
+nay" bằng `getTodayDateVN()` (`Intl.DateTimeFormat` với `timeZone:
+"Asia/Ho_Chi_Minh"`, đã có từ ZL3/ZL5), không phụ thuộc giờ hệ thống của
+Vercel function (chạy UTC). Nếu Vercel gọi route trễ vài phút (cron không
+đảm bảo chính xác tuyệt đối theo giây), ngày tính vẫn đúng trừ khi trễ tới
+mức vượt qua nửa đêm giờ VN — rủi ro không đáng kể ở khung giờ 18h/19h.
+
+## 35. Bảo mật
+
+`CRON_SECRET` — server-only, **không phải** `NEXT_PUBLIC_CRON_SECRET`. Cơ
+chế theo đúng tài liệu Vercel hiện tại: khi cấu hình `CRON_SECRET` trong
+Environment Variables của Vercel project, Vercel tự động gắn header
+`Authorization: Bearer $CRON_SECRET` vào mọi lần gọi cron đã lên lịch. Route
+so khớp header này với `process.env.CRON_SECRET`:
+
+```ts
+isAuthorizedCronSecret(request.headers.get("authorization"), process.env.CRON_SECRET)
+```
+
+Sai secret hoặc thiếu header → **401** (không phải 403 — cron endpoint
+không dùng hệ thống role của app, đây là một khách hàng "máy" không phải
+người dùng đăng nhập). Nếu `CRON_SECRET` chưa được set (quên cấu hình) →
+**fail closed**, luôn từ chối, không bao giờ coi "chưa set = mở cho tất cả".
+
+`isAuthorizedCronSecret` là hàm thuần (nhận `authHeader` + `expectedSecret`
+làm tham số, không tự đọc `process.env`/`Request`) — tách vậy để unit-test
+được bằng `node --test` mà không cần giả lập `Request` thật.
+
+**Cần bạn tự làm khi deploy thật:** set `CRON_SECRET` trong Vercel project
+settings (giá trị ngẫu nhiên dài, ví dụ `openssl rand -base64 32`) — route
+sẽ tự động fail-closed cho tới khi làm việc này.
+
+## 36. Idempotency (Vercel retry)
+
+Không có cơ chế idempotency MỚI riêng cho ZL6 — dedupe đã có sẵn từ ZL2 áp
+dụng nguyên vẹn: mỗi `sendNotification()` cho `DAILY_RECEIPT_SUMMARY`/
+`DAILY_PAYMENT_SUMMARY` dùng `dedupeKey` theo ngày
+(`DAILY_RECEIPT_SUMMARY:<date>`, `DAILY_PAYMENT_SUMMARY:<date>`). Nếu
+Vercel gọi cron 2 lần cho cùng 1 ngày (retry do timeout, lỗi mạng, …):
+
+- Người nhận đã có log `status='sent'` cho ngày đó → lần gọi thứ 2 bị
+  **skip** (không gửi lại).
+- Người nhận có log `status='failed'` (lần đầu gửi thật ra Zalo bị lỗi) →
+  lần gọi thứ 2 **được phép thử lại** — đây là hành vi ĐÚNG (thất bại thật
+  sự cần được thử lại), không phải lỗi idempotency.
+
+Đã verify thực nghiệm: gọi cron 2 lần liên tiếp cho cùng ngày, sau khi seed
+1 dòng log `sent` giả cho 1 người nhận (kỹ thuật giống ZL3-ZL5 vì môi
+trường này không có Zalo credentials thật), người đó nhận đúng
+`status: "skipped"` ở lần gọi thứ 2, 2 người còn lại vẫn thử gửi lại bình
+thường.
+
+## 37. Logging
+
+Mỗi lần chạy log 2 dòng (không log token, không log nội dung tin nhắn):
+
+```
+[cron:daily-receipt-summary] started date=2026-09-25
+[cron:daily-receipt-summary] completed date=2026-09-25 totalRecipients=3 sent=0 failed=3 skipped=0
+```
+
+hoặc khi không có dữ liệu:
+
+```
+[cron:daily-receipt-summary] completed date=2026-09-25 skipped reason=NO_RECEIPTS
+```
+
+Lỗi hệ thống (không phải lỗi gửi từng recipient, mà lỗi khiến cả
+`sendDailyReceiptSummary` throw) log riêng bằng `console.error` kèm
+`err.message`, route trả về 500.
+
+## 38. Test
+
+```
+node --env-file=.env.local --test src/lib/cron/auth.test.ts
+```
+
+7 test case cho `isAuthorizedCronSecret` (pure) — đúng secret, sai secret,
+thiếu header, thiếu prefix "Bearer ", `CRON_SECRET` rỗng/chưa set (fail
+closed), case-sensitive/không match từng phần.
+
+Route thật (`GET /api/cron/*`) verify bằng 1 script thực nghiệm sống trên
+dev server thật + DB thật (đã xoá sau khi dùng):
+
+- **case 1** (secret đúng) → 200, `success:true`.
+- **case 2** (secret sai / thiếu header) → 401 cho cả 2 route.
+- **case 3** (gọi lại 2 lần liên tiếp = giả lập Vercel retry) → người nhận
+  đã "gửi" (seed) không bị gửi lại, những người khác vẫn thử lại — xem mục
+  36.
+- **case 4** (timezone rollover) → `date` trả về từ route khớp chính xác
+  với `getTodayDateVN()` tính độc lập trong script.
+- **case 5** (không có dữ liệu) → **verify được thật cho payment cron**
+  (hôm nay không có payment thật tại thời điểm test → route trả về đúng
+  `{skipped:true, reason:"NO_PAYMENTS"}`); phía receipt cron hôm nay có dữ
+  liệu thật nên không lặp lại test này qua route — logic `NO_RECEIPTS` cho
+  service dùng chung đã được test riêng ở ZL3.
+- **case 6/7** (gửi thành công / 1 phần lỗi) — cùng giới hạn ZL2-ZL5: không
+  có Zalo credentials thật trong môi trường này nên không tạo được kết quả
+  thành công thật hay trộn thành công/thất bại; đã verify phần có thể verify
+  (không skip khi có dữ liệu thật, fan-out đúng số người nhận, mỗi người 1
+  kết quả riêng).
+- Toàn bộ `notification_logs` do script tạo ra (bao gồm cả 3 dòng phát sinh
+  từ một lần gọi thử route thủ công trước khi viết script) đã được xoá sạch
+  sau khi verify xong.
+
+## 39. Giới hạn còn lại của Phase ZL6
+
+- Chưa deploy thật lên Vercel trong phiên làm việc này nên chưa thể xác
+  nhận Vercel thực sự gửi đúng header `Authorization: Bearer $CRON_SECRET`
+  như tài liệu mô tả — cơ chế đã cài đúng theo tài liệu Vercel hiện tại,
+  nhưng cần bạn xác nhận sau khi deploy + set `CRON_SECRET` thật (mục 35).
+- Cùng giới hạn với ZL2-ZL5: chưa chứng minh được 1 lần gửi Zalo **thành
+  công thật**.
+- Không có cơ chế "chạy bù" (backfill) nếu cron bị miss hoàn toàn 1 ngày
+  (ví dụ Vercel downtime) — ngày đó sẽ không có summary nào được gửi, và
+  không tự động gửi bù vào lần chạy kế tiếp (lần chạy kế tiếp chỉ tính cho
+  "hôm nay" của chính nó). Không nằm trong phạm vi spec, nêu ra để biết.
+
+
+# Phase ZL7 — Zalo Notification Production Hardening
+
+## 40. Mục lục theo hạng mục (đúng thứ tự spec yêu cầu)
+
+| Hạng mục trong spec | Xem mục |
+|---|---|
+| Architecture | 1, 23 |
+| OAuth | 4, 5, 6 |
+| Recipients | 12, 16 |
+| Logs | 13, 44 |
+| Daily jobs | 18, 28, 33 |
+| Low stock state machine | 22 |
+| Cron schedules | 34 |
+| Retry | 15, 45 |
+| Troubleshooting | 10, 46 |
+| Production checklist | 47 |
+
+## 41. Health status
+
+`/settings/notifications` giờ hiển thị 2 badge độc lập thay vì 1:
+
+- **Zalo OA**: Đã kết nối / Cần kết nối lại / Chưa kết nối.
+- **Token**: Valid / Expired / Refresh failed.
+
+`getZaloConnectionStatus()` (`src/lib/zalo/token.ts`) tính token status theo
+thứ tự ưu tiên:
+
+1. Thử giải mã `access_token_encrypted` ngay tại chỗ (rẻ — chỉ là crypto cục
+   bộ, không gọi mạng). Giải mã lỗi → **Refresh failed** ngay, không đợi
+   lần gửi tin thật tiếp theo mới phát hiện ra. Đây là fix quan trọng nhất
+   của phase này — xem mục 43.
+2. Nếu giải mã được nhưng `last_refresh_error_code` (cột mới, migration
+   00033) đang có giá trị → **Refresh failed** (lần refresh gần nhất thất
+   bại, chưa có lần thành công nào sau đó).
+3. Nếu `expires_at` đã qua → **Expired**.
+4. Còn lại → **Valid**.
+
+`connectionHealth` ("Đã kết nối"/"Cần kết nối lại"/"Chưa kết nối") suy ra
+trực tiếp từ token status. Không bao giờ hiển thị token thật — chỉ badge +
+mã lỗi + thông điệp lỗi (không chứa token).
+
+## 42. Phân loại lỗi có cấu trúc
+
+`src/lib/zalo/error-category.ts` — `categorizeZaloError(errorCode)` map mọi
+`providerErrorCode` đã lưu trong `notification_logs` vào 1 trong 6 nhóm:
+
+```
+auth_error | invalid_recipient | recipient_unreachable | rate_limit | provider_temporary_error | unknown
+```
+
+2 tầng tin cậy khác nhau:
+- Mã lỗi **tự đặt** (`not_connected`, `no_refresh_token`, `decrypt_failed`,
+  `network_error`, `invalid_response`, `unexpected_error`, `invalid_input`)
+  — 100% chắc chắn, tự viết ra trong `token.ts`/`messages.ts`/`client.ts`.
+- Mã lỗi **số của Zalo** (`-201`, `-213`, `-214`, `-32`, ...) — best-effort,
+  lấy từ nguồn cộng đồng/SDK vì developers.zalo.me không cào được (cùng lý
+  do ZL1 từng flag URL endpoint). Sai ở tầng này chỉ làm sai nhãn hiển thị,
+  không ảnh hưởng logic gửi/lưu log/dedupe/retry (tất cả đều dùng
+  `errorCode` gốc, không dùng category).
+
+Log UI hiển thị category dưới dạng tooltip (hover vào error code).
+
+## 43. Token refresh — production-safe (PHẦN QUAN TRỌNG NHẤT của ZL7)
+
+### 43.1. Phát hiện thật trong lúc làm phase này: decrypt failure bị nuốt thành lỗi vô nghĩa
+
+Khi verify sống, phát hiện: token đang lưu trong `zalo_connections` của môi
+trường này **không giải mã được** bằng `ZALO_TOKEN_ENCRYPTION_KEY` hiện tại
+(rất có thể do giá trị biến môi trường này bị đổi sau khi kết nối OAuth
+thật đã diễn ra). Trước fix:
+
+- `decryptToken()` (`crypto.ts`) `throw` khi auth-tag không khớp.
+- `getStoredConnection()` gọi `decryptToken()` không có try/catch.
+- `sendZaloTextMessage()` gọi `getValidZaloAccessToken()` (chain dẫn tới
+  `getStoredConnection()`) cũng không có try/catch quanh lời gọi đó.
+- Kết quả: exception bay thẳng lên `service.ts`, bị bắt bởi catch-all
+  chung và biến thành `errorCode: "unexpected_error"` — **một lỗi cấu hình
+  thật, có thể chẩn đoán và sửa được, bị nuốt thành thông tin vô nghĩa.**
+  Đây chính xác là lỗi mọi test case "gửi thành công"/"lỗi 1 phần" ở
+  ZL2-ZL6 gặp phải — không phải chỉ do thiếu Zalo credentials thật như tài
+  liệu các phase trước suy đoán.
+
+**Đã sửa:** `getStoredConnection()` giờ bọc try/catch quanh 2 lần gọi
+`decryptToken()`, trả về `{status: "decrypt_failed"}` thay vì throw.
+`getValidZaloAccessToken()`/`performLockedRefresh()` xử lý status này như
+1 lỗi có cấu trúc (`errorCode: "decrypt_failed"`), ghi vào
+`last_refresh_error_*` để health status (mục 41) thấy ngay, và **không**
+fallback âm thầm sang `ZALO_ACCESS_TOKEN` thủ công (vì đó sẽ che mất tình
+trạng "cần kết nối lại" thật).
+
+**Cách khắc phục cho môi trường thật:** bấm "Kết nối Zalo" lại trên
+`/settings/notifications` để OAuth lại từ đầu — lần lưu token mới sẽ dùng
+đúng `ZALO_TOKEN_ENCRYPTION_KEY` hiện tại. Đã đưa vào mục 47 (production
+checklist).
+
+### 43.2. Race condition khi nhiều request refresh cùng lúc
+
+2 lớp bảo vệ, cộng dồn:
+
+1. **In-process promise memo** (`inFlightRefresh` — biến module-level): nếu
+   cùng 1 tiến trình Node (cùng 1 lần "ấm" của 1 Vercel function) có 2 lời
+   gọi `refreshZaloAccessToken()` gần như đồng thời, lời gọi thứ 2 dùng lại
+   promise của lời gọi thứ nhất thay vì tự gọi Zalo lần nữa.
+2. **DB-level lock** (`zalo_connections.refresh_lock_at`, migration 00033):
+   `claimRefreshLock()` là 1 câu `UPDATE ... WHERE refresh_lock_at IS NULL
+   OR refresh_lock_at < now() - 30s` — atomic ở tầng Postgres, đúng bất kể
+   có bao nhiêu server instance cùng gửi câu lệnh này. Thua cuộc đua
+   (`claimRefreshLock` trả `false`) → `waitForOtherRefresh()` poll tối đa
+   4s (250ms/lần) rồi đọc lại token thay vì tự refresh lần 2 — tránh việc 2
+   request cùng dùng 1 `refresh_token` (nếu Zalo rotate refresh_token, bên
+   thua sẽ bị lỗi "refresh_token đã dùng rồi" một cách không cần thiết).
+   Lock cũ hơn 30s được coi là kẹt (tiến trình giữ lock trước đó có thể đã
+   crash) và được phép chiếm lại — không deadlock vĩnh viễn.
+
+**Lưu ý quan trọng:** các hàm lock (`claimRefreshLock`/`releaseRefreshLock`/
+`recordRefreshFailure`) **không lọc theo `oa_id`** — cùng quy ước với mọi
+lần đọc khác trong file này (`getStoredConnection`/`getZaloConnectionStatus`
+đều dùng `.maybeSingle()` không WHERE), vì bảng này được thiết kế cho đúng
+1 OA. Bản đầu tiên của code này CÓ lọc theo
+`getZaloAppConfig().oaId`, và đó là 1 bug thật phát hiện lúc verify: giá trị
+`ZALO_OA_ID` cấu hình trong `.env.local` không khớp `oa_id` thật đang lưu
+trong bảng (row được tạo lúc `ZALO_OA_ID` là 1 giá trị khác) → mọi lần
+`UPDATE ... WHERE oa_id = $configured` khớp 0 dòng, lock/ghi lỗi thất bại
+âm thầm. Bỏ điều kiện lọc oa_id khỏi các hàm này đã sửa dứt điểm.
+
+### 43.3. Refresh token rotation
+
+`refreshZaloToken()` (`oauth.ts`) đã đọc đúng `refresh_token` mới nếu Zalo
+trả về (`parsed.refresh_token ?? null`); `token.ts` giữ nguyên
+`refresh_token` cũ nếu response không có cái mới
+(`result.refreshToken ?? connection.refreshToken`) — đúng cho cả 2 khả
+năng "Zalo rotate mỗi lần" và "Zalo chỉ cấp refresh_token 1 lần duy nhất".
+Không có gì cần sửa ở phần này (đã đúng từ ZL1).
+
+## 44. Notification log UI
+
+`/settings/notifications` → "Lịch sử gửi gần đây" giờ có:
+
+- Cột đầy đủ: Thời gian / Event / Người nhận / Trạng thái / Nội dung /
+  Error code / Error message.
+- 4 filter (`LogFilters`, URL-driven — `?logDate=&logEvent=&logRecipient=&logStatus=`):
+  ngày (giờ VN, xem `vnDateToUtcRange` trong `logs.ts`), event, người nhận,
+  trạng thái. "Xóa lọc" reset về mặc định.
+- Nút **"Gửi lại"** chỉ hiện ở dòng `status = failed`, gọi thẳng
+  `retryFailedNotification()` (đã có từ ZL2, ZL7 chỉ thêm nút UI) qua
+  server action `retryNotificationLog`.
+- Giới hạn 50 dòng gần nhất (tăng từ 20 ở ZL2) — vẫn "không cần full
+  reporting" theo đúng phạm vi ZL2 gốc, filter giúp thu hẹp mà không cần
+  phân trang.
+
+## 45. Admin tests
+
+- **Test 1 recipient**: menu "..." ở mỗi dòng người nhận → "Gửi thử" — gọi
+  lại đúng route `POST /api/notifications/test-all` (ZL2) với body
+  `{recipientId}`, dùng `sendNotification()`'s `recipientIds` filter mới
+  (không có service/route riêng — tái dùng 100%). Log dưới event type
+  `TEST_SINGLE_RECIPIENT` (phân biệt với `TEST_ALL_RECIPIENTS`).
+- **Test all recipients**: không đổi (ZL2).
+- **Test daily receipt/payment summary**: không đổi (ZL3/ZL5).
+- **Low-stock alert preview**: card mới "Xem trước cảnh báo hàng còn phải
+  về" — `previewLowStockAlerts()` (`src/lib/notifications/outstanding-alert-preview.ts`)
+  đọc `v_outstanding` (status `low`/`need_makeup` hiện tại) và format đúng
+  message thật sự sẽ gửi (dùng chung `formatOutstandingAlertMessage` với
+  ZL4), nhưng **chỉ đọc** — không ghi `notification_event_states`, không
+  gọi `sendNotification()`. Đúng yêu cầu "không cần fake thay đổi database
+  nếu nguy hiểm".
+
+## 46. Troubleshooting (mở rộng)
+
+Ngoài mục 10 (OAuth/gửi tin cơ bản):
+
+| Triệu chứng | Nguyên nhân khả dĩ | Cách xử lý |
+|---|---|---|
+| Token badge "Refresh failed", lỗi nhắc `ZALO_TOKEN_ENCRYPTION_KEY` | Biến môi trường đổi sau khi đã lưu token, hoặc token bị hỏng | Bấm "Kết nối Zalo" lại (mục 43.1) |
+| `errorCode: "unexpected_error"` xuất hiện thường xuyên trong log | Trước ZL7: có thể là decrypt lỗi bị nuốt (mục 43.1) — đã sửa. Nếu vẫn thấy: kiểm tra log server (`[notify] ...`) để tìm exception cụ thể | Xem log server, không chỉ log DB |
+| 2 job cron gần như trùng giờ mà 1 job báo lỗi refresh_token lạ | Race condition token refresh — đã có lock (mục 43.2), nhưng nếu vẫn thấy, kiểm tra `zalo_connections.refresh_lock_at` có bị kẹt (>30s) không | Lock tự hết hạn sau 30s, không cần can thiệp tay |
+| Danh sách người nhận log rỗng dù đã gửi | Filter đang áp dụng | Bấm "Xóa lọc" |
+| Nút "Gửi lại" không hiện | Log đang không ở trạng thái `failed`, hoặc role không phải admin | Kiểm tra trạng thái log / `NEXT_PUBLIC_MOCK_ROLE` |
+
+## 47. Production checklist
+
+Trước khi coi module thông báo Zalo là sẵn sàng chạy production lâu dài:
+
+- [ ] **Kết nối lại Zalo OA thật** trên `/settings/notifications` (bấm
+      "Kết nối Zalo") — mọi kết nối trong môi trường dev hiện tại dùng
+      `ZALO_APP_SECRET`/`ZALO_TOKEN_ENCRYPTION_KEY` giả, không gửi được tin
+      thật (mục 43.1).
+- [ ] Xác nhận `ZALO_APP_ID`, `ZALO_APP_SECRET`, `ZALO_OA_ID` trên Vercel
+      là giá trị thật, không phải placeholder.
+- [ ] `ZALO_TOKEN_ENCRYPTION_KEY` trên Vercel: đặt 1 lần, **không đổi sau
+      khi đã kết nối** (đổi key sau khi có token đã lưu = phải kết nối lại,
+      mục 43.1).
+- [ ] `CRON_SECRET` đã set trên Vercel (mục 35), khác với giá trị test cục
+      bộ trong `.env.local`.
+- [ ] Xác nhận `vercel.json`'s 2 cron job đã lên lịch đúng (Vercel dashboard
+      → Cron Jobs) sau lần deploy đầu tiên.
+- [ ] Danh sách `notification_recipients` chỉ chứa Zalo UID thật, đã
+      follow OA (mục 8 — cách lấy recipient UID).
+- [ ] Bấm thử "Gửi thử cho tất cả" (ZL2) + "Gửi thử" cho từng người (ZL7,
+      mục 45) sau khi kết nối thật — xác nhận nhận được tin thật trên điện
+      thoại, không chỉ xem log `status: sent`.
+- [ ] Theo dõi `/settings/notifications`'s health status định kỳ (token
+      hết hạn sau ~90 ngày kể từ lần refresh gần nhất theo tài liệu chung
+      của Zalo OA — cần xác nhận số ngày chính xác với tài liệu Zalo hiện
+      hành, chưa verify được trong phase này).
+- [ ] Đã đọc + đồng ý với giới hạn "không backfill nếu cron miss cả ngày"
+      (mục 39).
+
+## 48. Final test — end-to-end (A-H theo spec)
+
+| # | Kịch bản | Cách verify | Kết quả |
+|---|---|---|---|
+| A | Receipt summary | Playwright thật qua `/receipts/new` + `/receipts/[id]/edit` (ZL3/ZL4 test trước đó) + route `/api/notifications/daily-receipt-summary` | Đã verify (ZL3, tái xác nhận) |
+| B | Low-stock alert | 2 lượt Playwright thật qua `/receipts/new`/`edit` (ZL4) + preview mới (mục 45) trên dữ liệu thật hiện có | Đã verify (ZL4 + preview mới) |
+| C | Payment summary | Route thật `/api/notifications/daily-payment-summary` với payment test thật "hôm nay" (ZL5) | Đã verify (ZL5, tái xác nhận) |
+| D | Multiple recipients | Mọi lần gửi đều fan-out đúng số người nhận active hiện tại (2-3 người thật) — verify lại ở ZL7 qua cả route lẫn UI | Đã verify |
+| E | Token refresh | 2 lock claim đồng thời ở tầng DB (chỉ 1 thắng), stale lock tự giải phóng, 3 request đồng thời qua route thật không crash | Đã verify (mục 43.2) |
+| F | Duplicate cron | Gọi cron 2 lần liên tiếp cho cùng ngày — dedupe theo `dedupeKey` (đã verify kỹ ở ZL6) | Đã verify (ZL6, không lặp lại) |
+| G | Provider error | Refresh thật thất bại (do decrypt_failed thật trong môi trường này) → ghi đúng `last_refresh_error_*`, health status phản ánh đúng ngay | Đã verify (mục 43.1) |
+| H | Retry | Seed 1 log `failed` thật, bấm "Gửi lại" qua UI thật, xác nhận log được cập nhật (thử lại thật, không phải no-op) | Đã verify (mục 44) |
+
+Tổng cộng phase này verify bằng: 1 script race-condition ở tầng DB + route
+thật (7 assertion), 1 script Playwright UI cho health status/preview/test-1-
+recipient/filter/retry (11 assertion ban đầu + 1 assertion sửa lại chính
+xác hơn sau khi phát hiện assertion đầu tiên tự nó sai, không phải sản
+phẩm sai — xem chi tiết ở chỗ implementation). Toàn bộ dữ liệu test
+(notification_logs seed, zalo_connections state tạm thời) đã được khôi
+phục/xoá sạch sau khi xong.
+
+## 49. Giới hạn còn lại của Phase ZL7
+
+- **Chưa gửi được tin Zalo thành công thật trong toàn bộ 7 phase** — giờ
+  biết chính xác lý do tại môi trường này: (1) không có `ZALO_APP_SECRET`
+  thật, VÀ (2) token đang lưu không giải mã được bằng key hiện tại. Cả 2
+  đều cần hành động thật từ người dùng (mục 47), không phải giới hạn của
+  code.
+- Chưa verify được thời hạn thật của access/refresh token theo tài liệu
+  Zalo hiện hành (bao nhiêu ngày, refresh_token có hết hạn riêng không) —
+  `EXPIRY_SAFETY_BUFFER_SECONDS`/logic refresh đã đúng nguyên lý chung
+  (refresh trước khi hết hạn, không phụ thuộc số ngày cụ thể) nên không
+  cần con số chính xác để hoạt động đúng, nhưng nên xác nhận nếu có thể.
+  Đưa vào mục 47.
+- Lock DB-level (`refresh_lock_at`) chỉ bảo vệ **refresh token**, không mở
+  rộng ra bảo vệ toàn bộ luồng gửi tin (không cần thiết — gửi tin đã tuần
+  tự theo thiết kế từ ZL2, xem mục 5 phần RATE LIMIT của spec này).
+- `categorizeZaloError`'s bảng mã số Zalo (mục 42) vẫn là best-effort,
+  giống hệt giới hạn đã nêu từ ZL1 cho các URL endpoint — chỉ ảnh hưởng
+  hiển thị, không ảnh hưởng logic.
