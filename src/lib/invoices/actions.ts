@@ -7,6 +7,7 @@ import { canCreateInvoices, canEditInvoices, getCurrentRole } from "@/lib/auth/r
 import { validateSupplierAndItems } from "@/lib/products/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { calculateInvoiceFinancials, type SupplierType } from "@/lib/invoices/financials";
+import { triggerOutstandingAlertCheck } from "@/lib/notifications/outstanding-alert";
 
 const FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này.";
 
@@ -179,6 +180,16 @@ export async function createInvoice(
 
   const result = data[0] as { invoice_id: string; invoice_no: string };
   revalidatePath("/invoices");
+
+  // ZL4: a brand-new invoice_item can already be born into "low"/"need_makeup"
+  // (e.g. its own invoice_qty is under the threshold, or receipts for this
+  // supplier+SKU already exist as of the invoice date) — evaluate it right
+  // away, same as after a receipt.
+  await triggerOutstandingAlertCheck({
+    supplierIds: [parsed.supplierId],
+    productIds: parsed.items.map((i) => i.productId),
+  });
+
   return {
     status: "success",
     message: `Đã lưu hóa đơn ${result.invoice_no}.`,
@@ -199,12 +210,13 @@ export async function updateInvoice(
 
   const { data: original } = await supabase
     .from("invoices")
-    .select("id")
+    .select("id, supplier_id, invoice_items(product_id)")
     .eq("id", invoiceId)
     .maybeSingle();
   if (!original) {
     return { status: "error", message: "Không tìm thấy hóa đơn." };
   }
+  const originalProductIds = (original.invoice_items as { product_id: string }[]).map((i) => i.product_id);
 
   // Re-derives the full snapshot from scratch every time, using whatever
   // supplier_type the (possibly just-changed) supplier currently has — this
@@ -264,6 +276,18 @@ export async function updateInvoice(
   const result = data[0] as { invoice_id: string; invoice_no: string };
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${invoiceId}`);
+
+  // ZL4: evaluate both the OLD supplier/products and the NEW ones — same
+  // union rationale as updateReceipt (an edit can move a SKU/supplier off
+  // this invoice, which can itself change some OTHER invoice_item's
+  // received_qty allocation... in practice v_outstanding is keyed per
+  // invoice_item so this mainly re-checks the edited invoice's own rows,
+  // but the old-side union costs nothing and stays consistent).
+  await triggerOutstandingAlertCheck({
+    supplierIds: [...new Set([original.supplier_id, parsed.supplierId])],
+    productIds: [...new Set([...originalProductIds, ...parsed.items.map((i) => i.productId)])],
+  });
+
   return {
     status: "success",
     message: `Đã lưu thay đổi hóa đơn ${result.invoice_no}.`,

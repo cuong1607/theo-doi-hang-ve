@@ -1,4 +1,4 @@
-# Zalo OA Integration — Phase ZL1 + ZL2 + ZL3
+# Zalo OA Integration — Phase ZL1 + ZL2 + ZL3 + ZL4
 
 Phase ZL1 chỉ làm: OAuth start/callback, token exchange, refresh foundation,
 lưu token server-side, và gửi 1 tin nhắn test (tới `ZALO_TEST_RECIPIENT_ID`).
@@ -13,11 +13,18 @@ Phase ZL3 là business event **đầu tiên** dùng `sendNotification()` của Z
 từng nhà cung cấp) và gửi cho mọi người nhận active, tối đa 1 lần/ngày nhờ
 dedupe.
 
-Cả 3 phase đều **không có**: cron (ZL3 chỉ có nút test thủ công, chưa tự động
-hóa), broadcast, ZBS Template Message, hay phân quyền người nhận theo từng
-loại event (hiện tại: mọi người nhận active đều nhận mọi thông báo như
-nhau). Các business event khác (low stock, payment summary) vẫn chưa được
-xây — chỉ `DAILY_RECEIPT_SUMMARY` đã có từ ZL3.
+Phase ZL4 là business event thứ hai: `LOW_STOCK_ALERT` — cảnh báo khi một
+SKU trên màn hình "Theo dõi hàng còn phải về" (`/outstanding`) CHUYỂN trạng
+thái (không phải cứ ở trạng thái xấu là spam liên tục). Khác ZL3 (chạy theo
+yêu cầu thủ công/cron), ZL4 tự động chạy sau mỗi lần tạo/sửa phiếu nhận hoặc
+hóa đơn — không có nút bấm thủ công, không có cron, không có DB trigger.
+
+Cả 4 phase đều **không có**: cron thật (ZL3 chỉ có nút test thủ công), DB
+trigger gọi Zalo trực tiếp (ZL4 gọi từ server action, không phải
+trigger/function trong Postgres), broadcast, ZBS Template Message, hay phân
+quyền người nhận theo từng loại event (hiện tại: mọi người nhận active đều
+nhận mọi thông báo như nhau). `payment summary` — business event còn lại
+được nhắc tới trong bối cảnh ZL2 — vẫn chưa được xây.
 
 ## 1. Architecture
 
@@ -461,6 +468,14 @@ formatting":
 - `daily-receipt-summary.ts`: `buildDailyReceiptSummary(date)` — gọi RPC, có
   DB access, re-export lại các hàm pure ở trên cho tiện import từ nơi khác.
 
+Mỗi khối (từng NCC + TỔNG) trong tin nhắn có thêm 2 dòng tiền: **"Tổng
+tiền"** (= `totalAmount`, tổng `line_total` của các dòng hàng) và **"Tổng
+tiền sau VAT"** (= `totalAmount × 1.08`, làm tròn 2 chữ số thập phân — cùng
+tỷ lệ 8% đang dùng ở trang chi tiết hàng về theo ngày
+`/receipts/daily/[date]/[supplierId]`). Đây là VAT hiển thị theo quy ước
+receipts, khác với VAT snapshot theo từng invoice/supplier_type (UP1-UP4) —
+receipts không có khái niệm VAT theo loại NCC.
+
 ## 19. Cách tính ngày (Asia/Ho_Chi_Minh)
 
 `receipts.receipt_date` là cột `date` thuần (không có giờ), nên bản thân
@@ -476,8 +491,8 @@ với giờ Việt Nam có thể khiến "hôm nay" bị tính sai vào buổi t
 node --env-file=.env.local --test src/lib/notifications/daily-receipt-summary.test.ts
 ```
 
-6 test case cho `formatDailyReceiptSummaryMessage`/`getTodayDateVN` (pure,
-không cần DB) — bao gồm đúng ví dụ mẫu trong spec (nhiều NCC, chênh lệch âm,
+7 test case cho `formatDailyReceiptSummaryMessage`/`getTodayDateVN` (pure,
+không cần DB) — bao gồm nhiều NCC kèm dòng Tổng tiền/Tổng tiền sau VAT, chênh lệch âm,
 format tiền VND). `buildDailyReceiptSummary`/`sendDailyReceiptSummary` không
 unit-test được trực tiếp (đụng DB thật qua `@/lib/supabase/admin`, không
 resolve được dưới `node --test` thường) — đã verify bằng 2 script thực
@@ -506,4 +521,158 @@ nghiệm tạm thời (đã xoá sau khi dùng):
 - Cùng giới hạn với ZL2: chưa thể chứng minh một lần gửi Zalo **thành công
   thật** trong môi trường này (không có Zalo credentials thật).
 - `low stock` và `payment summary` — 2 business event còn lại được nhắc tới
-  trong bối cảnh ZL2/ZL3 — vẫn chưa được xây, để dành cho phase sau.
+  trong bối cảnh ZL2/ZL3 — vẫn chưa được xây ở thời điểm ZL3; `low stock` đã
+  được xây ở ZL4 (xem bên dưới), `payment summary` vẫn để dành cho phase sau.
+
+
+# Phase ZL4 — Low Stock / Outstanding Alert
+
+## 22. State machine
+
+Trạng thái theo dõi (lưu ở `notification_event_states`, KHÁC với
+`v_outstanding.status` — xem bảng map bên dưới):
+
+```
+              remaining_qty >= 15              0 <= remaining_qty < 15         remaining_qty < 0
+                    normal      ────────────►    near_empty      ────────────►   over_received
+                       ▲                              │  ▲                            │
+                       │        (không alert)         │  │      (không alert)         │
+                       └──────────────────────────────┘  └────────────────────────────┘
+                         near_empty -> normal              over_received -> bất kỳ
+```
+
+| v_outstanding.status (migration 00014) | notification_event_states.current_state |
+|---|---|
+| `normal` | `normal` |
+| `low` | `near_empty` |
+| `need_makeup` | `over_received` |
+
+**Chỉ gửi alert khi (đúng theo spec):**
+- `normal → near_empty` ("Sắp hết")
+- `normal → over_received` hoặc `near_empty → over_received` ("Cần xuất bù")
+
+**Không gửi alert khi:** trạng thái không đổi (ví dụ `near_empty →
+near_empty`, dù remaining_qty giảm từ 12 xuống 10) — đây là cơ chế chống
+spam chính; `near_empty → normal` hoặc `over_received → bất kỳ` (đều là hồi
+phục, chỉ update state âm thầm, không alert).
+
+Logic thuần (`toTrackedState`, `shouldAlert`) nằm ở
+`src/lib/notifications/outstanding-alert-state.ts` — file này không đụng DB
+nên test được trực tiếp bằng `node --test` (8 test case, xem mục 26).
+
+## 23. Kiến trúc
+
+```
+create/edit phiếu nhận (receipts/actions.ts)
+create/edit hóa đơn     (invoices/actions.ts)
+        │  (sau khi RPC ghi DB thành công)
+        ▼
+triggerOutstandingAlertCheck({ supplierIds, productIds })   [never throws — bọc try/catch]
+        │
+        ▼
+evaluateOutstandingNotifications({ supplierIds, productIds })
+  1. Đọc v_outstanding (WHERE supplier_id IN … AND product_id IN …)
+  2. Đọc notification_event_states cũ cho các invoice_item liên quan
+  3. Với mỗi invoice_item: so newState vs oldState (mặc định "normal" nếu
+     chưa có row) — bỏ qua nếu không đổi
+  4. Gom các invoice_item CẦN alert lại theo supplier_id (batch)
+  5. Upsert TOÀN BỘ state mới đổi trong 1 câu lệnh
+  6. Với mỗi supplier có batch cần alert → sendNotification() 1 lần
+        │
+        ▼
+sendNotification()   [ZL2 — fan-out cho mọi recipient active, ghi log, dedupe]
+```
+
+Không có DB trigger nào gọi thẳng Zalo — đúng theo "TRIGGER STRATEGY" của
+spec. `evaluateOutstandingNotifications()` không quan tâm điều gì gây ra
+thay đổi (receipt mới, receipt sửa, hay hóa đơn) — nó luôn đọc TRẠNG THÁI
+HIỆN TẠI từ `v_outstanding` và so với trạng thái đã lưu, nên gọi lại nhiều
+lần cho cùng 1 thay đổi là an toàn (idempotent — xem mục 25).
+
+## 24. Batch theo supplier
+
+Nếu 1 lần evaluate làm nhiều SKU cùng supplier cùng cần alert (vd 1 phiếu
+nhận có 10 SKU), chỉ gửi **1 tin nhắn** cho supplier đó thay vì N tin riêng:
+
+- 1 SKU cần alert → dùng format chi tiết đầy đủ (NCC/SKU/Sản phẩm/SL hóa
+  đơn/Đã nhận/Còn lại/HĐ — đúng ví dụ trong spec).
+- ≥2 SKU cùng supplier cần alert trong cùng 1 lần evaluate → dùng format gọn
+  "CẢNH BÁO HÀNG" liệt kê từng SKU 1 dòng (đúng ví dụ batch trong spec).
+
+Đã verify thực nghiệm: 1 phiếu nhận đổi cả 2 SKU cùng lúc → đúng 1 alert
+batch, 3 dòng `notification_logs` (1 lần gửi × 3 người nhận), không phải 6
+dòng.
+
+## 25. Dedupe
+
+Cơ chế chống trùng có 2 lớp:
+
+1. **Lớp chính (state machine):** một khi `evaluateOutstandingNotifications`
+   ghi `current_state` mới, lần gọi kế tiếp cho cùng invoice_item sẽ thấy
+   `newState === oldState` (trừ khi trạng thái thật sự đổi tiếp) → tự động
+   không alert lại. Đây là lý do gọi `evaluateOutstandingNotifications`
+   nhiều lần cho cùng 1 thay đổi (vd do double-submit) vẫn an toàn.
+2. **Lớp phụ (dedupeKey ở sendNotification, ZL2):**
+   `LOW_STOCK_ALERT:<supplierId>:<ISO timestamp của lần evaluate này>` —
+   dùng 1 timestamp dùng chung cho cả batch, đóng vai trò "version" như
+   spec gợi ý ("dùng event state updated timestamp/version"). Đây chỉ là
+   lớp phòng vệ bổ sung cho trường hợp đua (race) hiếm gặp — lớp chính (1)
+   mới là cơ chế chống spam chủ lực.
+
+## 26. Test
+
+```
+node --env-file=.env.local --test src/lib/notifications/outstanding-alert-state.test.ts
+node --env-file=.env.local --test src/lib/notifications/outstanding-alert-message.test.ts
+```
+
+8 test case cho state machine thuần (`toTrackedState`/`shouldAlert` — toàn
+bộ ma trận chuyển trạng thái) + 4 test case cho message formatting thuần
+(single SKU near_empty/over_received đúng ví dụ spec, batch nhiều SKU đúng
+ví dụ spec, item rỗng phải throw).
+
+`evaluateOutstandingNotifications`/`triggerOutstandingAlertCheck` đụng DB
+thật (`v_outstanding`, `notification_event_states`, `sendNotification`) nên
+không unit-test trực tiếp được — đã verify bằng thực nghiệm sống trên DB
+thật + dev server thật:
+
+- **2 lượt Playwright thật** qua `/receipts/new` và `/receipts/[id]/edit`
+  (tạo phiếu thật, sửa phiếu thật) — chứng minh code trong
+  `receipts/actions.ts` THẬT SỰ gọi `triggerOutstandingAlertCheck` sau khi
+  lưu (không chỉ đọc code): case 1 (normal → near_empty, tạo phiếu nhận 18/30
+  → còn 12 → alert "SẮP HẾT" đúng nội dung), case 3+9 (sửa phiếu về nhận 5 →
+  còn 25 → near_empty → normal, không alert, và tự re-evaluate khi edit),
+  case 7 (3 người nhận thật đều có dòng log riêng).
+- **1 route test tạm thời** (`POST /api/notifications/zl4-test-evaluate`,
+  gọi thẳng `evaluateOutstandingNotifications` — ĐÃ XÓA sau khi test xong,
+  không phải deliverable) dùng để dựng nhanh các kịch bản còn lại bằng cách
+  tạo receipt thẳng qua RPC (`create_receipt`) rồi gọi route này để trigger
+  evaluate: case 2 (near_empty → near_empty, 13→12, không alert), case 4
+  (normal → near_empty lần 2, sau khi đã reset về normal), case 5 (near_empty
+  → over_received), case 6 (normal → over_received trực tiếp, message đúng
+  "CẦN XUẤT BÙ" và "Còn lại: -5"), case 8 (1 phiếu đổi 2 SKU cùng lúc → 1
+  batch, không phải 2), case 10 (gọi lại evaluate nhiều lần cho cùng trạng
+  thái over_received → không spam thêm).
+- Toàn bộ 4 sản phẩm test, 4 hóa đơn test, 7 phiếu nhận test, các dòng
+  `notification_event_states` và `notification_logs` (event_type
+  `LOW_STOCK_ALERT`) do test tạo ra đã được xóa sạch sau khi verify xong.
+
+**Chưa verify riêng bằng UI:** `createInvoice`/`updateInvoice` trong
+`invoices/actions.ts` dùng đúng pattern gọi `triggerOutstandingAlertCheck`
+giống hệt `receipts/actions.ts` (đã verify), nhưng chưa có 1 lượt Playwright
+thật riêng cho hóa đơn — rủi ro thấp do code đối xứng, nhưng nên xác nhận
+nếu có thời gian.
+
+## 27. Giới hạn còn lại của Phase ZL4
+
+- Không có UI/nút test thủ công cho alert này (đúng phạm vi spec — không
+  yêu cầu "ADMIN TEST" như ZL3).
+- Cùng giới hạn với ZL2/ZL3: chưa chứng minh được 1 lần gửi Zalo **thành
+  công thật** (không có Zalo credentials thật trong môi trường này).
+- Race condition lý thuyết: 2 lần evaluate cho cùng 1 thay đổi chạy đồng
+  thời (trước khi lần đầu kịp ghi state mới) có thể cả 2 đều alert — chấp
+  nhận được cho quy mô dùng thực tế (1 admin, nhập tuần tự), không xây khóa
+  DB (advisory lock) cho việc này ở phase này.
+- `notification_event_states` không có FK tới `invoice_items` — nếu 1
+  invoice_item bị xóa (sửa hóa đơn xóa dòng), row state cũ nằm lại vô hại
+  (không bao giờ được đọc lại nữa) chứ không tự dọn.

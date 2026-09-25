@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "npx eslint .",
-    "test": "node --env-file=.env.local --test src/lib/invoices/financials.test.ts src/lib/invoices/snapshot.integration.test.ts src/lib/invoices/edit-flow.integration.test.ts src/lib/auth/role.test.ts src/lib/zalo/pkce.test.ts src/lib/zalo/crypto.test.ts src/lib/zalo/env.test.ts src/lib/zalo/oauth.test.ts src/lib/notifications/daily-receipt-summary.test.ts",
+    "test": "node --env-file=.env.local --test src/lib/invoices/financials.test.ts src/lib/invoices/snapshot.integration.test.ts src/lib/invoices/edit-flow.integration.test.ts src/lib/auth/role.test.ts src/lib/zalo/pkce.test.ts src/lib/zalo/crypto.test.ts src/lib/zalo/env.test.ts src/lib/zalo/oauth.test.ts src/lib/notifications/daily-receipt-summary.test.ts src/lib/notifications/outstanding-alert-message.test.ts src/lib/notifications/outstanding-alert-state.test.ts",
     "import:legacy:preview": "node --env-file=.env.local scripts/legacy-import/run.ts preview",
     "import:legacy:run": "node --env-file=.env.local scripts/legacy-import/run.ts import"
   },

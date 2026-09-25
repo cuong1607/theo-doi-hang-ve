@@ -7,6 +7,7 @@ import { canCreateReceipts, canEditReceipts, getCurrentRole } from "@/lib/auth/r
 import { getSupplierProducts, type SupplierProduct } from "@/lib/products/actions";
 import { validateSupplierAndItems } from "@/lib/products/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { triggerOutstandingAlertCheck } from "@/lib/notifications/outstanding-alert";
 
 const FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này.";
 
@@ -115,6 +116,16 @@ export async function createReceipt(
 
   const result = data[0] as { receipt_id: string; receipt_no: string };
   revalidatePath("/receipts");
+
+  // ZL4: a new receipt can push any of its SKUs' outstanding status down
+  // (e.g. a supplier+SKU combo now has enough received_qty to cross into
+  // "low"/"need_makeup") — re-evaluate after the receipt is durably saved,
+  // never before (and never blocking this action's own success).
+  await triggerOutstandingAlertCheck({
+    supplierIds: [parsed.data.supplierId],
+    productIds: parsed.data.items.map((i) => i.productId),
+  });
+
   return {
     status: "success",
     message: `Đã lưu phiếu nhập ${result.receipt_no}.`,
@@ -145,12 +156,13 @@ export async function updateReceipt(
 
   const { data: original } = await supabase
     .from("receipts")
-    .select("receipt_date, supplier_id")
+    .select("receipt_date, supplier_id, receipt_items(product_id)")
     .eq("id", receiptId)
     .maybeSingle();
   if (!original) {
     return { status: "error", message: "Không tìm thấy phiếu nhập." };
   }
+  const originalProductIds = (original.receipt_items as { product_id: string }[]).map((i) => i.product_id);
 
   const validationError = await validateSupplierAndItems(
     supabase,
@@ -200,6 +212,16 @@ export async function updateReceipt(
   ) {
     revalidatePath(`/receipts/daily/${parsed.data.receiptDate}/${parsed.data.supplierId}`);
   }
+
+  // ZL4: evaluate both the OLD supplier/products (in case the edit moved
+  // this receipt to a different supplier/date and some SKUs' received_qty
+  // just went DOWN) and the NEW ones — a plain union, since
+  // evaluateOutstandingNotifications() itself is a no-op for any SKU whose
+  // status didn't actually change.
+  await triggerOutstandingAlertCheck({
+    supplierIds: [...new Set([original.supplier_id, parsed.data.supplierId])],
+    productIds: [...new Set([...originalProductIds, ...parsed.data.items.map((i) => i.productId)])],
+  });
 
   return {
     status: "success",
