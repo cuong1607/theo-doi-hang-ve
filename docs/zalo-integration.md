@@ -1,4 +1,4 @@
-# Zalo OA Integration — Phase ZL1 + ZL2
+# Zalo OA Integration — Phase ZL1 + ZL2 + ZL3
 
 Phase ZL1 chỉ làm: OAuth start/callback, token exchange, refresh foundation,
 lưu token server-side, và gửi 1 tin nhắn test (tới `ZALO_TEST_RECIPIENT_ID`).
@@ -8,11 +8,16 @@ nhận (`notification_recipients`), bảng log gửi (`notification_logs`),
 notification service (`sendNotification`, `retryFailedNotification`), cơ chế
 chống gửi trùng (dedupe), và UI quản lý người nhận + xem lịch sử gửi.
 
-Cả hai phase đều **không có**: cron, business-event notifications thật
-(daily receipt summary/low stock/payment summary — các phase sau sẽ gọi
-`sendNotification()` cho các event này), broadcast, ZBS Template Message,
-hay phân quyền người nhận theo từng loại event (hiện tại: mọi người nhận
-active đều nhận mọi thông báo như nhau).
+Phase ZL3 là business event **đầu tiên** dùng `sendNotification()` của ZL2:
+`DAILY_RECEIPT_SUMMARY` — tổng hợp hàng về trong ngày (toàn hệ thống + theo
+từng nhà cung cấp) và gửi cho mọi người nhận active, tối đa 1 lần/ngày nhờ
+dedupe.
+
+Cả 3 phase đều **không có**: cron (ZL3 chỉ có nút test thủ công, chưa tự động
+hóa), broadcast, ZBS Template Message, hay phân quyền người nhận theo từng
+loại event (hiện tại: mọi người nhận active đều nhận mọi thông báo như
+nhau). Các business event khác (low stock, payment summary) vẫn chưa được
+xây — chỉ `DAILY_RECEIPT_SUMMARY` đã có từ ZL3.
 
 ## 1. Architecture
 
@@ -416,3 +421,89 @@ bản), không liên quan tới bảng `notification_recipients`.
 - `retryFailedNotification` chưa có nút bấm trên UI (xem mục 15).
 - Không có phân quyền người nhận theo từng event — mọi người active nhận mọi
   thông báo như nhau (đúng phạm vi ZL2, để dành cho phase sau nếu cần).
+
+
+# Phase ZL3 — Daily Receipt Summary Notification
+
+## 18. Kiến trúc
+
+```
+receipts + receipt_items (ngày X)
+        │
+        ▼
+get_daily_receipt_summary_by_supplier(p_date)   [SQL RPC, migration 00030]
+GROUP BY supplier — receipt_count, total_delivered,
+total_received, total_difference, total_amount
+        │
+        ▼
+buildDailyReceiptSummary(date)                  [src/lib/notifications/daily-receipt-summary.ts]
+cộng các dòng theo supplier lại thành "TỔNG"
+        │
+        ▼
+formatDailyReceiptSummaryMessage(summary)       [daily-receipt-summary-message.ts — pure, không đụng DB]
+build text tin nhắn
+        │
+        ▼
+sendDailyReceiptSummary(date)                   [send-daily-receipt-summary.ts]
+receiptCount === 0 ? → skip, không gửi
+                     → sendNotification({ eventType: "DAILY_RECEIPT_SUMMARY",
+                         dedupeKey: `DAILY_RECEIPT_SUMMARY:${date}`, ... })
+        │
+        ▼
+POST /api/notifications/daily-receipt-summary   [admin-only, luôn dùng "hôm nay" theo giờ VN]
+```
+
+Tách 2 file rõ ràng theo đúng yêu cầu "tách calculation khỏi message
+formatting":
+- `daily-receipt-summary-message.ts`: pure, không import DB/`@/` alias nào —
+  chứa `getTodayDateVN()`, `formatDailyReceiptSummaryMessage()`, và các type.
+  File này chạy được trực tiếp bằng `node --test` (xem mục 20).
+- `daily-receipt-summary.ts`: `buildDailyReceiptSummary(date)` — gọi RPC, có
+  DB access, re-export lại các hàm pure ở trên cho tiện import từ nơi khác.
+
+## 19. Cách tính ngày (Asia/Ho_Chi_Minh)
+
+`receipts.receipt_date` là cột `date` thuần (không có giờ), nên bản thân
+việc lọc theo ngày không có vấn đề timezone. Vấn đề chỉ nằm ở chỗ **xác định
+"hôm nay" là ngày nào** khi server chạy trên Vercel (UTC) — lệch 7 tiếng so
+với giờ Việt Nam có thể khiến "hôm nay" bị tính sai vào buổi tối.
+`getTodayDateVN()` dùng `Intl.DateTimeFormat` với `timeZone:
+"Asia/Ho_Chi_Minh"` để luôn ra đúng ngày VN bất kể server chạy ở múi giờ nào.
+
+## 20. Test
+
+```
+node --env-file=.env.local --test src/lib/notifications/daily-receipt-summary.test.ts
+```
+
+6 test case cho `formatDailyReceiptSummaryMessage`/`getTodayDateVN` (pure,
+không cần DB) — bao gồm đúng ví dụ mẫu trong spec (nhiều NCC, chênh lệch âm,
+format tiền VND). `buildDailyReceiptSummary`/`sendDailyReceiptSummary` không
+unit-test được trực tiếp (đụng DB thật qua `@/lib/supabase/admin`, không
+resolve được dưới `node --test` thường) — đã verify bằng 2 script thực
+nghiệm tạm thời (đã xoá sau khi dùng):
+
+- Script 1 (đọc real RPC, không đụng dữ liệu thật ngoại trừ 3 phiếu tạo/xoá
+  trên ngày giả `2030-01-15`): xác nhận aggregation đúng cho no-receipts,
+  nhiều NCC, nhiều phiếu cùng NCC, sáng+chiều gộp lại, chênh lệch âm/dương,
+  tổng tiền.
+- Script 2 (gọi thật `POST /api/notifications/daily-receipt-summary` trên
+  dev server + dữ liệu phiếu thật của "hôm nay"): xác nhận gửi không bị skip
+  khi có phiếu thật, cô lập lỗi từng người nhận (3 người nhận thật, mỗi
+  người 1 kết quả riêng), và dedupe đúng theo từng người nhận (seed 1 dòng
+  log `sent` giả cho 1 người — kỹ thuật giống ZL2 vì môi trường này không có
+  Zalo credentials thật nên không thể tạo ra 1 lần gửi thành công thật — rồi
+  gửi lần 2: đúng người đó bị "skipped", 2 người còn lại vẫn thử gửi lại
+  bình thường). Đã dọn sạch toàn bộ `notification_logs` do script tạo ra sau
+  khi test xong; 3 người nhận thật (`anh Công`, `Cường`, `Số Hotline`) được
+  giữ nguyên vì đó là dữ liệu thật của người dùng, không phải test data.
+
+## 21. Giới hạn còn lại của Phase ZL3
+
+- Chưa có cron — nút "Gửi báo cáo hàng về hôm nay" trên
+  `/settings/notifications` là cách duy nhất để trigger, đúng phạm vi ("test
+  thủ công trước khi cron").
+- Cùng giới hạn với ZL2: chưa thể chứng minh một lần gửi Zalo **thành công
+  thật** trong môi trường này (không có Zalo credentials thật).
+- `low stock` và `payment summary` — 2 business event còn lại được nhắc tới
+  trong bối cảnh ZL2/ZL3 — vẫn chưa được xây, để dành cho phase sau.

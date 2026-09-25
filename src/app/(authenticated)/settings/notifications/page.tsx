@@ -20,6 +20,7 @@ import { SendTestMessageButton } from "./send-test-message-button";
 import { CreateRecipientButton } from "./create-recipient-button";
 import { RecipientRowActions } from "./recipient-row-actions";
 import { SendTestAllButton } from "./send-test-all-button";
+import { SendDailySummaryButton } from "./send-daily-summary-button";
 
 const RECENT_LOGS_LIMIT = 20;
 
@@ -218,11 +219,20 @@ export default async function NotificationSettingsPage({
           )}
 
           {canManageRecipients && (
-            <div className="border-t pt-4">
-              <SendTestAllButton disabled={!hasActiveRecipient} />
-              {!hasActiveRecipient && (
-                <p className="mt-1 text-xs text-muted-foreground">Thêm ít nhất 1 người nhận đang hoạt động để gửi thử.</p>
-              )}
+            <div className="space-y-4 border-t pt-4">
+              <div>
+                <SendTestAllButton disabled={!hasActiveRecipient} />
+                {!hasActiveRecipient && (
+                  <p className="mt-1 text-xs text-muted-foreground">Thêm ít nhất 1 người nhận đang hoạt động để gửi thử.</p>
+                )}
+              </div>
+              <div>
+                <SendDailySummaryButton disabled={!hasActiveRecipient} />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Tổng hợp hàng về hôm nay (theo giờ Việt Nam) và gửi cho tất cả người nhận đang hoạt động — dùng để
+                  test thủ công trước khi có cron tự động.
+                </p>
+              </div>
             </div>
           )}
         </CardContent>
