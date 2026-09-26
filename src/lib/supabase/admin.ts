@@ -1,9 +1,12 @@
+import "server-only";
+
 import { createClient } from "@supabase/supabase-js";
 
-// Server-only. Uses the service_role key, which bypasses RLS entirely — never
-// import this from a Client Component or expose SUPABASE_SERVICE_ROLE_KEY via
-// NEXT_PUBLIC_*. This is a stand-in until Phase 5 (Authentication) lands a
-// per-user server client that can rely on RLS instead.
+// Server-only (enforced by the "server-only" import: bundling this into a
+// Client Component fails the build). Uses the service_role key, which
+// bypasses RLS — so every caller must have authorized the request first via
+// src/lib/auth/session.ts. Never expose SUPABASE_SERVICE_ROLE_KEY via
+// NEXT_PUBLIC_*.
 export function createAdminClient() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

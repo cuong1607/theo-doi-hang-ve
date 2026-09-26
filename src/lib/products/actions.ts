@@ -1,5 +1,6 @@
 "use server";
 
+import { authorizeAction } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type SupplierProduct = {
@@ -17,6 +18,11 @@ export type SupplierProduct = {
 export async function getSupplierProducts(
   supplierId: string
 ): Promise<{ status: "success"; data: SupplierProduct[] } | { status: "error"; message: string }> {
+  // A Server Action is a public POST endpoint — authorize even reads.
+  const authz = await authorizeAction("product:view");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
+  }
   if (!supplierId) {
     return { status: "success", data: [] };
   }

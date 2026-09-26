@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requirePermission } from "@/lib/auth/session";
 import { AlertTriangle, PackageSearch, Wallet } from "lucide-react";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -50,6 +51,7 @@ export default async function OutstandingPage({
     page?: string;
   }>;
 }) {
+  await requirePermission("outstanding:view");
   const params = await searchParams;
   const supplierId = (params.supplier ?? "").trim();
   const invoiceDate = (params.invoiceDate ?? "").trim();

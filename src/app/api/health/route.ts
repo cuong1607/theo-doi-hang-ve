@@ -27,7 +27,8 @@ export async function GET() {
     const { error } = await supabase.auth.getUser();
 
     // PGRST116 hoặc không có session đều OK — chỉ cần client khởi tạo được
-    if (error && error.code !== "PGRST116" && error.status !== 401) {
+    // (Public endpoint: a request without a session is the normal case.)
+    if (error && error.code !== "PGRST116" && error.status !== 401 && error.name !== "AuthSessionMissingError") {
       return Response.json(
         {
           status: "error",

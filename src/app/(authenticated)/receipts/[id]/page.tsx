@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { requirePermission } from "@/lib/auth/session";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CalendarDays, Pencil } from "lucide-react";
 
-import { canEditReceipts, getCurrentRole } from "@/lib/auth/role";
+import { canEditReceipts } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -58,6 +59,7 @@ export default async function ReceiptDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const auth = await requirePermission("receipt:view");
   const { id } = await params;
   const receipt = await getReceipt(id);
 
@@ -65,7 +67,7 @@ export default async function ReceiptDetailPage({
     notFound();
   }
 
-  const canEdit = canEditReceipts(getCurrentRole());
+  const canEdit = canEditReceipts(auth.profile.role);
 
   const totalDelivered = receipt.receipt_items.reduce((sum, i) => sum + i.delivered_qty, 0);
   const totalReceived = receipt.receipt_items.reduce((sum, i) => sum + i.received_qty, 0);

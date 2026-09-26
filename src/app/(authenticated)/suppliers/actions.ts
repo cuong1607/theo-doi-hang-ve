@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { canManageSuppliers, getCurrentRole } from "@/lib/auth/role";
+import { authorizeAction } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type SupplierFormValues = {
@@ -30,7 +30,6 @@ export type SupplierActionResult = {
   message?: string;
 };
 
-const FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này.";
 
 function readOptionalField(value: FormDataEntryValue | null) {
   const s = (value ?? "").toString().trim();
@@ -82,8 +81,9 @@ export async function createSupplier(
   _prevState: SupplierFormState,
   formData: FormData
 ): Promise<SupplierFormState> {
-  if (!canManageSuppliers(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("supplier:manage");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const parsed = parseSupplierForm(formData);
@@ -161,8 +161,9 @@ export async function updateSupplier(
   _prevState: SupplierFormState,
   formData: FormData
 ): Promise<SupplierFormState> {
-  if (!canManageSuppliers(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("supplier:manage");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const parsed = parseSupplierForm(formData);
@@ -212,8 +213,9 @@ export async function setSupplierActive(
   id: string,
   isActive: boolean
 ): Promise<SupplierActionResult> {
-  if (!canManageSuppliers(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("supplier:manage");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const supabase = createAdminClient();

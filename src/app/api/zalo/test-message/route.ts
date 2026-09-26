@@ -7,7 +7,7 @@
 // intentionally not distributed).
 import { NextResponse } from "next/server";
 
-import { canManageIntegrations, getCurrentRole } from "@/lib/auth/role";
+import { authorizeRoute } from "@/lib/auth/session";
 import { getZaloTestRecipientId } from "@/lib/zalo/env";
 import { sendZaloTextMessage } from "@/lib/zalo/messages";
 import { checkRateLimit } from "@/lib/zalo/rate-limit";
@@ -18,9 +18,8 @@ const TEST_MESSAGE_TEXT = "Test kết nối hệ thống Theo dõi hàng về";
 const RATE_LIMIT_KEY = "zalo_test_message"; // single fixed key: this is a single-OA admin action, not per-user
 
 export async function POST() {
-  if (!canManageIntegrations(getCurrentRole())) {
-    return NextResponse.json({ success: false, errorMessage: "Bạn không có quyền thực hiện thao tác này." }, { status: 403 });
-  }
+  const authz = await authorizeRoute("integration:manage");
+  if (!authz.ok) return authz.response;
 
   const rateLimit = checkRateLimit(RATE_LIMIT_KEY);
   if (!rateLimit.allowed) {

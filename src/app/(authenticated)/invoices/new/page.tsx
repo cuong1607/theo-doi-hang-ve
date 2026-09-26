@@ -1,6 +1,7 @@
 import { Lock } from "lucide-react";
+import { requirePermission } from "@/lib/auth/session";
 
-import { canCreateInvoices, getCurrentRole } from "@/lib/auth/role";
+import { canCreateInvoices } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { InvoiceForm } from "@/components/invoices/invoice-form";
@@ -22,7 +23,8 @@ async function getActiveSuppliers() {
 }
 
 export default async function NewInvoicePage() {
-  const role = getCurrentRole();
+  const auth = await requirePermission("invoice:view");
+  const role = auth.profile.role;
   const canCreate = canCreateInvoices(role);
 
   if (!canCreate) {

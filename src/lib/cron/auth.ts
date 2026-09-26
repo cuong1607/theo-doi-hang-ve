@@ -1,8 +1,8 @@
 // PHASE ZL6: shared auth check for /api/cron/* routes — completely separate
-// from the app's role system (canManageNotificationRecipients/getCurrentRole).
-// A cron invocation isn't a logged-in user, so it's never gated by
-// NEXT_PUBLIC_MOCK_ROLE; it's gated by a secret only Vercel (and whoever
-// configures the Vercel project's env vars) knows.
+// from the app's user auth (src/lib/auth/session.ts). A cron invocation
+// isn't a logged-in user (the proxy lets /api/cron/* through without a
+// session), so it's gated by a secret only Vercel (and whoever configures
+// the Vercel project's env vars) knows.
 //
 // Pure — takes the header value and the expected secret as plain arguments
 // rather than reading `process.env`/`Request` itself, so it's unit-testable

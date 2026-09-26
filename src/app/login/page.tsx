@@ -1,9 +1,16 @@
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { PackageSearch } from "lucide-react";
 
-export default function LoginPage() {
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+
+import { LoginForm } from "./login-form";
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  const { next } = await searchParams;
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-sm">
@@ -12,39 +19,10 @@ export default function LoginPage() {
             <PackageSearch className="size-6" />
           </div>
           <CardTitle className="text-xl">Theo Dõi Hàng Về</CardTitle>
-          <CardDescription>
-            Đăng nhập để tiếp tục sử dụng hệ thống.
-          </CardDescription>
+          <CardDescription>Đăng nhập để tiếp tục sử dụng hệ thống.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium">
-              Email
-            </label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="email@example.com"
-              disabled
-            />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="password" className="text-sm font-medium">
-              Mật khẩu
-            </label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              disabled
-            />
-          </div>
-          <Button className="w-full" disabled>
-            Đăng nhập
-          </Button>
-          <p className="text-center text-xs text-muted-foreground">
-            Chức năng đăng nhập sẽ được xây dựng trong phase tiếp theo.
-          </p>
+        <CardContent>
+          <LoginForm next={next ?? ""} />
         </CardContent>
       </Card>
     </div>

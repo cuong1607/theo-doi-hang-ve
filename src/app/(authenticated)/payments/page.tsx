@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requirePermission } from "@/lib/auth/session";
 import { AlertTriangle, Wallet } from "lucide-react";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -46,6 +47,7 @@ export default async function PaymentsPage({
     page?: string;
   }>;
 }) {
+  await requirePermission("payment:view");
   const params = await searchParams;
   const fromDate = (params.from ?? "").trim();
   const toDate = (params.to ?? "").trim();

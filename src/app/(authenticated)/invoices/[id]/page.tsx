@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { requirePermission } from "@/lib/auth/session";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Pencil } from "lucide-react";
 
-import { canEditInvoices, getCurrentRole } from "@/lib/auth/role";
+import { canEditInvoices } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/format";
 import { INVOICE_SOURCE_LABELS, type InvoiceSourceType } from "@/lib/invoices/receipt-days";
@@ -73,6 +74,7 @@ export default async function InvoiceDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const auth = await requirePermission("invoice:view");
   const { id } = await params;
   const invoice = await getInvoice(id);
 
@@ -80,7 +82,7 @@ export default async function InvoiceDetailPage({
     notFound();
   }
 
-  const canEdit = canEditInvoices(getCurrentRole());
+  const canEdit = canEditInvoices(auth.profile.role);
   const isFromReceipts = invoice.source_type === "from_receipts";
   const totalQuantity = invoice.invoice_items.reduce((sum, i) => sum + i.quantity, 0);
   const discountLabel =

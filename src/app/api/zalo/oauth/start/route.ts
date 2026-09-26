@@ -8,7 +8,7 @@
 // state when there's no session to hang it off.
 import { NextResponse } from "next/server";
 
-import { canManageIntegrations, getCurrentRole } from "@/lib/auth/role";
+import { authorizeRoute } from "@/lib/auth/session";
 import { buildZaloAuthorizationUrl } from "@/lib/zalo/oauth";
 import { generateCodeChallenge, generateCodeVerifier, generateState } from "@/lib/zalo/pkce";
 import { ZaloEnvError } from "@/lib/zalo/env";
@@ -26,9 +26,8 @@ const cookieOptions = {
 };
 
 export async function GET() {
-  if (!canManageIntegrations(getCurrentRole())) {
-    return NextResponse.json({ success: false, errorMessage: "Bạn không có quyền thực hiện thao tác này." }, { status: 403 });
-  }
+  const authz = await authorizeRoute("integration:manage");
+  if (!authz.ok) return authz.response;
 
   const state = generateState();
   const codeVerifier = generateCodeVerifier();

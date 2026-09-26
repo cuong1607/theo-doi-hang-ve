@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { requirePermission } from "@/lib/auth/session";
 import { AlertTriangle, FileSearch, Plus } from "lucide-react";
 
-import { canCreateInvoices, getCurrentRole } from "@/lib/auth/role";
+import { canCreateInvoices } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getInvoiceList } from "@/lib/invoices/list";
 import { INVOICE_SOURCE_LABELS } from "@/lib/invoices/receipt-days";
@@ -58,6 +59,7 @@ export default async function InvoicesPage({
     page?: string;
   }>;
 }) {
+  const auth = await requirePermission("invoice:view");
   const params = await searchParams;
   const fromDate = (params.from ?? "").trim();
   const toDate = (params.to ?? "").trim();
@@ -72,7 +74,7 @@ export default async function InvoicesPage({
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hasFilter = !!(fromDate || toDate || supplierId || invoiceNo);
-  const canCreate = canCreateInvoices(getCurrentRole());
+  const canCreate = canCreateInvoices(auth.profile.role);
   const supplierTypeById = new Map(suppliers.map((s) => [s.id, s.supplier_type]));
 
   return (

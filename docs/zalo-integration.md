@@ -249,8 +249,8 @@ source).
 
 ## 9. Cách gửi test message
 
-1. Đăng nhập với vai trò admin (`NEXT_PUBLIC_MOCK_ROLE=admin` ở giai đoạn
-   chưa có auth thật).
+1. Đăng nhập bằng tài khoản có vai trò admin (xem
+   docs/authentication-authorization.md).
 2. Vào `/settings/notifications`, bấm **"Kết nối Zalo"** nếu chưa kết nối
    (hoặc đặt `ZALO_ACCESS_TOKEN` thủ công để test trước — mục 6).
 3. Bấm **"Gửi tin nhắn thử"**, hoặc gọi trực tiếp:
@@ -273,7 +273,7 @@ Có rate limit cơ bản (3 lần/phút/process — xem mục 11).
 
 | Triệu chứng | Nguyên nhân khả dĩ | Cách xử lý |
 | --- | --- | --- |
-| `/api/zalo/oauth/start` trả 403 | Role hiện tại không phải admin | Đặt `NEXT_PUBLIC_MOCK_ROLE=admin` (tạm thời, chờ Phase 5 auth thật) |
+| `/api/zalo/oauth/start` trả 403 | Tài khoản đang đăng nhập không phải admin | Đăng nhập bằng admin, hoặc nhờ admin đổi vai trò ở `/users` |
 | `/api/zalo/oauth/start` trả 500 "Thiếu biến môi trường..." | Thiếu `ZALO_APP_ID`/`ZALO_APP_SECRET`/`ZALO_OA_ID` | Điền env, redeploy/restart dev server |
 | Callback redirect `reason=state_mismatch` | Cookie state hết hạn (>10 phút), trình duyệt chặn cookie, hoặc bấm lại nút "Kết nối Zalo" ở tab khác | Thử lại từ đầu bằng `/settings/notifications`, không mở nhiều tab OAuth song song |
 | Callback redirect `reason=exchange_failed_<mã>` | `ZALO_APP_SECRET` sai, `code` đã dùng rồi (Zalo code chỉ dùng 1 lần), hoặc callback URL trên Zalo OA không khớp `APP_URL` | Kiểm tra lại 3 giá trị env + callback URL trên Zalo Developers |
@@ -1131,7 +1131,7 @@ Ngoài mục 10 (OAuth/gửi tin cơ bản):
 | `errorCode: "unexpected_error"` xuất hiện thường xuyên trong log | Trước ZL7: có thể là decrypt lỗi bị nuốt (mục 43.1) — đã sửa. Nếu vẫn thấy: kiểm tra log server (`[notify] ...`) để tìm exception cụ thể | Xem log server, không chỉ log DB |
 | 2 job cron gần như trùng giờ mà 1 job báo lỗi refresh_token lạ | Race condition token refresh — đã có lock (mục 43.2), nhưng nếu vẫn thấy, kiểm tra `zalo_connections.refresh_lock_at` có bị kẹt (>30s) không | Lock tự hết hạn sau 30s, không cần can thiệp tay |
 | Danh sách người nhận log rỗng dù đã gửi | Filter đang áp dụng | Bấm "Xóa lọc" |
-| Nút "Gửi lại" không hiện | Log đang không ở trạng thái `failed`, hoặc role không phải admin | Kiểm tra trạng thái log / `NEXT_PUBLIC_MOCK_ROLE` |
+| Nút "Gửi lại" không hiện | Log đang không ở trạng thái `failed`, hoặc role không phải admin | Kiểm tra trạng thái log / vai trò tài khoản ở `/users` |
 
 ## 47. Production checklist
 

@@ -7,9 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "npx eslint .",
-    "test": "node --env-file=.env.local --test src/lib/invoices/financials.test.ts src/lib/invoices/snapshot.integration.test.ts src/lib/invoices/edit-flow.integration.test.ts src/lib/invoices/receipt-days.test.ts src/lib/invoices/from-receipts.integration.test.ts src/lib/auth/role.test.ts src/lib/zalo/pkce.test.ts src/lib/zalo/crypto.test.ts src/lib/zalo/env.test.ts src/lib/zalo/oauth.test.ts src/lib/notifications/daily-receipt-summary.test.ts src/lib/notifications/outstanding-alert-message.test.ts src/lib/notifications/outstanding-alert-state.test.ts src/lib/notifications/daily-payment-summary.test.ts src/lib/cron/auth.test.ts src/lib/zalo/error-category.test.ts",
+    "test": "node --env-file=.env.local --test src/lib/invoices/financials.test.ts src/lib/invoices/snapshot.integration.test.ts src/lib/invoices/edit-flow.integration.test.ts src/lib/invoices/receipt-days.test.ts src/lib/invoices/from-receipts.integration.test.ts src/lib/auth/role.test.ts src/lib/auth/permissions.test.ts src/lib/auth/auth.integration.test.ts src/lib/zalo/pkce.test.ts src/lib/zalo/crypto.test.ts src/lib/zalo/env.test.ts src/lib/zalo/oauth.test.ts src/lib/notifications/daily-receipt-summary.test.ts src/lib/notifications/outstanding-alert-message.test.ts src/lib/notifications/outstanding-alert-state.test.ts src/lib/notifications/daily-payment-summary.test.ts src/lib/cron/auth.test.ts src/lib/zalo/error-category.test.ts",
     "import:legacy:preview": "node --env-file=.env.local scripts/legacy-import/run.ts preview",
-    "import:legacy:run": "node --env-file=.env.local scripts/legacy-import/run.ts import"
+    "import:legacy:run": "node --env-file=.env.local scripts/legacy-import/run.ts import",
+    "auth:create-admin": "node --env-file=.env.local scripts/auth/create-admin.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

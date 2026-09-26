@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 
-import { canManageNotificationRecipients, getCurrentRole } from "@/lib/auth/role";
+import { authorizeAction } from "@/lib/auth/session";
 import { retryFailedNotification } from "@/lib/notifications/service";
 
 export type RetryLogActionState = { status: "idle" | "error" | "success"; message?: string };
@@ -11,8 +11,9 @@ export type RetryLogActionState = { status: "idle" | "error" | "success"; messag
 // retryFailedNotification (already built in ZL2's service.ts, just never
 // had a UI button before) — no new send/retry logic here.
 export async function retryNotificationLog(logId: string): Promise<RetryLogActionState> {
-  if (!canManageNotificationRecipients(getCurrentRole())) {
-    return { status: "error", message: "Bạn không có quyền thực hiện thao tác này." };
+  const authz = await authorizeAction("notification:manage");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const result = await retryFailedNotification(logId);

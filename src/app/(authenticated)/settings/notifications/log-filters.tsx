@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { NOTIFICATION_EVENT_TYPES } from "@/lib/notifications/logs";
+import { NOTIFICATION_EVENT_TYPES } from "@/lib/notifications/event-types";
 
 const STATUS_OPTIONS = [
   { label: "Đang gửi", value: "pending" },

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requirePermission } from "@/lib/auth/session";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
@@ -32,6 +33,7 @@ export default async function OutstandingDetailPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePermission("outstanding:view");
   const { id } = await params;
   const { row, contributingReceipts } = await getOutstandingDetail(id);
 

@@ -28,8 +28,18 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
+import { hasPermission, type Permission, type Role } from "@/lib/auth/permissions";
 
-const navGroups = [
+type NavItem = {
+  title: string;
+  href: string;
+  icon: typeof LayoutDashboard;
+  // Menu visibility only (UX). Pages/actions enforce the same permission
+  // server-side.
+  permission?: Permission;
+};
+
+const navGroups: { label?: string; items: NavItem[] }[] = [
   {
     items: [
       {
@@ -46,6 +56,7 @@ const navGroups = [
         title: "Nhập hàng",
         href: "/receipts/new",
         icon: PackagePlus,
+        permission: "receipt:create",
       },
       {
         title: "Lịch sử hàng về",
@@ -101,18 +112,26 @@ const navGroups = [
         title: "Người dùng",
         href: "/users",
         icon: Users,
+        permission: "user:manage",
       },
       {
         title: "Cài đặt thông báo",
         href: "/settings/notifications",
         icon: Bell,
+        permission: "notification:manage",
       },
     ],
   },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ role }: { role: Role }) {
   const pathname = usePathname();
+  const visibleGroups = navGroups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.permission || hasPermission(role, item.permission)),
+    }))
+    .filter((group) => group.items.length > 0);
 
   return (
     <Sidebar collapsible="icon">
@@ -128,7 +147,7 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        {navGroups.map((group, groupIndex) => (
+        {visibleGroups.map((group, groupIndex) => (
           <SidebarGroup key={groupIndex}>
             {group.label && (
               <SidebarGroupLabel>{group.label}</SidebarGroupLabel>

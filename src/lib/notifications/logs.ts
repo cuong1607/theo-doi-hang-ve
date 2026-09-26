@@ -16,17 +16,7 @@ export type NotificationLogRow = {
   createdAt: string;
 };
 
-// Known event types so far (ZL2's manual test-all, ZL3/ZL5's daily
-// summaries, ZL4's low-stock alert) — hardcoded rather than a DISTINCT
-// query, same convention as other fixed dropdowns in this codebase (e.g.
-// SHIFT_OPTIONS). Add a new value here whenever a new business event ships.
-export const NOTIFICATION_EVENT_TYPES = [
-  "TEST_ALL_RECIPIENTS",
-  "TEST_SINGLE_RECIPIENT",
-  "DAILY_RECEIPT_SUMMARY",
-  "DAILY_PAYMENT_SUMMARY",
-  "LOW_STOCK_ALERT",
-] as const;
+export { NOTIFICATION_EVENT_TYPES } from "./event-types";
 
 export type NotificationLogFilters = {
   date?: string; // YYYY-MM-DD, interpreted as a full day in Asia/Ho_Chi_Minh

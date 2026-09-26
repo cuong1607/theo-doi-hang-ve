@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { requirePermission } from "@/lib/auth/session";
 import { AlertTriangle, FileClock, Receipt, Wallet } from "lucide-react";
 
-import { canCreatePayments, getCurrentRole } from "@/lib/auth/role";
+import { canCreatePayments } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getDebtOverview } from "@/lib/debt/overview";
 import { getInvoiceDebtList, type PaymentStatus } from "@/lib/debt/invoice-debt";
@@ -64,6 +65,7 @@ export default async function DebtsPage({
     page?: string;
   }>;
 }) {
+  const auth = await requirePermission("debt:view");
   const params = await searchParams;
   const fromDate = (params.from ?? "").trim() || DEFAULT_FROM_DATE;
   const toDate = (params.to ?? "").trim() || todayISO();
@@ -76,7 +78,7 @@ export default async function DebtsPage({
   const page = Math.max(1, Number(params.page) || 1);
 
   const filters = { fromDate, toDate, supplierId: supplierId || undefined, paymentStatus, search };
-  const canPay = canCreatePayments(getCurrentRole());
+  const canPay = canCreatePayments(auth.profile.role);
 
   const [
     suppliers,

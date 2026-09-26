@@ -3,14 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { canCreateInvoices, canEditInvoices, getCurrentRole } from "@/lib/auth/role";
+import { authorizeAction } from "@/lib/auth/session";
 import { validateSupplierAndItems } from "@/lib/products/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { calculateInvoiceFinancials, type SupplierType } from "@/lib/invoices/financials";
 import { triggerOutstandingAlertCheck } from "@/lib/notifications/outstanding-alert";
 import { fromReceiptsErrorMessage } from "@/lib/invoices/receipt-days";
 
-const FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này.";
 
 // Same rationale as receipts: seed ids aren't RFC-4122-version-compliant, so
 // zod's strict `.uuid()` rejects them. Match the general shape and let FK
@@ -129,8 +128,9 @@ export async function createInvoice(
   _prevState: InvoiceFormState,
   payload: InvoiceFormPayload
 ): Promise<InvoiceFormState> {
-  if (!canCreateInvoices(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("invoice:create");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const supabase = createAdminClient();
@@ -144,7 +144,8 @@ export async function createInvoice(
     p_invoice_no: parsed.invoiceNo,
     p_invoice_date: parsed.invoiceDate,
     p_note: parsed.note || null,
-    p_created_by: null,
+    // Audit: always the signed-in user from the server session, never client input.
+    p_created_by: authz.auth.user.id,
     p_items: parsed.items.map((i) => ({
       product_id: i.productId,
       unit_price: i.unitPrice,
@@ -203,8 +204,9 @@ export async function updateInvoice(
   _prevState: InvoiceFormState,
   payload: InvoiceFormPayload
 ): Promise<InvoiceFormState> {
-  if (!canEditInvoices(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("invoice:edit");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const supabase = createAdminClient();

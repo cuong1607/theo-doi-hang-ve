@@ -9,7 +9,7 @@
 // and failure both redirect with no token in the URL, ever.
 import { NextResponse, type NextRequest } from "next/server";
 
-import { canManageIntegrations, getCurrentRole } from "@/lib/auth/role";
+import { authorizeAction } from "@/lib/auth/session";
 import { exchangeZaloAuthorizationCode } from "@/lib/zalo/oauth";
 import { saveZaloTokens } from "@/lib/zalo/token";
 
@@ -28,7 +28,8 @@ function redirectWithReason(request: NextRequest, reason: string) {
 }
 
 export async function GET(request: NextRequest) {
-  if (!canManageIntegrations(getCurrentRole())) {
+  const authz = await authorizeAction("integration:manage");
+  if (!authz.ok) {
     return redirectWithReason(request, "forbidden");
   }
 

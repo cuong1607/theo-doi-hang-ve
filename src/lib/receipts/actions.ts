@@ -3,14 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { canCreateReceipts, canEditReceipts, getCurrentRole } from "@/lib/auth/role";
+import { authorizeAction } from "@/lib/auth/session";
 import { getSupplierProducts, type SupplierProduct } from "@/lib/products/actions";
 import { validateSupplierAndItems } from "@/lib/products/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { triggerOutstandingAlertCheck } from "@/lib/notifications/outstanding-alert";
 import { isReceiptDayLockedError } from "@/lib/invoices/receipt-days";
 
-const FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này.";
 
 // Re-exported for existing imports (receipt-form.tsx, receipt-item-row.tsx).
 // getSupplierProducts must originate from a "use server" file (see
@@ -68,8 +67,9 @@ export async function createReceipt(
   _prevState: ReceiptFormState,
   payload: ReceiptFormPayload
 ): Promise<ReceiptFormState> {
-  if (!canCreateReceipts(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("receipt:create");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const parsed = receiptSchema.safeParse(payload);
@@ -99,7 +99,8 @@ export async function createReceipt(
     p_supplier_id: parsed.data.supplierId,
     p_receiver_name: parsed.data.receiverName,
     p_note: parsed.data.note || null,
-    p_created_by: null,
+    // Audit: always the signed-in user from the server session, never client input.
+    p_created_by: authz.auth.user.id,
     p_items: parsed.data.items.map((i) => ({
       product_id: i.productId,
       unit_price: i.unitPrice,
@@ -144,8 +145,9 @@ export async function updateReceipt(
   _prevState: ReceiptFormState,
   payload: ReceiptFormPayload
 ): Promise<ReceiptFormState> {
-  if (!canEditReceipts(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("receipt:edit");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const parsed = receiptSchema.safeParse(payload);

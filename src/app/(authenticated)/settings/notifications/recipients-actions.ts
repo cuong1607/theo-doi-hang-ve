@@ -3,10 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { canManageNotificationRecipients, getCurrentRole } from "@/lib/auth/role";
+import { authorizeAction } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này.";
 const SETTINGS_PATH = "/settings/notifications";
 
 export type RecipientFormValues = {
@@ -49,8 +48,9 @@ export async function createRecipient(
   _prevState: RecipientFormState,
   formData: FormData
 ): Promise<RecipientFormState> {
-  if (!canManageNotificationRecipients(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("notification:manage");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const parsed = parseRecipientForm(formData);
@@ -94,8 +94,9 @@ export async function updateRecipient(
   _prevState: RecipientFormState,
   formData: FormData
 ): Promise<RecipientFormState> {
-  if (!canManageNotificationRecipients(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("notification:manage");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const parsed = parseRecipientForm(formData);
@@ -135,8 +136,9 @@ export async function updateRecipient(
 }
 
 export async function setRecipientActive(id: string, isActive: boolean): Promise<RecipientActionResult> {
-  if (!canManageNotificationRecipients(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("notification:manage");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const supabase = createAdminClient();
@@ -151,8 +153,9 @@ export async function setRecipientActive(id: string, isActive: boolean): Promise
 }
 
 export async function deleteRecipient(id: string): Promise<RecipientActionResult> {
-  if (!canManageNotificationRecipients(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("notification:manage");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const supabase = createAdminClient();

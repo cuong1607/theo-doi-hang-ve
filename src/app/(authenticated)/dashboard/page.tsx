@@ -1,4 +1,5 @@
 import type { ComponentType } from "react";
+import { requirePermission } from "@/lib/auth/session";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -85,6 +86,7 @@ export default async function DashboardPage({
     supplierType?: string;
   }>;
 }) {
+  await requirePermission("dashboard:view");
   const params = await searchParams;
   const range: RangePreset = isRangePreset(params.range ?? "") ? (params.range as RangePreset) : "today";
   const supplierId = (params.supplier ?? "").trim();

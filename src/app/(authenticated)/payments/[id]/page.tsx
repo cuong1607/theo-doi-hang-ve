@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requirePermission } from "@/lib/auth/session";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
@@ -21,6 +22,7 @@ function formatDateVN(iso: string) {
 }
 
 export default async function PaymentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requirePermission("payment:view");
   const { id } = await params;
   const { data: payment, error } = await getPaymentDetail(id);
 

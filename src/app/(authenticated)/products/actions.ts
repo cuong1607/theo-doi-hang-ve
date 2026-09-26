@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { canManageProducts, getCurrentRole } from "@/lib/auth/role";
+import { authorizeAction } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type ProductFormValues = {
@@ -29,7 +29,6 @@ export type ProductActionResult = {
   message?: string;
 };
 
-const FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này.";
 
 const productSchema = z.object({
   sku: z.string().trim().min(1, "SKU là bắt buộc.").max(100, "SKU tối đa 100 ký tự."),
@@ -95,8 +94,9 @@ export async function createProduct(
   _prevState: ProductFormState,
   formData: FormData
 ): Promise<ProductFormState> {
-  if (!canManageProducts(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("product:manage");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const parsed = parseProductForm(formData);
@@ -154,8 +154,9 @@ export async function updateProduct(
   _prevState: ProductFormState,
   formData: FormData
 ): Promise<ProductFormState> {
-  if (!canManageProducts(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("product:manage");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const parsed = parseProductForm(formData);
@@ -228,8 +229,9 @@ export async function setProductActive(
   id: string,
   isActive: boolean
 ): Promise<ProductActionResult> {
-  if (!canManageProducts(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("product:manage");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const supabase = createAdminClient();

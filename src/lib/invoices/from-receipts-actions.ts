@@ -3,13 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { canCreateInvoices, getCurrentRole } from "@/lib/auth/role";
+import { authorizeAction } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { calculateInvoiceFinancials } from "@/lib/invoices/financials";
 import { loadReceiptInvoiceDraft, type ReceiptInvoiceDraft } from "@/lib/invoices/from-receipts";
 import { fromReceiptsErrorMessage, normalizeReceiptDates } from "@/lib/invoices/receipt-days";
 
-const FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này.";
 
 // Same uuid-shape rationale as invoices/actions.ts (seed ids aren't
 // RFC-4122-version-compliant).
@@ -67,8 +66,9 @@ function parseSelection(input: ReceiptInvoiceSelection) {
 export async function getReceiptInvoicePreview(
   input: ReceiptInvoiceSelection
 ): Promise<ReceiptInvoicePreviewResult> {
-  if (!canCreateInvoices(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("invoice:create");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
   const selection = parseSelection(input);
   if (!selection.ok) return { status: "error", message: selection.message };
@@ -81,8 +81,9 @@ export async function createInvoiceFromReceiptDays(
   _prevState: CreateInvoiceFromReceiptsState,
   payload: CreateInvoiceFromReceiptsPayload
 ): Promise<CreateInvoiceFromReceiptsState> {
-  if (!canCreateInvoices(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("invoice:create");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const parsed = createSchema.safeParse(payload);
@@ -130,7 +131,8 @@ export async function createInvoiceFromReceiptDays(
     p_invoice_no: parsed.data.invoiceNo,
     p_invoice_date: parsed.data.invoiceDate,
     p_note: parsed.data.note || null,
-    p_created_by: null,
+    // Audit: always the signed-in user from the server session, never client input.
+    p_created_by: authz.auth.user.id,
     p_items: draft.lines.map((l) => ({
       product_id: l.product_id,
       unit_price: l.unit_price,

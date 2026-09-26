@@ -10,7 +10,7 @@
 // from a real "test all" in the log filters.
 import { NextResponse } from "next/server";
 
-import { canManageNotificationRecipients, getCurrentRole } from "@/lib/auth/role";
+import { authorizeRoute } from "@/lib/auth/session";
 import { sendNotification } from "@/lib/notifications/service";
 
 export const runtime = "nodejs";
@@ -18,9 +18,8 @@ export const runtime = "nodejs";
 const TEST_ALL_MESSAGE = "Test thông báo hệ thống Theo dõi hàng về";
 
 export async function POST(request: Request) {
-  if (!canManageNotificationRecipients(getCurrentRole())) {
-    return NextResponse.json({ success: false, errorMessage: "Bạn không có quyền thực hiện thao tác này." }, { status: 403 });
-  }
+  const authz = await authorizeRoute("notification:manage");
+  if (!authz.ok) return authz.response;
 
   let recipientId: string | undefined;
   try {

@@ -1,6 +1,7 @@
 import { Lock } from "lucide-react";
+import { requirePermission } from "@/lib/auth/session";
 
-import { canCreateReceipts, getCurrentRole } from "@/lib/auth/role";
+import { canCreateReceipts } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -23,7 +24,8 @@ async function getActiveSuppliers() {
 }
 
 export default async function NewReceiptPage() {
-  const role = getCurrentRole();
+  const auth = await requirePermission("receipt:view");
+  const role = auth.profile.role;
   const canCreate = canCreateReceipts(role);
 
   if (!canCreate) {

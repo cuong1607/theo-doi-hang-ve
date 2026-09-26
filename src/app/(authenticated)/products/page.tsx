@@ -1,6 +1,7 @@
 import { AlertTriangle, PackageSearch } from "lucide-react";
+import { requirePermission } from "@/lib/auth/session";
 
-import { canManageProducts, getCurrentRole } from "@/lib/auth/role";
+import { canManageProducts } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { escapeIlikeTerm } from "@/lib/supabase/search";
 import { formatCurrency } from "@/lib/format";
@@ -85,6 +86,7 @@ export default async function ProductsPage({
 }: {
   searchParams: Promise<{ sku?: string; name?: string; supplier?: string; status?: string; page?: string }>;
 }) {
+  const auth = await requirePermission("product:view");
   const params = await searchParams;
   const sku = (params.sku ?? "").trim();
   const name = (params.name ?? "").trim();
@@ -93,7 +95,7 @@ export default async function ProductsPage({
   const page = Math.max(1, Number(params.page) || 1);
   const hasFilter = !!(sku || name || supplierId || status);
 
-  const role = getCurrentRole();
+  const role = auth.profile.role;
   const canManage = canManageProducts(role);
 
   const [{ data: suppliers }, { data: products, error, count }] = await Promise.all([

@@ -5,16 +5,15 @@
 // same as the button's label promises.
 import { NextResponse } from "next/server";
 
-import { canManageNotificationRecipients, getCurrentRole } from "@/lib/auth/role";
+import { authorizeRoute } from "@/lib/auth/session";
 import { getTodayDateVN } from "@/lib/notifications/daily-receipt-summary";
 import { sendDailyReceiptSummary } from "@/lib/notifications/send-daily-receipt-summary";
 
 export const runtime = "nodejs";
 
 export async function POST() {
-  if (!canManageNotificationRecipients(getCurrentRole())) {
-    return NextResponse.json({ success: false, errorMessage: "Bạn không có quyền thực hiện thao tác này." }, { status: 403 });
-  }
+  const authz = await authorizeRoute("notification:manage");
+  if (!authz.ok) return authz.response;
 
   const date = getTodayDateVN();
 

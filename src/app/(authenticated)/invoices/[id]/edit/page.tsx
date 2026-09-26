@@ -1,7 +1,8 @@
 import { Lock } from "lucide-react";
+import { requirePermission } from "@/lib/auth/session";
 import { notFound } from "next/navigation";
 
-import { canEditInvoices, getCurrentRole } from "@/lib/auth/role";
+import { canEditInvoices } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { InvoiceForm, type ExistingInvoice, type InvoiceSupplierOption } from "@/components/invoices/invoice-form";
@@ -71,6 +72,7 @@ async function getSuppliersForEdit(currentSupplierId: string): Promise<InvoiceSu
 }
 
 export default async function EditInvoicePage({ params }: { params: Promise<{ id: string }> }) {
+  const auth = await requirePermission("invoice:view");
   const { id } = await params;
 
   const invoiceRow = await getInvoiceForEdit(id);
@@ -78,7 +80,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     notFound();
   }
 
-  const role = getCurrentRole();
+  const role = auth.profile.role;
   const canEdit = canEditInvoices(role);
 
   if (!canEdit) {

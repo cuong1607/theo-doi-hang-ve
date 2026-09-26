@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requirePermission } from "@/lib/auth/session";
 import { notFound } from "next/navigation";
 
 import { getDailyReceiptDetail, type DailyProductRow, type SourceReceipt } from "@/lib/receipts/daily";
@@ -88,6 +89,7 @@ export default async function DailyReceiptDetailPage({
 }: {
   params: Promise<{ date: string; supplierId: string }>;
 }) {
+  await requirePermission("receipt:view");
   const { date, supplierId } = await params;
 
   if (!DATE_PATTERN.test(date)) {

@@ -1,7 +1,8 @@
 import { Lock } from "lucide-react";
+import { requirePermission } from "@/lib/auth/session";
 import { notFound } from "next/navigation";
 
-import { canEditReceipts, getCurrentRole } from "@/lib/auth/role";
+import { canEditReceipts } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Card, CardContent } from "@/components/ui/card";
 import { ReceiptForm, type ExistingReceipt } from "@/components/receipts/receipt-form";
@@ -79,6 +80,7 @@ async function getLinkedInvoiceNo(supplierId: string, receiptDate: string): Prom
 }
 
 export default async function EditReceiptPage({ params }: { params: Promise<{ id: string }> }) {
+  const auth = await requirePermission("receipt:view");
   const { id } = await params;
 
   const receiptRow = await getReceiptForEdit(id);
@@ -86,7 +88,7 @@ export default async function EditReceiptPage({ params }: { params: Promise<{ id
     notFound();
   }
 
-  const role = getCurrentRole();
+  const role = auth.profile.role;
   const canEdit = canEditReceipts(role);
 
   if (!canEdit) {

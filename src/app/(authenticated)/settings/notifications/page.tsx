@@ -1,6 +1,7 @@
 import { AlertTriangle, CheckCircle2, Eye, MessageCircle, Users } from "lucide-react";
+import { requirePermission } from "@/lib/auth/session";
 
-import { canManageIntegrations, canManageNotificationRecipients, getCurrentRole } from "@/lib/auth/role";
+import { canManageIntegrations, canManageNotificationRecipients } from "@/lib/auth/role";
 import { getZaloConnectionStatus, type ZaloTokenStatus } from "@/lib/zalo/token";
 import { categorizeZaloError, ZALO_ERROR_CATEGORY_LABELS } from "@/lib/zalo/error-category";
 import { getAllNotificationRecipients } from "@/lib/notifications/recipients";
@@ -108,8 +109,9 @@ export default async function NotificationSettingsPage({
     logStatus?: string;
   }>;
 }) {
+  const auth = await requirePermission("notification:manage");
   const params = await searchParams;
-  const role = getCurrentRole();
+  const role = auth.profile.role;
   const canManage = canManageIntegrations(role);
   const canManageRecipients = canManageNotificationRecipients(role);
   const status = await getZaloConnectionStatus();

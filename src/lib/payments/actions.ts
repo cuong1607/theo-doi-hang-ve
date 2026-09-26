@@ -3,11 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-import { canCreatePayments, getCurrentRole } from "@/lib/auth/role";
+import { authorizeAction } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { InvoiceDebtRow } from "@/lib/debt/invoice-debt";
 
-const FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này.";
 
 // Same rationale as receipts/invoices: seed ids aren't RFC-4122-version-
 // compliant, so zod's strict `.uuid()` rejects them. Match the general
@@ -46,8 +45,9 @@ export async function createPayment(
   _prevState: PaymentFormState,
   payload: PaymentFormPayload
 ): Promise<PaymentFormState> {
-  if (!canCreatePayments(getCurrentRole())) {
-    return { status: "error", message: FORBIDDEN_MESSAGE };
+  const authz = await authorizeAction("payment:create");
+  if (!authz.ok) {
+    return { status: "error", message: authz.message };
   }
 
   const parsed = paymentSchema.safeParse(payload);
@@ -104,7 +104,8 @@ export async function createPayment(
     p_supplier_id: parsed.data.supplierId,
     p_payment_date: parsed.data.paymentDate,
     p_note: parsed.data.note || null,
-    p_created_by: null,
+    // Audit: always the signed-in user from the server session, never client input.
+    p_created_by: authz.auth.user.id,
     p_items: items,
   });
 

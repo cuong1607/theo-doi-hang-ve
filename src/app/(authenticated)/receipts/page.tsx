@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { requirePermission } from "@/lib/auth/session";
 import { AlertTriangle, Plus, PackageSearch } from "lucide-react";
 
-import { canCreateInvoices, getCurrentRole } from "@/lib/auth/role";
+import { canCreateInvoices, canCreateReceipts } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getReceiptDailyGroups } from "@/lib/receipts/history";
 import { ListPagination } from "@/components/list-pagination";
@@ -31,6 +32,7 @@ export default async function ReceiptsPage({
     page?: string;
   }>;
 }) {
+  const auth = await requirePermission("receipt:view");
   const params = await searchParams;
   const fromDate = (params.from ?? "").trim();
   const toDate = (params.to ?? "").trim();
@@ -47,7 +49,7 @@ export default async function ReceiptsPage({
 
   const totalPages = Math.max(1, Math.ceil(totalGroups / PAGE_SIZE));
   const hasFilter = !!(fromDate || toDate || supplierId || sku || productName);
-  const canCreateInvoice = canCreateInvoices(getCurrentRole());
+  const canCreateInvoice = canCreateInvoices(auth.profile.role);
   // New filters/page => new set of visible rows => fresh selection.
   const selectionResetKey = [fromDate, toDate, supplierId, sku, productName, page].join("|");
 
@@ -60,10 +62,12 @@ export default async function ReceiptsPage({
             Tổng hợp theo ngày và nhà cung cấp. Bấm &quot;Xem&quot; để xem chi tiết từng phiếu.
           </p>
         </div>
-        <Button nativeButton={false} render={<Link href="/receipts/new" />}>
-          <Plus className="mr-2 size-4" />
-          Nhập hàng mới
-        </Button>
+        {canCreateReceipts(auth.profile.role) && (
+          <Button nativeButton={false} render={<Link href="/receipts/new" />}>
+            <Plus className="mr-2 size-4" />
+            Nhập hàng mới
+          </Button>
+        )}
       </div>
 
       <Card>
