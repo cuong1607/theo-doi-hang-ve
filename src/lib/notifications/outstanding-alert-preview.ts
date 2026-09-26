@@ -19,7 +19,7 @@ type OutstandingRow = {
   invoice_qty: number;
   received_qty: number;
   remaining_qty: number;
-  status: "need_makeup" | "low" | "normal";
+  status: "need_makeup" | "complete" | "low" | "normal";
 };
 
 // PHẦN 7 (ZL7) — "Low-stock alert: có thể preview message, không cần fake

@@ -65,6 +65,19 @@ async function getSuppliersForEdit(currentSupplierId: string) {
   return current ? [...list, current].sort((a, b) => a.code.localeCompare(b.code)) : list;
 }
 
+// INV-FROM-RECEIPTS: heads-up only — the actual block is the DB trigger
+// (migration 00034), which also covers the NEW supplier/date on save.
+async function getLinkedInvoiceNo(supplierId: string, receiptDate: string): Promise<string | null> {
+  const supabase = createAdminClient();
+  const { data } = await supabase
+    .from("invoice_receipt_days")
+    .select("invoices(invoice_no)")
+    .eq("supplier_id", supplierId)
+    .eq("receipt_date", receiptDate)
+    .maybeSingle();
+  return (data as unknown as { invoices: { invoice_no: string } | null } | null)?.invoices?.invoice_no ?? null;
+}
+
 export default async function EditReceiptPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
@@ -96,7 +109,10 @@ export default async function EditReceiptPage({ params }: { params: Promise<{ id
     );
   }
 
-  const suppliers = await getSuppliersForEdit(receiptRow.supplier_id);
+  const [suppliers, linkedInvoiceNo] = await Promise.all([
+    getSuppliersForEdit(receiptRow.supplier_id),
+    getLinkedInvoiceNo(receiptRow.supplier_id, receiptRow.receipt_date),
+  ]);
 
   const receipt: ExistingReceipt = {
     id: receiptRow.id,
@@ -123,6 +139,14 @@ export default async function EditReceiptPage({ params }: { params: Promise<{ id
         <h2 className="text-2xl font-bold tracking-tight">Sửa phiếu nhập</h2>
         <p className="text-muted-foreground">Cập nhật thông tin phiếu nhập hàng.</p>
       </div>
+
+      {linkedInvoiceNo && (
+        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          Ngày hàng về này đã được sử dụng để lập hóa đơn {linkedInvoiceNo}. Không thể thay đổi dữ liệu
+          hàng về trực tiếp (ngày, nhà cung cấp, sản phẩm, đơn giá, số lượng). Chỉ sửa được người nhận,
+          ca và ghi chú.
+        </p>
+      )}
 
       <ReceiptForm suppliers={suppliers} receipt={receipt} />
     </div>

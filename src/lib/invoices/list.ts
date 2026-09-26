@@ -11,6 +11,8 @@ export type InvoiceListRow = {
   sku_count: number;
   total_quantity: number;
   total_amount: number;
+  source_type: "manual" | "from_receipts";
+  receipt_start_date: string | null;
 };
 
 export type InvoiceListFilters = {

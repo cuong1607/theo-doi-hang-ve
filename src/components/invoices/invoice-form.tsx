@@ -17,6 +17,7 @@ import {
 import {
   Table,
   TableBody,
+  TableCell,
   TableHead,
   TableHeader,
   TableRow,
@@ -30,15 +31,10 @@ import {
   type SupplierType,
 } from "@/lib/invoices/financials";
 
+import { InvoiceFinancialFields } from "./invoice-financial-fields";
 import { InvoiceItemRow } from "./invoice-item-row";
 
 const initialState: InvoiceFormState = { status: "idle" };
-
-const DISCOUNT_TYPE_OPTIONS = [
-  { label: "Không áp dụng", value: "none" },
-  { label: "Phần trăm (%)", value: "percent" },
-  { label: "Số tiền cố định", value: "fixed_amount" },
-];
 
 export type InvoiceItemState = {
   key: number;
@@ -70,6 +66,9 @@ export type ExistingInvoice = {
   discountType: "percent" | "fixed_amount" | null;
   discountValue: number | null;
   vatRate: number;
+  // from_receipts invoices (INV-FROM-RECEIPTS): supplier and items are
+  // locked — only header fields and discount/VAT are editable.
+  sourceType?: "manual" | "from_receipts";
   items: {
     id: string;
     productId: string;
@@ -101,6 +100,7 @@ export function InvoiceForm({
   invoice?: ExistingInvoice;
 }) {
   const isEdit = !!invoice;
+  const itemsLocked = invoice?.sourceType === "from_receipts";
   const router = useRouter();
   // Initial items (if any) are keyed by index — safe since this only runs
   // once at mount, before nextKeyRef has generated any keys of its own.
@@ -189,7 +189,7 @@ export function InvoiceForm({
   }, [isDirty]);
 
   useEffect(() => {
-    if (!supplierId) return;
+    if (!supplierId || itemsLocked) return;
     let cancelled = false;
     startLoadingProducts(async () => {
       const result = await getSupplierProducts(supplierId);
@@ -199,7 +199,7 @@ export function InvoiceForm({
     return () => {
       cancelled = true;
     };
-  }, [supplierId]);
+  }, [supplierId, itemsLocked]);
 
   // Switching supplier invalidates the previously loaded product list — per
   // spec, never silently keep a now-invalid item, so warn and clear rather
@@ -346,6 +346,13 @@ export function InvoiceForm({
 
   return (
     <div className="space-y-6">
+      {itemsLocked && (
+        <p className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+          Hóa đơn này được tạo từ hàng đã nhận: nhà cung cấp, các ngày hàng về liên kết và danh sách
+          hàng không thể thay đổi. Chỉ sửa được số hóa đơn, ngày hóa đơn, ghi chú và chiết khấu/VAT.
+          Muốn đổi ngày hàng về, cần xóa hóa đơn và tạo lại.
+        </p>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Thông tin hóa đơn</CardTitle>
@@ -356,6 +363,7 @@ export function InvoiceForm({
               Nhà cung cấp *
             </label>
             <Select
+              disabled={itemsLocked}
               value={supplierId || null}
               onValueChange={(value) => handleSupplierChange(String(value))}
               items={suppliers.map((s) => ({ label: `${s.code} — ${s.name}`, value: s.id }))}
@@ -414,19 +422,50 @@ export function InvoiceForm({
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle>Danh sách hàng hóa</CardTitle>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleAddItem}
-            disabled={!supplierId || loadingProducts}
-          >
-            <Plus className="mr-2 size-4" />
-            Thêm dòng
-          </Button>
+          {!itemsLocked && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleAddItem}
+              disabled={!supplierId || loadingProducts}
+            >
+              <Plus className="mr-2 size-4" />
+              Thêm dòng
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
-          {!supplierId ? (
+          {itemsLocked ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>Tên hàng</TableHead>
+                  <TableHead>Đơn vị</TableHead>
+                  <TableHead>Đơn giá</TableHead>
+                  <TableHead>SL hóa đơn</TableHead>
+                  <TableHead>Thành tiền</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {items.map((item) => (
+                  <TableRow key={item.key}>
+                    <TableCell className="font-medium">{item.sku}</TableCell>
+                    <TableCell>{item.name}</TableCell>
+                    <TableCell>{item.unit}</TableCell>
+                    <TableCell>{formatCurrency(Number(item.unitPrice) || 0)}</TableCell>
+                    <TableCell>{item.quantity}</TableCell>
+                    <TableCell>
+                      {formatCurrency(
+                        Math.round((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0) * 100) / 100
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : !supplierId ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Vui lòng chọn nhà cung cấp trước.
             </p>
@@ -474,78 +513,22 @@ export function InvoiceForm({
         </CardContent>
       </Card>
 
-      {activeFinancialType === "business_household" && (
+      {activeFinancialType && (
         <Card>
           <CardHeader>
-            <CardTitle>Chiết khấu</CardTitle>
+            <CardTitle>{activeFinancialType === "company" ? "VAT" : "Chiết khấu"}</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="space-y-1.5">
-              <label htmlFor="discountType" className="text-sm font-medium">
-                Loại chiết khấu
-              </label>
-              <Select
-                value={discountType}
-                onValueChange={(value) => setDiscountType(String(value))}
-                items={DISCOUNT_TYPE_OPTIONS}
-              >
-                <SelectTrigger id="discountType" className="w-full">
-                  <SelectValue placeholder="Không áp dụng" />
-                </SelectTrigger>
-                <SelectContent>
-                  {DISCOUNT_TYPE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {discountType !== "none" && (
-              <div className="space-y-1.5">
-                <label htmlFor="discountValue" className="text-sm font-medium">
-                  Giá trị chiết khấu {discountType === "percent" ? "(%)" : "(VNĐ)"} *
-                </label>
-                <Input
-                  id="discountValue"
-                  type="number"
-                  min={0}
-                  max={discountType === "percent" ? 100 : undefined}
-                  step="0.01"
-                  value={discountValue}
-                  onChange={(e) => setDiscountValue(e.target.value)}
-                />
-                {state.fieldErrors?.discountValue && (
-                  <p className="text-xs text-destructive">{state.fieldErrors.discountValue[0]}</p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {activeFinancialType === "company" && (
-        <Card>
-          <CardHeader>
-            <CardTitle>VAT</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="space-y-1.5">
-              <label htmlFor="vatRate" className="text-sm font-medium">
-                VAT (%)
-              </label>
-              <Input
-                id="vatRate"
-                type="number"
-                min={0}
-                step="0.01"
-                value={vatRate}
-                onChange={(e) => setVatRate(e.target.value)}
-              />
-              {state.fieldErrors?.vatRate && (
-                <p className="text-xs text-destructive">{state.fieldErrors.vatRate[0]}</p>
-              )}
-            </div>
+          <CardContent>
+            <InvoiceFinancialFields
+              supplierType={activeFinancialType}
+              discountType={discountType}
+              onDiscountTypeChange={setDiscountType}
+              discountValue={discountValue}
+              onDiscountValueChange={setDiscountValue}
+              vatRate={vatRate}
+              onVatRateChange={setVatRate}
+              fieldErrors={state.fieldErrors}
+            />
           </CardContent>
         </Card>
       )}

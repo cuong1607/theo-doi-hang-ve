@@ -11,6 +11,12 @@ export type DailyGroup = {
   total_received_qty: number;
   total_difference_qty: number;
   total_line_total: number;
+  // INV-FROM-RECEIPTS: the from_receipts invoice this daily group feeds, if
+  // any (at most one — UNIQUE(supplier_id, receipt_date) on
+  // invoice_receipt_days). null = "Chưa lập HĐ". Comes from the same RPC
+  // call, no per-row lookup.
+  linked_invoice_id: string | null;
+  linked_invoice_no: string | null;
 };
 
 export type ReceiptHistoryFilters = {
@@ -64,6 +70,8 @@ export async function getReceiptDailyGroups(
       total_received_qty: row.total_received_qty,
       total_difference_qty: row.total_difference_qty,
       total_line_total: row.total_line_total,
+      linked_invoice_id: row.linked_invoice_id,
+      linked_invoice_no: row.linked_invoice_no,
     })),
     totalGroups,
     error: false,

@@ -35,10 +35,14 @@ export type SourceReceipt = {
   total_amount: number;
 };
 
+export type LinkedInvoice = { id: string; invoice_no: string; invoice_date: string };
+
 export type DailyReceiptDetail = {
   supplier: { id: string; code: string; name: string } | null;
   products: DailyProductRow[];
   receipts: SourceReceipt[];
+  // INV-FROM-RECEIPTS: the from_receipts invoice this day was used for.
+  linkedInvoice: LinkedInvoice | null;
 };
 
 // Single service/query layer for the /receipts/daily/[date]/[supplierId]
@@ -55,7 +59,7 @@ export async function getDailyReceiptDetail(
 ): Promise<DailyReceiptDetail> {
   const supabase = createAdminClient();
 
-  const [supplierResult, productsResult, receiptsResult] = await Promise.all([
+  const [supplierResult, productsResult, receiptsResult, linkResult] = await Promise.all([
     supabase.from("suppliers").select("id, code, name").eq("id", supplierId).maybeSingle(),
     supabase
       .from("v_daily_receipt_product_summary")
@@ -69,11 +73,20 @@ export async function getDailyReceiptDetail(
       .eq("receipt_date", date)
       .eq("supplier_id", supplierId)
       .order("created_at", { ascending: true }),
+    supabase
+      .from("invoice_receipt_days")
+      .select("invoices(id, invoice_no, invoice_date)")
+      .eq("receipt_date", date)
+      .eq("supplier_id", supplierId)
+      .maybeSingle(),
   ]);
+
+  const link = linkResult.data as unknown as { invoices: LinkedInvoice | null } | null;
 
   return {
     supplier: supplierResult.data ?? null,
     products: (productsResult.data as DailyProductRow[] | null) ?? [],
     receipts: (receiptsResult.data as SourceReceipt[] | null) ?? [],
+    linkedInvoice: link?.invoices ?? null,
   };
 }

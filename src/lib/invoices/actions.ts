@@ -8,6 +8,7 @@ import { validateSupplierAndItems } from "@/lib/products/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { calculateInvoiceFinancials, type SupplierType } from "@/lib/invoices/financials";
 import { triggerOutstandingAlertCheck } from "@/lib/notifications/outstanding-alert";
+import { fromReceiptsErrorMessage } from "@/lib/invoices/receipt-days";
 
 const FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này.";
 
@@ -210,11 +211,14 @@ export async function updateInvoice(
 
   const { data: original } = await supabase
     .from("invoices")
-    .select("id, supplier_id, invoice_items(product_id)")
+    .select("id, supplier_id, source_type, invoice_items(product_id)")
     .eq("id", invoiceId)
     .maybeSingle();
   if (!original) {
     return { status: "error", message: "Không tìm thấy hóa đơn." };
+  }
+  if (original.source_type === "from_receipts") {
+    return updateFromReceiptsInvoiceHeader(supabase, invoiceId, payload);
   }
   const originalProductIds = (original.invoice_items as { product_id: string }[]).map((i) => i.product_id);
 
@@ -287,6 +291,103 @@ export async function updateInvoice(
     supplierIds: [...new Set([original.supplier_id, parsed.supplierId])],
     productIds: [...new Set([...originalProductIds, ...parsed.items.map((i) => i.productId)])],
   });
+
+  return {
+    status: "success",
+    message: `Đã lưu thay đổi hóa đơn ${result.invoice_no}.`,
+    invoice: { id: result.invoice_id, invoiceNo: result.invoice_no },
+  };
+}
+
+// PHASE INV-FROM-RECEIPTS: a from_receipts invoice may only change its
+// header (số HĐ, ngày HĐ, ghi chú) and discount/VAT. Supplier, linked
+// receipt days and items are fixed — whatever supplierId/items the client
+// sends is ignored; financials are recomputed from the invoice's own stored
+// items and the supplier's current supplier_type (same rule as the manual
+// edit path).
+const fromReceiptsHeaderSchema = invoiceSchema.pick({
+  invoiceNo: true,
+  invoiceDate: true,
+  note: true,
+  discountType: true,
+  discountValue: true,
+  vatRate: true,
+});
+
+async function updateFromReceiptsInvoiceHeader(
+  supabase: ReturnType<typeof createAdminClient>,
+  invoiceId: string,
+  payload: InvoiceFormPayload
+): Promise<InvoiceFormState> {
+  const parsed = fromReceiptsHeaderSchema.safeParse(payload);
+  if (!parsed.success) {
+    const flattened = z.flattenError(parsed.error);
+    return {
+      status: "error",
+      message: flattened.formErrors[0] ?? "Vui lòng kiểm tra lại thông tin.",
+      fieldErrors: flattened.fieldErrors as Record<string, string[]>,
+    };
+  }
+
+  const { data: invoice } = await supabase
+    .from("invoices")
+    .select("id, suppliers(supplier_type), invoice_items(quantity, unit_price)")
+    .eq("id", invoiceId)
+    .maybeSingle();
+  const row = invoice as unknown as {
+    suppliers: { supplier_type: SupplierType } | null;
+    invoice_items: { quantity: number; unit_price: number }[];
+  } | null;
+  if (!row?.suppliers) {
+    return { status: "error", message: "Không tìm thấy hóa đơn." };
+  }
+
+  const financials = calculateInvoiceFinancials({
+    supplierType: row.suppliers.supplier_type,
+    items: row.invoice_items.map((i) => ({ quantity: Number(i.quantity), unitPrice: Number(i.unit_price) })),
+    discountType: parsed.data.discountType ?? null,
+    discountValue: parsed.data.discountValue ?? null,
+    vatRate: parsed.data.vatRate ?? null,
+  });
+  if (!financials.ok) {
+    return {
+      status: "error",
+      message: financials.error,
+      fieldErrors: financials.field ? { [financials.field]: [financials.error] } : undefined,
+    };
+  }
+
+  const { data, error } = await supabase.rpc("update_invoice_from_receipts_header", {
+    p_invoice_id: invoiceId,
+    p_invoice_no: parsed.data.invoiceNo,
+    p_invoice_date: parsed.data.invoiceDate,
+    p_note: parsed.data.note || null,
+    p_subtotal: financials.data.subtotal,
+    p_discount_type: financials.data.discountType,
+    p_discount_value: financials.data.discountValue,
+    p_discount_amount: financials.data.discountAmount,
+    p_vat_rate: financials.data.vatRate,
+    p_vat_amount: financials.data.vatAmount,
+    p_final_amount: financials.data.finalAmount,
+  });
+
+  if (error) {
+    const message = fromReceiptsErrorMessage(error.code, error.message);
+    return error.code === "HD003"
+      ? { status: "error", message, fieldErrors: { invoiceNo: ["Số hóa đơn đã tồn tại cho nhà cung cấp này."] } }
+      : { status: "error", message };
+  }
+  if (!data || data.length === 0) {
+    return { status: "error", message: "Không thể lưu thay đổi. Vui lòng thử lại." };
+  }
+
+  const result = data[0] as { invoice_id: string; invoice_no: string };
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${invoiceId}`);
+  revalidatePath("/receipts");
+
+  // No ZL4 evaluation: quantities are untouched by a header edit, so no
+  // outstanding status can change.
 
   return {
     status: "success",

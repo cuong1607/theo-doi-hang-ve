@@ -20,6 +20,7 @@ type InvoiceRow = {
   discount_type: "percent" | "fixed_amount" | null;
   discount_value: number | null;
   vat_rate: number;
+  source_type: "manual" | "from_receipts";
   invoice_items: {
     id: string;
     product_id: string;
@@ -34,9 +35,10 @@ async function getInvoiceForEdit(id: string) {
   const { data } = await supabase
     .from("invoices")
     .select(
-      "id, invoice_no, invoice_date, supplier_id, note, discount_type, discount_value, vat_rate, invoice_items(id, product_id, unit_price, quantity, products(sku, name, unit))"
+      "id, invoice_no, invoice_date, supplier_id, note, discount_type, discount_value, vat_rate, source_type, invoice_items(id, product_id, unit_price, quantity, created_at, products(sku, name, unit))"
     )
     .eq("id", id)
+    .order("created_at", { referencedTable: "invoice_items", ascending: true })
     .maybeSingle();
   return data as unknown as InvoiceRow | null;
 }
@@ -110,6 +112,7 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     discountType: invoiceRow.discount_type,
     discountValue: invoiceRow.discount_value,
     vatRate: invoiceRow.vat_rate,
+    sourceType: invoiceRow.source_type,
     items: invoiceRow.invoice_items.map((i) => ({
       id: i.id,
       productId: i.product_id,

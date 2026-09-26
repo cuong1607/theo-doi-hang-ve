@@ -21,7 +21,7 @@ import {
 import { OutstandingFilters } from "./outstanding-filters";
 
 const PAGE_SIZE = 20;
-const VALID_STATUSES: OutstandingStatus[] = ["need_makeup", "low", "normal"];
+const VALID_STATUSES: OutstandingStatus[] = ["need_makeup", "complete", "low", "normal"];
 
 function formatDateVN(iso: string) {
   const [y, m, d] = iso.split("-");

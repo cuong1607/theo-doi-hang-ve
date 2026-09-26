@@ -9,6 +9,13 @@ test("toTrackedState: maps v_outstanding's status vocabulary to the alert vocabu
   assert.equal(toTrackedState("need_makeup"), "over_received");
 });
 
+// INV-FROM-RECEIPTS: remaining_qty = 0 is "Đã đủ", never a low-stock alert.
+test("toTrackedState: complete (remaining = 0) is tracked as normal, not near_empty", () => {
+  assert.equal(toTrackedState("complete"), "normal");
+  assert.equal(shouldAlert("normal", toTrackedState("complete")), false);
+  assert.equal(shouldAlert("near_empty", toTrackedState("complete")), false);
+});
+
 // Spec's worked example: 30 -> 12 (gửi "Sắp hết"); 12 -> 10 (không gửi lại —
 // handled by the caller's oldState===newState skip, not exercised here);
 // 10 -> 20 (trở lại Bình thường); 20 -> 13 (được phép gửi cảnh báo mới).

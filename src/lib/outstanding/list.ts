@@ -1,8 +1,9 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { escapeIlikeTerm } from "@/lib/supabase/search";
 
-// Kept in sync with the CASE expression in v_outstanding (migration 00014).
-export type OutstandingStatus = "need_makeup" | "low" | "normal";
+// Kept in sync with the CASE expression in v_outstanding (migration 00034:
+// remaining < 0 need_makeup, = 0 complete, < 15 low, else normal).
+export type OutstandingStatus = "need_makeup" | "complete" | "low" | "normal";
 
 export type OutstandingRow = {
   invoice_item_id: string;
@@ -24,6 +25,7 @@ export type OutstandingRow = {
   received_value: number;
   remaining_value: number;
   status: OutstandingStatus;
+  source_type: "manual" | "from_receipts";
 };
 
 export type OutstandingFilters = {

@@ -8,6 +8,7 @@ import { getSupplierProducts, type SupplierProduct } from "@/lib/products/action
 import { validateSupplierAndItems } from "@/lib/products/queries";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { triggerOutstandingAlertCheck } from "@/lib/notifications/outstanding-alert";
+import { isReceiptDayLockedError } from "@/lib/invoices/receipt-days";
 
 const FORBIDDEN_MESSAGE = "Bạn không có quyền thực hiện thao tác này.";
 
@@ -107,6 +108,11 @@ export async function createReceipt(
     })),
   });
 
+  if (error && isReceiptDayLockedError(error.code)) {
+    // Edit-lock trigger (migration 00034): the day is linked to a
+    // from_receipts invoice. The DB message names the invoice.
+    return { status: "error", message: error.message };
+  }
   if (error || !data || data.length === 0) {
     return {
       status: "error",
@@ -189,6 +195,10 @@ export async function updateReceipt(
     })),
   });
 
+  if (error && isReceiptDayLockedError(error.code)) {
+    // The trigger checks BOTH the old and the new supplier/date.
+    return { status: "error", message: error.message };
+  }
   if (error || !data || data.length === 0) {
     return {
       status: "error",

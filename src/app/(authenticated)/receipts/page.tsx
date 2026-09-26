@@ -1,29 +1,17 @@
 import Link from "next/link";
 import { AlertTriangle, Plus, PackageSearch } from "lucide-react";
 
+import { canCreateInvoices, getCurrentRole } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getReceiptDailyGroups } from "@/lib/receipts/history";
-import { formatCurrency } from "@/lib/format";
 import { ListPagination } from "@/components/list-pagination";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 import { ReceiptHistoryFilters } from "./receipt-history-filters";
+import { ReceiptHistoryTable } from "./receipt-history-table";
 
 const PAGE_SIZE = 10;
-
-function formatDateVN(iso: string) {
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
-}
 
 async function getAllSuppliers() {
   const supabase = createAdminClient();
@@ -59,6 +47,9 @@ export default async function ReceiptsPage({
 
   const totalPages = Math.max(1, Math.ceil(totalGroups / PAGE_SIZE));
   const hasFilter = !!(fromDate || toDate || supplierId || sku || productName);
+  const canCreateInvoice = canCreateInvoices(getCurrentRole());
+  // New filters/page => new set of visible rows => fresh selection.
+  const selectionResetKey = [fromDate, toDate, supplierId, sku, productName, page].join("|");
 
   return (
     <div className="space-y-6">
@@ -115,57 +106,19 @@ export default async function ReceiptsPage({
             </div>
           ) : (
             <>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Ngày</TableHead>
-                    <TableHead>Nhà cung cấp</TableHead>
-                    <TableHead>Số SKU</TableHead>
-                    <TableHead>Tổng SL giao</TableHead>
-                    <TableHead>Tổng SL nhận</TableHead>
-                    <TableHead>Chênh lệch</TableHead>
-                    <TableHead>Tổng tiền</TableHead>
-                    <TableHead>VAT 8%</TableHead>
-                    <TableHead>Tổng sau VAT</TableHead>
-                    <TableHead className="text-right">Thao tác</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {groups.map((g) => {
-                    const vat = Math.round(g.total_line_total * 0.08 * 100) / 100;
-                    const grandTotal = Math.round(g.total_line_total * 1.08 * 100) / 100;
-                    return (
-                      <TableRow key={`${g.receipt_date}-${g.supplier_id}`}>
-                        <TableCell className="font-medium">{formatDateVN(g.receipt_date)}</TableCell>
-                        <TableCell>
-                          {g.supplier_code} — {g.supplier_name}
-                        </TableCell>
-                        <TableCell>{g.sku_count}</TableCell>
-                        <TableCell>{g.total_delivered_qty}</TableCell>
-                        <TableCell>{g.total_received_qty}</TableCell>
-                        <TableCell
-                          className={g.total_difference_qty < 0 ? "text-destructive" : undefined}
-                        >
-                          {g.total_difference_qty}
-                        </TableCell>
-                        <TableCell>{formatCurrency(g.total_line_total)}</TableCell>
-                        <TableCell>{formatCurrency(vat)}</TableCell>
-                        <TableCell className="font-medium">{formatCurrency(grandTotal)}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            nativeButton={false}
-                            render={<Link href={`/receipts/daily/${g.receipt_date}/${g.supplier_id}`} />}
-                          >
-                            Xem
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+              {canCreateInvoice && (
+                <p className="mb-4 text-sm text-muted-foreground">
+                  Chọn các ngày hàng về của cùng một nhà cung cấp để tạo hóa đơn từ hàng đã nhận. Mẹo: lọc
+                  theo nhà cung cấp để thấy nhiều ngày hơn.
+                  {isProductFiltered &&
+                    " Lưu ý: hóa đơn luôn lấy toàn bộ hàng của ngày đã chọn, không chỉ các SKU đang lọc."}
+                </p>
+              )}
+              <ReceiptHistoryTable
+                key={selectionResetKey}
+                groups={groups}
+                canCreateInvoice={canCreateInvoice}
+              />
               <ListPagination
                 page={page}
                 totalPages={totalPages}

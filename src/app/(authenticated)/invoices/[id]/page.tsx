@@ -5,6 +5,8 @@ import { ArrowLeft, Pencil } from "lucide-react";
 import { canEditInvoices, getCurrentRole } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/format";
+import { INVOICE_SOURCE_LABELS, type InvoiceSourceType } from "@/lib/invoices/receipt-days";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -21,6 +23,11 @@ const SUPPLIER_TYPE_LABELS: Record<string, string> = {
   company: "Công ty",
 };
 
+function formatDateVN(iso: string) {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
 type InvoiceDetail = {
   id: string;
   invoice_no: string;
@@ -35,6 +42,9 @@ type InvoiceDetail = {
   vat_rate: number;
   vat_amount: number;
   final_amount: number;
+  source_type: InvoiceSourceType;
+  receipt_start_date: string | null;
+  invoice_receipt_days: { receipt_date: string }[];
   invoice_items: {
     id: string;
     unit_price: number;
@@ -49,9 +59,11 @@ async function getInvoice(id: string) {
   const { data } = await supabase
     .from("invoices")
     .select(
-      "id, invoice_no, invoice_date, note, supplier_id, suppliers(code, name, supplier_type), subtotal, discount_type, discount_value, discount_amount, vat_rate, vat_amount, final_amount, invoice_items(id, unit_price, quantity, line_total, products(sku, name, unit))"
+      "id, invoice_no, invoice_date, note, supplier_id, suppliers(code, name, supplier_type), subtotal, discount_type, discount_value, discount_amount, vat_rate, vat_amount, final_amount, source_type, receipt_start_date, invoice_receipt_days(receipt_date), invoice_items(id, unit_price, quantity, line_total, created_at, products(sku, name, unit))"
     )
     .eq("id", id)
+    .order("receipt_date", { referencedTable: "invoice_receipt_days", ascending: true })
+    .order("created_at", { referencedTable: "invoice_items", ascending: true })
     .maybeSingle();
   return data as unknown as InvoiceDetail | null;
 }
@@ -69,6 +81,7 @@ export default async function InvoiceDetailPage({
   }
 
   const canEdit = canEditInvoices(getCurrentRole());
+  const isFromReceipts = invoice.source_type === "from_receipts";
   const totalQuantity = invoice.invoice_items.reduce((sum, i) => sum + i.quantity, 0);
   const discountLabel =
     invoice.discount_type === "percent"
@@ -102,7 +115,7 @@ export default async function InvoiceDetailPage({
           <CardTitle>Thông tin hóa đơn</CardTitle>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          <InfoField label="Ngày hóa đơn" value={invoice.invoice_date} />
+          <InfoField label="Ngày hóa đơn" value={formatDateVN(invoice.invoice_date)} />
           <InfoField
             label="Nhà cung cấp"
             value={invoice.suppliers ? `${invoice.suppliers.code} — ${invoice.suppliers.name}` : "—"}
@@ -113,9 +126,45 @@ export default async function InvoiceDetailPage({
               invoice.suppliers ? SUPPLIER_TYPE_LABELS[invoice.suppliers.supplier_type] ?? "—" : "—"
             }
           />
+          <div className="space-y-0.5">
+            <p className="text-muted-foreground">Nguồn</p>
+            <Badge variant={isFromReceipts ? "secondary" : "outline"}>
+              {INVOICE_SOURCE_LABELS[invoice.source_type]}
+            </Badge>
+          </div>
+          {isFromReceipts && invoice.receipt_start_date && (
+            <InfoField label="Ngày hàng về đầu tiên" value={formatDateVN(invoice.receipt_start_date)} />
+          )}
           <InfoField label="Ghi chú" value={invoice.note || "—"} />
         </CardContent>
       </Card>
+
+      {isFromReceipts && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Hàng về liên kết</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              Số lượng đã nhận của hóa đơn này chỉ tính từ đúng các ngày hàng về dưới đây (không tính
+              các ngày khác xen giữa).
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {invoice.invoice_receipt_days.map((d) => (
+                <Button
+                  key={d.receipt_date}
+                  variant="outline"
+                  size="sm"
+                  nativeButton={false}
+                  render={<Link href={`/receipts/daily/${d.receipt_date}/${invoice.supplier_id}`} />}
+                >
+                  {formatDateVN(d.receipt_date)}
+                </Button>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

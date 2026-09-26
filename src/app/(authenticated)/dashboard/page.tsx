@@ -28,6 +28,7 @@ import {
 } from "@/lib/dashboard/queries";
 import type { SupplierType } from "@/lib/debt/invoice-debt";
 import { STATUS_BADGE_VARIANT, STATUS_LABELS } from "@/lib/outstanding/status";
+import type { OutstandingStatus } from "@/lib/outstanding/list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -618,7 +619,7 @@ function OutstandingMiniList({
   rows,
 }: {
   title: string;
-  rows: { invoice_item_id: string; invoice_no: string; sku: string; product_name: string; remaining_qty: number; status: "need_makeup" | "low" | "normal" }[];
+  rows: { invoice_item_id: string; invoice_no: string; sku: string; product_name: string; remaining_qty: number; status: OutstandingStatus }[];
 }) {
   return (
     <div className="space-y-2">

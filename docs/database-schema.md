@@ -204,6 +204,34 @@ Hóa đơn từ nhà cung cấp.
 **Unique:** `(supplier_id, invoice_no)`
 **Indexes:** `invoice_date`, `supplier_id`
 
+Cột bổ sung ở các phase sau (tóm tắt): snapshot tài chính UP2 (`subtotal`, `discount_*`, `vat_*`, `final_amount` — migration 00022) và nguồn hóa đơn INV-FROM-RECEIPTS (migration 00034):
+
+| Column | Type | Constraint |
+|--------|------|------------|
+| source_type | text | NOT NULL, DEFAULT `'manual'`, CHECK IN (`manual`, `from_receipts`) |
+| receipt_start_date | date | nullable; bắt buộc khi `source_type = 'from_receipts'` |
+
+`invoice_date` = ngày trên hóa đơn NCC. `receipt_start_date` = ngày hàng về sớm nhất trong các ngày đã liên kết — chỉ là mốc nghiệp vụ, **không** phải khoảng truy vấn. Xem [invoice-from-receipts.md](invoice-from-receipts.md).
+
+**Unique bổ sung:** `(id, supplier_id)` — đích của FK kép từ `invoice_receipt_days`.
+
+### invoice_receipt_days
+
+Các ngày hàng về (daily group `supplier_id + receipt_date`) đã dùng để tạo một hóa đơn `from_receipts`.
+
+| Column | Type | Constraint |
+|--------|------|------------|
+| id | uuid | PK, DEFAULT gen_random_uuid() |
+| invoice_id | uuid | NOT NULL |
+| supplier_id | uuid | NOT NULL, FK → suppliers(id) |
+| receipt_date | date | NOT NULL |
+| created_at | timestamptz | NOT NULL, DEFAULT now() |
+
+**FK kép:** `(invoice_id, supplier_id)` → `invoices(id, supplier_id)` ON DELETE CASCADE — DB tự đảm bảo NCC của ngày liên kết = NCC của hóa đơn, và xóa hóa đơn thì các ngày được giải phóng.
+**Unique:** `(supplier_id, receipt_date)` — một daily group chỉ thuộc tối đa một hóa đơn.
+**Indexes:** `invoice_id`, `supplier_id`, `receipt_date`
+**RLS:** SELECT/INSERT cho `authenticated`; không có UPDATE/DELETE policy (chỉ xóa qua cascade).
+
 ### invoice_items
 
 Chi tiết hàng trong hóa đơn.
@@ -218,7 +246,7 @@ Chi tiết hàng trong hóa đơn.
 | line_total | numeric(15,2) | **GENERATED** = `quantity * unit_price` |
 | created_at | timestamptz | NOT NULL, DEFAULT now() |
 
-**Unique:** `(invoice_id, product_id)`
+**Unique:** `(invoice_id, product_id, unit_price)` (từ migration 00034; trước đó là `(invoice_id, product_id)`). Hóa đơn `from_receipts` có thể có cùng SKU ở nhiều dòng giá khác nhau. Hóa đơn `manual` vẫn chỉ 1 dòng/SKU — do schema zod của server action kiểm tra.
 **Index:** `product_id`
 
 ## Generated Columns
@@ -300,3 +328,6 @@ RLS được bật cho tất cả bảng. Policies hiện tại cho phép tất 
 |------|----------|
 | `00001_initial_schema.sql` | Tất cả tables, triggers, indexes, RLS policies, views |
 | `00002_seed_data.sql` | 2 suppliers + 4 products |
+| … | (00003–00033: xem header comment của từng file) |
+| `00034_invoice_from_receipts.sql` | `invoices.source_type`/`receipt_start_date`, bảng `invoice_receipt_days`, khóa sửa hàng về đã lập HĐ (trigger), RPC `create_invoice_from_receipts` / `update_invoice_from_receipts_header` / `get_receipt_days_invoice_lines`, `v_outstanding` rẽ nhánh theo nguồn + trạng thái `complete` |
+| `00035_invoice_receipt_days_single_fk.sql` | Bỏ FK đơn `invoice_id → invoices(id)` thừa (FK kép đã bao gồm) để PostgREST embed không bị mơ hồ |

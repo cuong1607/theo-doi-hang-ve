@@ -80,9 +80,17 @@ export default async function OutstandingDetailPage({
           <CardTitle>Các phiếu nhập được tính vào số đã nhận</CardTitle>
         </CardHeader>
         <CardContent>
+          {row.source_type === "from_receipts" && (
+            <p className="mb-4 rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
+              Hóa đơn tạo từ hàng đã nhận: chỉ tính các phiếu thuộc đúng những ngày hàng về đã liên kết
+              với hóa đơn, cùng SKU và cùng đơn giá.
+            </p>
+          )}
           {contributingReceipts.length === 0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Chưa có phiếu nhập nào của NCC này (từ ngày hóa đơn trở đi) khớp SKU này.
+              {row.source_type === "from_receipts"
+                ? "Không có phiếu nhập nào trong các ngày đã liên kết khớp SKU và đơn giá này."
+                : "Chưa có phiếu nhập nào của NCC này (từ ngày hóa đơn trở đi) khớp SKU này."}
             </p>
           ) : (
             <Table>

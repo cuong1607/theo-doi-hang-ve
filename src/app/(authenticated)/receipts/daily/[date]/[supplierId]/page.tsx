@@ -94,7 +94,7 @@ export default async function DailyReceiptDetailPage({
     notFound();
   }
 
-  const { supplier, products, receipts } = await getDailyReceiptDetail(date, supplierId);
+  const { supplier, products, receipts, linkedInvoice } = await getDailyReceiptDetail(date, supplierId);
 
   if (!supplier) {
     notFound();
@@ -147,6 +147,47 @@ export default async function DailyReceiptDetailPage({
           />
         </CardContent>
       </Card>
+
+      <Card>
+        <CardContent className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          {linkedInvoice ? (
+            <>
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+                <Badge variant="default">Đã lập hóa đơn</Badge>
+                <span>
+                  <span className="text-muted-foreground">Số HĐ: </span>
+                  <span className="font-medium">{linkedInvoice.invoice_no}</span>
+                </span>
+                <span>
+                  <span className="text-muted-foreground">Ngày HĐ: </span>
+                  <span className="font-medium">{formatDateVN(linkedInvoice.invoice_date)}</span>
+                </span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                nativeButton={false}
+                render={<Link href={`/invoices/${linkedInvoice.id}`} />}
+              >
+                Xem hóa đơn
+              </Button>
+            </>
+          ) : (
+            <div className="flex items-center gap-3">
+              <Badge variant="outline">Chưa lập hóa đơn</Badge>
+              <span className="text-muted-foreground">
+                Có thể chọn ngày này ở Lịch sử hàng về để tạo hóa đơn từ hàng đã nhận.
+              </span>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+      {linkedInvoice && (
+        <p className="-mt-3 text-sm text-muted-foreground">
+          Dữ liệu hàng về của ngày này đã khóa: không thể thêm, xóa, chuyển phiếu hoặc sửa số lượng/đơn
+          giá vì hóa đơn {linkedInvoice.invoice_no} được lập từ đó.
+        </p>
+      )}
 
       <Card>
         <CardHeader>

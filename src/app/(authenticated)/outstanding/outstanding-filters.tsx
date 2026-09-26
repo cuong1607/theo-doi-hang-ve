@@ -16,6 +16,7 @@ import {
 const STATUS_OPTIONS = [
   { label: "Tất cả trạng thái", value: "all" },
   { label: "Cần xuất bù", value: "need_makeup" },
+  { label: "Đã đủ", value: "complete" },
   { label: "Sắp hết", value: "low" },
   { label: "Bình thường", value: "normal" },
 ];

@@ -4,8 +4,10 @@ import { AlertTriangle, FileSearch, Plus } from "lucide-react";
 import { canCreateInvoices, getCurrentRole } from "@/lib/auth/role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getInvoiceList } from "@/lib/invoices/list";
+import { INVOICE_SOURCE_LABELS } from "@/lib/invoices/receipt-days";
 import { formatCurrency } from "@/lib/format";
 import { ListPagination } from "@/components/list-pagination";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -128,6 +130,7 @@ export default async function InvoicesPage({
                     <TableHead>Ngày hóa đơn</TableHead>
                     <TableHead>NCC</TableHead>
                     <TableHead>Loại NCC</TableHead>
+                    <TableHead>Nguồn</TableHead>
                     <TableHead>Số SKU</TableHead>
                     <TableHead>Tổng SL</TableHead>
                     <TableHead>Tổng phải trả</TableHead>
@@ -144,6 +147,11 @@ export default async function InvoicesPage({
                       </TableCell>
                       <TableCell>
                         {SUPPLIER_TYPE_LABELS[supplierTypeById.get(row.supplier_id) ?? ""] ?? "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={row.source_type === "from_receipts" ? "secondary" : "outline"}>
+                          {INVOICE_SOURCE_LABELS[row.source_type]}
+                        </Badge>
                       </TableCell>
                       <TableCell>{row.sku_count}</TableCell>
                       <TableCell>{row.total_quantity}</TableCell>

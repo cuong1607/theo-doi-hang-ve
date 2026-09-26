@@ -6,11 +6,15 @@ import type { OutstandingAlertState } from "./outstanding-alert-message";
 
 export type TrackedState = "normal" | OutstandingAlertState;
 
-// v_outstanding's status vocabulary (need_makeup/low/normal, migration
-// 00014 — the numeric thresholds live there and stay the single source of
-// truth) mapped to this phase's alert vocabulary (STATE MAPPING in the
-// spec).
-export function toTrackedState(outstandingStatus: "need_makeup" | "low" | "normal"): TrackedState {
+// v_outstanding's status vocabulary (need_makeup/complete/low/normal — the
+// numeric thresholds live in the view and stay the single source of truth)
+// mapped to this phase's alert vocabulary (STATE MAPPING in the spec).
+//
+// "complete" (remaining_qty = 0, added in INV-FROM-RECEIPTS / migration
+// 00034) means the invoice is fully received — NOT "sắp hết". It maps to
+// "normal" so it never alerts, and a later drop back into "low" (e.g. a
+// receipt correction) is again a normal -> near_empty transition.
+export function toTrackedState(outstandingStatus: "need_makeup" | "complete" | "low" | "normal"): TrackedState {
   if (outstandingStatus === "need_makeup") return "over_received";
   if (outstandingStatus === "low") return "near_empty";
   return "normal";

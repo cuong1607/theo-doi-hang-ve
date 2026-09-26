@@ -1,7 +1,7 @@
 // Run: node --env-file=.env.local --test src/lib/auth/role.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { canManageIntegrations, canManageNotificationRecipients } from "./role.ts";
+import { canCreateInvoices, canEditInvoices, canManageIntegrations, canManageNotificationRecipients } from "./role.ts";
 
 test("canManageIntegrations: admin only — the gate used by /api/zalo/oauth/start and /api/zalo/test-message", () => {
   assert.equal(canManageIntegrations("admin"), true);
@@ -13,4 +13,11 @@ test("canManageNotificationRecipients: admin only — the gate used by recipient
   assert.equal(canManageNotificationRecipients("admin"), true, "case 14: admin quản lý recipient");
   assert.equal(canManageNotificationRecipients("staff"), false, "case 13: staff không quản lý recipient");
   assert.equal(canManageNotificationRecipients("viewer"), false, "case 12: viewer không quản lý recipient");
+});
+
+test("canCreateInvoices / canEditInvoices: the gates of getReceiptInvoicePreview, createInvoiceFromReceiptDays and the from_receipts edit path (INV-FROM-RECEIPTS case 28)", () => {
+  assert.equal(canCreateInvoices("admin"), true);
+  assert.equal(canCreateInvoices("staff"), true);
+  assert.equal(canCreateInvoices("viewer"), false, "viewer không được tạo hóa đơn từ hàng đã nhận");
+  assert.equal(canEditInvoices("viewer"), false);
 });
