@@ -3,6 +3,9 @@ import { UserX } from "lucide-react";
 
 import { getAuthContext } from "@/lib/auth/session";
 import { logout } from "@/lib/auth/actions";
+import { displayLogin } from "@/lib/auth/login-identifier";
+import { BRAND_NAME } from "@/lib/brand";
+import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -15,16 +18,18 @@ export default async function AccountDisabledPage() {
   if (ctx.status === "active") redirect("/dashboard");
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-accent/60 to-background p-4">
       <Card className="w-full max-w-sm text-center">
-        <CardHeader>
-          <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
-            <UserX className="size-6" />
+        <CardHeader className="items-center">
+          <BrandLogo size={72} className="mx-auto" />
+          <p className="text-sm font-bold tracking-wide text-heading">{BRAND_NAME}</p>
+          <div className="mx-auto mt-2 flex items-center gap-2 text-destructive">
+            <UserX className="size-5" />
+            <CardTitle className="text-lg">Tài khoản đã bị vô hiệu hóa.</CardTitle>
           </div>
-          <CardTitle className="text-xl">Tài khoản đã bị vô hiệu hóa.</CardTitle>
           <CardDescription>
-            Tài khoản {ctx.user.email} hiện không được phép sử dụng hệ thống. Vui lòng liên hệ quản trị
-            viên để được kích hoạt lại.
+            Tài khoản {displayLogin(ctx.user.email ?? "")} hiện không được phép sử dụng hệ thống. Vui lòng liên
+            hệ quản trị viên để được kích hoạt lại.
           </CardDescription>
         </CardHeader>
         <CardContent>

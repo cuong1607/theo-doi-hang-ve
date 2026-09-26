@@ -29,6 +29,8 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar";
 import { hasPermission, type Permission, type Role } from "@/lib/auth/permissions";
+import { APP_NAME, BRAND_NAME } from "@/lib/brand";
+import { BrandLogo } from "@/components/brand-logo";
 
 type NavItem = {
   title: string;
@@ -136,15 +138,13 @@ export function AppSidebar({ role }: { role: Role }) {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border">
-        <div className="flex items-center gap-2 px-2 py-1">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <PackageSearch className="size-4" />
+        <Link href="/dashboard" className="flex items-center gap-2 px-0.5 py-1" aria-label={`${BRAND_NAME} — Dashboard`}>
+          <BrandLogo size={36} priority className="group-data-[collapsible=icon]:size-8" />
+          <div className="flex min-w-0 flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
+            <span className="truncate text-sm font-bold tracking-wide text-heading">{BRAND_NAME}</span>
+            <span className="text-xs text-muted-foreground">{APP_NAME}</span>
           </div>
-          <div className="flex flex-col gap-0.5 leading-none group-data-[collapsible=icon]:hidden">
-            <span className="font-semibold text-sm">Theo Dõi Hàng Về</span>
-            <span className="text-xs text-muted-foreground">Quản lý kho</span>
-          </div>
-        </div>
+        </Link>
       </SidebarHeader>
       <SidebarContent>
         {visibleGroups.map((group, groupIndex) => (

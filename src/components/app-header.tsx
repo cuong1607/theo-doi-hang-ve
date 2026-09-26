@@ -6,6 +6,7 @@ import { LogOut, User } from "lucide-react";
 
 import { logout } from "@/lib/auth/actions";
 import { ROLE_LABELS, type Role } from "@/lib/auth/permissions";
+import { BRAND_NAME } from "@/lib/brand";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,7 @@ const pageTitles: Record<string, string> = {
 
 export function AppHeader({ displayName, email, role }: { displayName: string; email: string; role: Role }) {
   const pathname = usePathname();
-  const title = pageTitles[pathname] ?? "Theo Dõi Hàng Về";
+  const title = pageTitles[pathname] ?? BRAND_NAME;
   const [isLoggingOut, startLogout] = useTransition();
 
   return (
