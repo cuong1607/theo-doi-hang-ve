@@ -1,0 +1,19 @@
+{
+  "error": "",
+  "message": "",
+  "warning": "",
+  "request_id": "fixture-model-list-800000105",
+  "response": {
+    "tier_variation": [{ "name": "Kích thước", "option_list": [{ "option": "1m2x2m" }] }],
+    "model": [
+      {
+        "model_id": 9000001051,
+        "tier_index": [0],
+        "model_sku": "bao_ve_chong_tham_m2x2m",
+        "model_status": "MODEL_NORMAL",
+        "price_info": [{ "currency": "VND", "original_price": 95000, "current_price": 95000 }],
+        "stock_info_v2": { "summary_info": { "total_reserved_stock": 0, "total_available_stock": 0 } }
+      }
+    ]
+  }
+}

@@ -40,6 +40,7 @@ export const PERMISSIONS = {
   "invoice:create": OPERATORS, // includes "create invoice from receipt history"
   "invoice:edit": OPERATORS,
   "payment:create": OPERATORS,
+  "channel:map": OPERATORS, // map / unmap a Shopee variation to an internal SKU
 
   // Master data + system administration — admin only.
   "product:manage": ADMIN,

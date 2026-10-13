@@ -13,7 +13,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import { isChannel, isConnectionStatus, type Shop, type ShopConnectionStatus } from "./types.ts";
 
-const SHOP_COLUMNS = "id, channel, external_shop_id, shop_name, currency, region, is_active, created_at, updated_at";
+const SHOP_COLUMNS = "id, channel, external_shop_id, shop_name, currency, region, is_active, data_source, created_at, updated_at";
 
 // Keep in sync with the column GRANT in migration 00038 (no token columns).
 const CONNECTION_STATUS_COLUMNS =
@@ -28,6 +28,7 @@ type ShopRow = {
   currency: string | null;
   region: string | null;
   is_active: boolean;
+  data_source: string;
   created_at: string;
   updated_at: string;
 };
@@ -55,6 +56,7 @@ function toShop(row: ShopRow): Shop {
     currency: row.currency,
     region: row.region,
     isActive: row.is_active,
+    dataSource: row.data_source === "fixture" ? "fixture" : "live",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

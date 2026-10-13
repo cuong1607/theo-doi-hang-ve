@@ -1,0 +1,16 @@
+{
+  "error": "",
+  "message": "",
+  "warning": "",
+  "request_id": "fixture-item-list-page-2",
+  "response": {
+    "item": [
+      { "item_id": 800000104, "item_status": "UNLIST", "update_time": 1760000300, "tag": { "kit": false } },
+      { "item_id": 800000105, "item_status": "SELLER_DELETE", "update_time": 1760000400, "tag": { "kit": false } },
+      { "item_id": 800000106, "item_status": "NORMAL", "update_time": 1760000500, "tag": { "kit": true } }
+    ],
+    "total_count": 6,
+    "has_next_page": false,
+    "next_offset": 6
+  }
+}

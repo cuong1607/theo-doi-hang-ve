@@ -59,6 +59,10 @@ export type InventoryDisposition = (typeof INVENTORY_DISPOSITIONS)[number];
 export const SYNC_LOG_STATUSES = ["running", "success", "partial", "failed"] as const;
 export type SyncLogStatus = (typeof SYNC_LOG_STATUSES)[number];
 
+/** Where channel data came from (shops.data_source, channel_api_snapshots.source_mode). */
+export const SOURCE_MODES = ["live", "fixture"] as const;
+export type SourceMode = (typeof SOURCE_MODES)[number];
+
 /** Open text in the DB (validated here) so new sync kinds need no migration. */
 export const SYNC_TYPES = ["product", "order", "return", "income", "payout"] as const;
 export type SyncType = (typeof SYNC_TYPES)[number];
@@ -86,6 +90,8 @@ export interface Shop {
   currency: string | null;
   region: string | null;
   isActive: boolean;
+  /** "fixture" shops hold test data only and can only be synced from fixtures. */
+  dataSource: SourceMode;
   createdAt: Timestamp;
   updatedAt: Timestamp;
 }

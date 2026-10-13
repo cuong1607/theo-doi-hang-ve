@@ -490,6 +490,177 @@ logs), không dựng framework mới.
 - Response lỗi chỉ chứa mã lỗi + message của Shopee (đã redact mọi bí mật mình
   gửi đi nếu provider echo lại).
 
+## Product Sync Architecture (SHOPEE-2)
+
+> **Trạng thái: FIXTURE-FIRST.** Toàn bộ pipeline chạy và được test bằng fixture
+> dựng từ *response example trong tài liệu*. Chưa từng chạy với API Shopee thật —
+> xem "Product real-payload validation" bên dưới.
+
+### Thành phần
+
+```
+ShopeeProductProvider (port)            src/lib/channels/shopee/product-provider.ts
+ ├─ RealShopeeProductProvider   → ShopeeClient + token service (SHOPEE-1), HTTP
+ └─ FixtureShopeeProductProvider → tests/fixtures/shopee/product/*.json
+        │ raw JSON + request_id
+        ▼
+product-adapter.ts + dto/product.ts      ← NƠI DUY NHẤT biết field Shopee (zod, khoan dung)
+        │ MappedChannelProduct / MappedChannelModel (canonical)
+        ▼
+ShopeeProductSyncService (product-sync.ts) — 1 implementation cho cả live và fixture
+        │
+        ├─ core/product-catalog.ts   upsert channel_products / channel_product_models
+        ├─ core/snapshots.ts         saveLatestChannelSnapshot (catalog only)
+        ├─ core/sku-mapping.ts       auto-map / manual map / unmap / review flag
+        └─ core/sync-log.ts          channel_sync_states + channel_sync_logs
+```
+
+Payload thật khác tài liệu → chỉ sửa `dto/product.ts` + `product-adapter.ts`.
+
+### Provider mode
+
+| `SHOPEE_PROVIDER_MODE` | Mặc định | Ghi chú |
+|---|---|---|
+| `fixture` | ngoài production | Chỉ đồng bộ **shop fixture** (`shops.data_source = 'fixture'`) |
+| `live` | production | Cần cấu hình SHOPEE-1 đầy đủ; thiếu → UI báo "Chưa kết nối API Shopee" |
+
+- Fixture trên production bị chặn trừ khi `ENABLE_SHOPEE_FIXTURE_MODE=true`.
+- **Không có fallback live → fixture.** Sync từ chối khi `data_source` của shop khác
+  mode của provider (`source_mismatch`) → dữ liệu fixture không thể vào shop thật.
+- Shop fixture: tạo bằng nút "Tạo shop fixture (dev)" (chỉ hiện khi fixture được
+  phép) → `external_shop_id = FIXTURE_SHOP_001`, tên `[FIXTURE] …`, badge FIXTURE
+  ở mọi nơi. Không có trong migration.
+- Snapshot ghi `source_mode = fixture|live`.
+
+### Luồng đồng bộ (`syncShopeeProducts` = `ShopeeProductSyncService.sync`)
+
+1. Kiểm tra shop (tồn tại, kênh shopee, data_source khớp mode), không có lượt
+   sync product khác đang chạy (< 30 phút).
+2. **Discovery** `v2.product.get_item_list`: `page_size = 100`, đủ 6 trạng thái
+   (`NORMAL, UNLIST, REVIEWING, BANNED, SELLER_DELETE, SHOPEE_DELETE`) để item bị
+   ẩn/xoá cũng cập nhật trạng thái local. Phân trang `offset → next_offset` tới khi
+   `has_next_page = false`; `next_offset` không tăng → dừng với lỗi (chống lặp vô hạn).
+3. **Chi tiết** `get_item_base_info` theo lô 50 id → `channel_products`.
+4. **Biến thể**: `has_model = true` → `get_model_list` → `channel_product_models`;
+   `has_model = false` → 1 đơn vị **synthetic** (xem bên dưới).
+5. Snapshot raw (chỉ giữ bản mới nhất), 6. auto-map + cờ review, 7. state + log.
+
+**Incremental**: `mode = incremental` dùng `update_time_from = last_success_at − 5 phút`
+(overlap chống sót biên), `update_time_to = thời điểm bắt đầu`. Chưa có lần thành
+công → chạy full. Chưa lên lịch cron.
+
+### Upsert
+
+- `channel_products` theo `UNIQUE(shop_id, external_item_id)`; `channel_product_models`
+  theo `UNIQUE(channel_product_id, external_model_id)` → chạy lại không tạo trùng.
+- Sync **chỉ ghi cột của provider** — không bao giờ ghi `internal_product_id`,
+  `mapping_status`, `mapped_*` → không thể ghi đè mapping.
+- Model không còn trong `get_model_list` (hoặc item đổi có/không biến thể) →
+  `removed_at` được đặt, **giữ nguyên dòng + mapping** (lịch sử); xuất hiện lại →
+  `removed_at = NULL`. Chỉ đánh dấu khi danh sách model parse sạch hoàn toàn.
+- Item không còn được discovery trả về: không tự xoá/ẩn (có thể do bộ lọc); trạng
+  thái cập nhật qua `item_status` (UNLIST/…_DELETE).
+
+### Sản phẩm không có biến thể — synthetic model
+
+Item `has_model = false` vẫn cần một "đơn vị bán được" để ghép SKU, nên mọi thứ đi
+qua một abstraction duy nhất **channel sellable unit (channel_product_models) →
+products**:
+
+- `external_model_id = 'NO_MODEL'`, `is_synthetic = true` (CHECK: hai điều này luôn
+  đi cùng nhau), `model_sku = item_sku`, `model_name = NULL`, giá/tồn/kích thước của item.
+- `NO_MODEL` là id **nội bộ**, không phải id Shopee trả về.
+- SHOPEE-3 sẽ khớp dòng order có `model_id` rỗng/0 vào đơn vị `NO_MODEL` của item đó
+  (cần xác nhận Shopee trả gì cho item không biến thể).
+
+### Ghép SKU
+
+- **Danh tính** của đơn vị bán = `shop_id + external_item_id + external_model_id`.
+  SKU chỉ là **công cụ hỗ trợ ghép**, không phải danh tính. Order (SHOPEE-3) khớp
+  theo danh tính, **không** theo chuỗi SKU.
+- **Auto-map** (`autoMapChannelModels`, nút "Tự động ghép SKU", cũng chạy cuối mỗi
+  lượt sync): chuẩn hoá = trim + chữ thường (SKU nội bộ dạng snake_case chữ
+  thường). Không bỏ ký tự, không fuzzy, không theo tên. So với sản phẩm nội bộ
+  **đang hoạt động**. 1 kết quả → `auto_mapped`; 0 → `unmapped`; ≥ 2 (vd `ABC` và
+  `abc` cùng tồn tại) → `mapping_conflict` (không chọn bừa). Chỉ chạm dòng
+  `unmapped`/`mapping_conflict`, mỗi lệnh ghi có điều kiện trạng thái → ghép tay
+  đồng thời luôn thắng.
+- **Ổn định**: SKU Shopee của dòng `auto_mapped` đổi và không còn khớp SKU nội bộ →
+  **giữ mapping**, bật `mapping_review_required` (badge "Cần kiểm tra lại").
+  Khớp lại → tự tắt. Ghép tay không bao giờ bị gắn cờ.
+- **Ghép tay** (`mapChannelModelToProduct`, quyền `channel:map` = admin + staff):
+  server kiểm tra model + product tồn tại, chỉ nhận 2 id từ trình duyệt; ghi
+  `manual_mapped`, `mapped_at`, `mapped_by`. Có thể ghép với sản phẩm ngừng hoạt động
+  (hiện badge cảnh báo).
+- **Bỏ ghép** (`unmapChannelModel`): về `unmapped`, xoá `mapped_*`. ⚠️ **Phải siết lại
+  ở SHOPEE-3**: khi đã có order dùng mapping này, không cho bỏ ghép/đổi ghép âm thầm.
+
+### Màn hình `/shopee/products`
+
+Quyền: `channel:view` (mọi role) xem; `channel:map` (admin, staff) ghép/bỏ ghép;
+`channel:manage` (admin) đồng bộ, tự ghép, tạo shop fixture. Gồm: banner fixture mode
+(chỉ khi thật sự ở fixture mode) hoặc "Chưa kết nối API Shopee"; khối Shop & đồng bộ
+(lần sync gần nhất + nút); 6 thẻ tổng hợp (đang bán / đã ghép / chưa ghép / xung đột /
+cần kiểm tra / ngừng bán-đã xoá — từ RPC `get_channel_mapping_summary`); bảng có lọc
+shop, trạng thái ghép, trạng thái Shopee, tên, SKU Shopee, SKU nội bộ; dialog chi tiết
+(không hiện raw JSON). Dữ liệu đọc từ view `v_channel_model_listing` (không N+1).
+
+> **Quy tắc trước SHOPEE-3:** không xử lý order thật cho tới khi các biến thể đang
+> bán chủ chốt đã được ghép (thẻ "Chưa ghép" và "Xung đột" ≈ 0).
+
+### Giá / tồn kho Shopee ≠ nội bộ
+
+- `channel_*_price` là **giá bán**. Không bao giờ ghi vào `products.current_price`,
+  không bao giờ dùng làm COGS.
+- `available_stock` / `reserved_stock` là **tồn trên Shopee**. Không đối chiếu/ghi
+  vào tồn kho nội bộ, không đẩy tồn về Shopee. (Test xác nhận bảng `products`,
+  receipts/invoices/payments không đổi sau sync.)
+
+### Số (NUMERIC)
+
+Giá/tồn đi qua `toDecimalString` (`core/decimal.ts`): số JSON của provider → chuỗi
+thập phân đúng như literal (≤ 15 chữ số có nghĩa, không exponent), ghi vào NUMERIC
+dưới dạng chuỗi; view trả NUMERIC dạng text; UI định dạng chuỗi, không đổi sang float.
+Id > 2^53 bị từ chối (parse error), không lưu sai.
+
+### Snapshot sản phẩm
+
+`saveLatestChannelSnapshot`: đúng **1 bản mới nhất** cho mỗi
+`(shop, entity_type, entity_external_id, api_name)` với `entity_type ∈ {product, model}`.
+Payload giống hệt (sha-256 trên JSON sắp xếp key) → chỉ cập nhật `synced_at`; khác →
+thay bản cũ. Hàm từ chối entity type khác: **không** áp dụng cho escrow/income/
+payout/return (giữ lịch sử lâu dài).
+
+### Sync state / log / lỗi từng phần
+
+- `channel_sync_states(sync_type = 'product')`: `last_offset`, `last_window_from/to`,
+  `last_success_at`, `last_failure_at`, `last_error_*` (cursor = NULL vì phân trang offset).
+- `channel_sync_logs`: `running → success | partial | failed`, `records_fetched`
+  (item discovered), `records_created/updated` (item + model), `records_failed`;
+  metadata: `pagesFetched, itemsDiscovered, modelsFetched, autoMapped, unmapped,
+  conflicts, sourceMode, syncMode, window, failures[≤50]` (id + lý do, không bí mật).
+- **Lỗi từng phần**: lô/item lỗi được ghi lại, phần còn lại vẫn chạy → `partial`.
+  Chỉ lượt `success` mới tiến `last_success_at` (checkpoint incremental) → lượt
+  incremental kế tiếp sẽ quét lại phần bị lỗi. Discovery lỗi → `failed`, không tiến gì.
+- Payload hỏng: entry không có id hợp lệ / sai kiểu → ghi vào failures, **không insert**.
+
+### Product real-payload validation (CHƯA kiểm chứng — làm sau Go-Live)
+
+- [ ] Kiểu `item_id` (number? string? vượt 2^53?)
+- [ ] Kiểu `model_id`; item không biến thể trả `model_id` gì trong order (0?)
+- [ ] `item_sku` trống: `""` hay thiếu field?
+- [ ] `model_sku` trống: `""` hay thiếu field?
+- [ ] Item không biến thể: có `price_info`/`stock_info_v2` ở item không
+- [ ] Item kit/bundle: `tag.kit` và cấu trúc thành phần
+- [ ] Nhiều kho (`seller_stock`/`shopee_stock` nhiều location) — `summary_info` có đúng tổng?
+- [ ] `price_info` có > 1 phần tử không
+- [ ] Độ chính xác giá VND (số nguyên? có `.0`?)
+- [ ] Item UNLIST / SELLER_DELETE / SHOPEE_DELETE còn trả `get_item_base_info`/`get_model_list` không
+- [ ] `update_time` thay đổi khi nào; giới hạn độ dài cửa sổ `update_time_from/to`
+- [ ] Phân trang: `next_offset`, `total_count`, giới hạn offset tối đa
+- [ ] Cách truyền `item_status` (lặp key?) và `item_id_list` (dấu phẩy?) trên query
+- [ ] Rate limit thực tế của các API product
+
 ## Snapshot retention (thiết kế — chưa triển khai)
 
 Áp dụng **trước khi** bật sync định kỳ trên production (carry-forward #6). Chưa

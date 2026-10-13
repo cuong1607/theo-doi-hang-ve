@@ -1,0 +1,40 @@
+{
+  "error": "",
+  "message": "",
+  "warning": "",
+  "request_id": "fixture-model-list-800000102",
+  "response": {
+    "tier_variation": [
+      { "name": "Kích thước", "option_list": [{ "option": "1m6x2m" }, { "option": "1m8x2m" }, { "option": "2mx2m2" }] }
+    ],
+    "standardise_tier_variation": [],
+    "model": [
+      {
+        "model_id": 9000001021,
+        "tier_index": [0],
+        "model_sku": "bao_ve_dem_thuong_m6x2m",
+        "model_status": "MODEL_NORMAL",
+        "price_info": [{ "currency": "VND", "original_price": 99000, "current_price": 90000 }],
+        "stock_info_v2": { "summary_info": { "total_reserved_stock": 1, "total_available_stock": 40 } },
+        "weight": "0.450",
+        "dimension": { "package_length": 35, "package_width": 25, "package_height": 8 }
+      },
+      {
+        "model_id": 9000001022,
+        "tier_index": [1],
+        "model_sku": "  bao_ve_dem_thuong_m8x2m  ",
+        "model_status": "MODEL_NORMAL",
+        "price_info": [{ "currency": "VND", "original_price": 109000, "current_price": 100000 }],
+        "stock_info_v2": { "summary_info": { "total_reserved_stock": 1, "total_available_stock": 30 } }
+      },
+      {
+        "model_id": 9000001023,
+        "tier_index": [2],
+        "model_sku": "",
+        "model_status": "MODEL_NORMAL",
+        "price_info": [{ "currency": "VND", "original_price": 125000, "current_price": 115000 }],
+        "stock_info_v2": { "summary_info": { "total_reserved_stock": 0, "total_available_stock": 20 } }
+      }
+    ]
+  }
+}

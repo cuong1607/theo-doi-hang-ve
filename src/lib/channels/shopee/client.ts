@@ -77,7 +77,7 @@ export interface ShopeeRequestOptions {
   method: "GET" | "POST";
   /** Shop-level call: signs with access token + Shopee shop id. Omit for public endpoints. */
   shop?: { externalShopId: string; accessToken: string };
-  query?: Record<string, string | number | boolean | undefined>;
+  query?: Record<string, string | number | boolean | undefined | ReadonlyArray<string | number>>;
   body?: unknown;
   /** Defaults to true for GET, false for POST. Only idempotent calls are retried. */
   idempotent?: boolean;
@@ -154,7 +154,10 @@ export class ShopeeClient {
   signedUrl(path: string, query: ShopeeRequestOptions["query"] = {}, shop?: ShopeeRequestOptions["shop"]): string {
     const url = new URL(`${this.deps.apiBaseUrl}${path}`);
     for (const [key, value] of Object.entries(query)) {
-      if (value !== undefined) url.searchParams.set(key, String(value));
+      if (value === undefined) continue;
+      // Array params are sent as repeated keys (?item_status=NORMAL&item_status=UNLIST).
+      if (Array.isArray(value)) for (const v of value) url.searchParams.append(key, String(v));
+      else url.searchParams.set(key, String(value));
     }
     const signed = signedQuery({
       partnerId: this.deps.partnerId,
