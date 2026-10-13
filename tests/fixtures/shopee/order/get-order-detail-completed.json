@@ -1,0 +1,27 @@
+{
+  "error": "",
+  "message": "",
+  "warning": "",
+  "request_id": "fixture-order-detail-completed",
+  "response": {
+    "order_list": [
+      {
+        "order_sn": "251013COMPLT06",
+        "order_status": "COMPLETED",
+        "create_time": 1759900000,
+        "update_time": 1760370000,
+        "pay_time": 1759900100,
+        "pickup_done_time": 1759990000,
+        "currency": "VND",
+        "cod": false,
+        "payment_method": "Online Payment",
+        "total_amount": 60000,
+        "estimated_shipping_fee": 15000,
+        "shipping_carrier": "SPX Express",
+        "item_list": [
+          { "order_item_id": 600001, "item_id": 800000101, "item_name": "Ga chống thấm 1m6x2m cao 10cm", "item_sku": "GA_CHONG_THAM_1M6X2MX10CM", "model_id": 0, "model_original_price": 59000, "model_discounted_price": 45000, "model_quantity_purchased": 1 }
+        ]
+      }
+    ]
+  }
+}

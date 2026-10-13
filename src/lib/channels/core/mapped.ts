@@ -62,9 +62,13 @@ export interface MappedChannelModel {
 export type MappedOrderItem = Omit<
   ChannelOrderItem,
   "id" | "orderId" | "internalProductId" | "costMethod" | "costPerUnitSnapshot" | "totalCogs" | "cogsCalculatedAt"
->;
+> & {
+  /** Our per-order line identity (see migration 00042 / buildShopeeOrderItemIdentity). */
+  providerLineKey: string;
+};
 
 export type MappedOrder = Omit<ChannelOrder, "id" | "shopId" | "financialStatus" | "lastSyncedAt"> & {
+  shippingCarrier: string | null;
   items: MappedOrderItem[];
 };
 

@@ -15,6 +15,8 @@ import { ShopeeConnectionService } from "./token.ts";
 
 import { FixtureShopeeProductProvider, loadProductFixtures, RealShopeeProductProvider, type ShopeeProductProvider } from "./product-provider.ts";
 import { ShopeeProductSyncService } from "./product-sync.ts";
+import { FixtureShopeeOrderProvider, loadOrderFixtures, RealShopeeOrderProvider, type ShopeeOrderProvider } from "./order-provider.ts";
+import { ShopeeOrderSyncService } from "./order-sync.ts";
 import { getShopeeProviderMode } from "./provider-mode.ts";
 
 let cached: { config: ShopeeConfig; client: ShopeeClient; service: ShopeeConnectionService } | null = null;
@@ -35,6 +37,25 @@ export function getShopeeProductSync(): { mode: "live" | "fixture"; sync: Shopee
     provider = new RealShopeeProductProvider({ client, connections: service });
   }
   return { mode, sync: new ShopeeProductSyncService({ db: createAdminClient(), provider }) };
+}
+
+/**
+ * Order sync wired to the configured data source. Unknown listings referenced
+ * by orders are fetched through the product sync of the SAME source
+ * (ensureItems) — never a fixture fallback for a live shop.
+ */
+export function getShopeeOrderSync(): { mode: "live" | "fixture"; sync: ShopeeOrderSyncService } {
+  const { mode, problem } = getShopeeProviderMode();
+  if (problem) throw new Error(problem);
+  const products = getShopeeProductSync().sync;
+  let provider: ShopeeOrderProvider;
+  if (mode === "fixture") {
+    provider = new FixtureShopeeOrderProvider(loadOrderFixtures());
+  } else {
+    const { client, service } = getShopee();
+    provider = new RealShopeeOrderProvider({ client, connections: service });
+  }
+  return { mode, sync: new ShopeeOrderSyncService({ db: createAdminClient(), provider, products }) };
 }
 
 /**

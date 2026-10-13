@@ -8,14 +8,21 @@ import { z } from "zod";
 
 import { authorizeAction } from "@/lib/auth/session";
 import { searchInternalProducts, type InternalProductOption } from "@/lib/channels/core/product-queries";
-import { autoMapChannelModels, mapChannelModelToProduct, unmapChannelModel, type AutoMapResult } from "@/lib/channels/core/sku-mapping";
+import {
+  autoMapChannelModels,
+  changeChannelModelMappingControlled,
+  mapChannelModelToProduct,
+  unmapChannelModel,
+  type AutoMapResult,
+} from "@/lib/channels/core/sku-mapping";
 import { ShopeeConfigError } from "@/lib/channels/shopee/config";
 import { ProductSyncRefusedError } from "@/lib/channels/shopee/product-sync";
 import { getShopeeProductSync } from "@/lib/channels/shopee/server";
 import { getShopeeProviderMode } from "@/lib/channels/shopee/provider-mode";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-const PATH = "/shopee/products";
+// Mapping changes also change order readiness → revalidate every /shopee screen.
+const PATH = "/shopee";
 const uuid = z.string().uuid();
 
 export type ActionResult<T = undefined> = { ok: true; message: string; data?: T } | { ok: false; message: string };
@@ -33,7 +40,7 @@ export async function syncShopeeProductsAction(shopId: string, mode: "full" | "i
   }
   try {
     const result = await sync.sync(shopId, { mode });
-    revalidatePath(PATH);
+    revalidatePath(PATH, "layout");
     const base = `Đã quét ${result.itemsDiscovered} sản phẩm (${result.pagesFetched} trang, ${result.modelsFetched} biến thể). Tự ghép ${result.autoMap?.mapped ?? 0}.`;
     if (result.status === "success") return { ok: true, message: `Đồng bộ xong. ${base}` };
     if (result.status === "partial") return { ok: true, message: `Đồng bộ một phần: ${result.counts.failed} lỗi. ${base} ${result.errorMessage ?? ""}`.trim() };
@@ -52,7 +59,7 @@ export async function autoMapShopeeProductsAction(shopId: string): Promise<Actio
   const { data: shop } = await db.from("shops").select("id").eq("id", shopId).eq("channel", "shopee").maybeSingle();
   if (!shop) return { ok: false, message: "Không tìm thấy shop." };
   const result = await autoMapChannelModels(db, shopId);
-  revalidatePath(PATH);
+  revalidatePath(PATH, "layout");
   return {
     ok: true,
     message: `Đã quét ${result.scanned}: ghép ${result.mapped}, chưa ghép ${result.unmapped}, xung đột ${result.conflicts}.`,
@@ -72,8 +79,29 @@ export async function mapChannelModelAction(input: { channelModelId: string; int
     mappedBy: authz.auth.user.id,
   });
   if (!result.ok) return result;
-  revalidatePath(PATH);
+  revalidatePath(PATH, "layout");
   return { ok: true, message: "Đã ghép SKU." };
+}
+
+/**
+ * Controlled remap of a unit already used by orders (admin only): requires a
+ * reason, audited, affects future order lines only (history keeps its snapshot).
+ */
+export async function changeUsedChannelModelMappingAction(input: { channelModelId: string; internalProductId: string; reason: string }): Promise<ActionResult> {
+  const authz = await authorizeAction("channel:manage");
+  if (!authz.ok) return { ok: false, message: authz.message };
+  if (!uuid.safeParse(input?.channelModelId).success || !uuid.safeParse(input?.internalProductId).success || typeof input?.reason !== "string") {
+    return { ok: false, message: "Dữ liệu không hợp lệ." };
+  }
+  const result = await changeChannelModelMappingControlled(createAdminClient(), {
+    channelModelId: input.channelModelId,
+    internalProductId: input.internalProductId,
+    reason: input.reason.slice(0, 500),
+    changedBy: authz.auth.user.id,
+  });
+  if (!result.ok) return result;
+  revalidatePath(PATH, "layout");
+  return { ok: true, message: "Đã điều chỉnh mapping (áp dụng cho đơn hàng mới; đơn cũ giữ nguyên)." };
 }
 
 export async function unmapChannelModelAction(channelModelId: string): Promise<ActionResult> {
@@ -82,7 +110,7 @@ export async function unmapChannelModelAction(channelModelId: string): Promise<A
   if (!uuid.safeParse(channelModelId).success) return { ok: false, message: "Dữ liệu không hợp lệ." };
   const result = await unmapChannelModel(createAdminClient(), { channelModelId });
   if (!result.ok) return result;
-  revalidatePath(PATH);
+  revalidatePath(PATH, "layout");
   return { ok: true, message: "Đã bỏ ghép." };
 }
 
@@ -104,6 +132,6 @@ export async function createFixtureShopAction(): Promise<ActionResult> {
       { onConflict: "channel,external_shop_id", ignoreDuplicates: true },
     );
   if (error) return { ok: false, message: "Không tạo được shop fixture." };
-  revalidatePath(PATH);
+  revalidatePath(PATH, "layout");
   return { ok: true, message: "Đã tạo shop fixture FIXTURE_SHOP_001." };
 }

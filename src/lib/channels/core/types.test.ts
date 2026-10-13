@@ -61,7 +61,8 @@ test("type guards accept known values only", () => {
 
 test("SHOPEE-0 skeletons exist but are not implemented", () => {
   assert.throws(() => calculateOrderFinancials({} as never), NotImplementedError);
-  assert.throws(() => mapShopeeOrder({} as never), NotImplementedError);
+  // mapShopeeOrder is implemented since SHOPEE-3: invalid input is a payload error, not "not implemented".
+  assert.throws(() => mapShopeeOrder({}), (err: unknown) => err instanceof Error && !(err instanceof NotImplementedError));
   assert.throws(() => mapShopeeEscrow({} as never), NotImplementedError);
   assert.throws(() => mapShopeeReturn({} as never), NotImplementedError);
   assert.throws(() => mapShopeePayout({} as never), NotImplementedError);

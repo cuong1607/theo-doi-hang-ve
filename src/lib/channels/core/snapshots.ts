@@ -32,6 +32,59 @@ export function payloadHash(payload: unknown): string {
   return createHash("sha256").update(stableStringify(payload)).digest("hex");
 }
 
+/**
+ * Order detail retention (SHOPEE-3): keeps the latest snapshot PLUS every
+ * snapshot whose meaningful fingerprint (status / provider update time / line
+ * structure) differed from the one before — i.e. the transition history.
+ * Polling an unchanged order refreshes the latest row in place (no growth);
+ * a non-meaningful change (e.g. package/tracking) replaces the latest payload.
+ */
+export async function saveMeaningfulOrderSnapshot(
+  db: SupabaseClient,
+  input: {
+    shopId: string;
+    orderSn: string;
+    apiName: string;
+    payload: unknown;
+    fingerprint: string;
+    sourceMode: SourceMode;
+    sourceUpdatedAt?: string | null;
+    syncedAt: string;
+  },
+): Promise<"inserted" | "refreshed"> {
+  const key = { shop_id: input.shopId, entity_type: "order", entity_external_id: input.orderSn, api_name: input.apiName };
+  const hash = payloadHash(input.payload);
+  const { data: latest, error } = await db
+    .from("channel_api_snapshots")
+    .select("id, fingerprint, payload_hash")
+    .match(key)
+    .order("synced_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string; fingerprint: string | null; payload_hash: string | null }>();
+  if (error) throw new Error(`Không đọc được snapshot đơn: ${error.message}`);
+
+  if (latest && latest.fingerprint === input.fingerprint) {
+    const patch =
+      latest.payload_hash === hash
+        ? { synced_at: input.syncedAt }
+        : { synced_at: input.syncedAt, payload: input.payload, payload_hash: hash, source_updated_at: input.sourceUpdatedAt ?? null };
+    const { error: updError } = await db.from("channel_api_snapshots").update(patch).eq("id", latest.id);
+    if (updError) throw new Error(`Không cập nhật được snapshot đơn: ${updError.message}`);
+    return "refreshed";
+  }
+  const { error: insError } = await db.from("channel_api_snapshots").insert({
+    ...key,
+    payload: input.payload,
+    payload_hash: hash,
+    fingerprint: input.fingerprint,
+    source_mode: input.sourceMode,
+    source_updated_at: input.sourceUpdatedAt ?? null,
+    synced_at: input.syncedAt,
+  });
+  if (insError) throw new Error(`Không lưu được snapshot đơn: ${insError.message}`);
+  return "inserted";
+}
+
 export async function saveLatestChannelSnapshot(
   db: SupabaseClient,
   input: {

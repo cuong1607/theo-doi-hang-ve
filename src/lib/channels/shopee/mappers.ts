@@ -16,11 +16,18 @@ import type {
   ShopeePayoutDetailRaw,
   ShopeeReturnDetailRaw,
 } from "./types.ts";
+import { mapShopeeOrderEntry } from "./order-adapter.ts";
+import { ShopeePayloadError } from "./product-adapter.ts";
 
-/** v2.order.get_order_detail → channel_orders + channel_order_items. */
-export function mapShopeeOrder(raw: ShopeeOrderDetailRaw): MappedOrder {
-  void raw;
-  throw new NotImplementedError("mapShopeeOrder");
+/**
+ * v2.order.get_order_detail (one order object) → channel_orders + channel_order_items.
+ * Implemented in SHOPEE-3 by ./order-adapter.ts; throws ShopeePayloadError on an
+ * order whose identity / line identity is invalid.
+ */
+export function mapShopeeOrder(raw: ShopeeOrderDetailRaw | unknown, options: { fallbackCurrency?: string | null } = {}): MappedOrder {
+  const result = mapShopeeOrderEntry(raw, options);
+  if ("issue" in result) throw new ShopeePayloadError(result.issue.apiName, result.issue.reason);
+  return result.order;
 }
 
 /** v2.payment.get_escrow_detail → order_financials input + order_financial_components. */

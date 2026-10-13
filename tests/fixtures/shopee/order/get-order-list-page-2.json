@@ -1,0 +1,15 @@
+{
+  "error": "",
+  "message": "",
+  "warning": "",
+  "request_id": "fixture-order-list-2",
+  "response": {
+    "more": false,
+    "next_cursor": "",
+    "order_list": [
+      { "order_sn": "251013CANCEL05", "order_status": "CANCELLED" },
+      { "order_sn": "251013COMPLT06", "order_status": "COMPLETED" },
+      { "order_sn": "251013BUNDLE07", "order_status": "READY_TO_SHIP" }
+    ]
+  }
+}

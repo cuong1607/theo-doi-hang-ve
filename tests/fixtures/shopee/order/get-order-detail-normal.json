@@ -1,0 +1,46 @@
+{
+  "error": "",
+  "message": "",
+  "warning": "",
+  "request_id": "fixture-order-detail-normal",
+  "response": {
+    "order_list": [
+      {
+        "order_sn": "251013NORMAL01",
+        "order_status": "READY_TO_SHIP",
+        "create_time": 1760300000,
+        "update_time": 1760300600,
+        "pay_time": 1760300100,
+        "ship_by_date": 1760472800,
+        "currency": "VND",
+        "cod": false,
+        "payment_method": "Online Payment",
+        "total_amount": 105000,
+        "estimated_shipping_fee": 15000,
+        "reverse_shipping_fee": 0,
+        "shipping_carrier": "SPX Express",
+        "fulfillment_flag": "fulfilled_by_local_seller",
+        "item_list": [
+          {
+            "order_item_id": 100001,
+            "item_id": 800000101,
+            "item_name": "Ga chống thấm 1m6x2m cao 10cm",
+            "item_sku": "GA_CHONG_THAM_1M6X2MX10CM",
+            "model_id": 0,
+            "model_name": "",
+            "model_sku": "",
+            "model_original_price": 59000,
+            "model_discounted_price": 45000,
+            "model_quantity_purchased": 2,
+            "promotion_type": "",
+            "promotion_id": 0,
+            "add_on_deal": false,
+            "main_item": false,
+            "weight": 0.35
+          }
+        ],
+        "package_list": [{ "package_number": "PKG-N01", "logistics_status": "LOGISTICS_READY", "shipping_carrier": "SPX Express" }]
+      }
+    ]
+  }
+}

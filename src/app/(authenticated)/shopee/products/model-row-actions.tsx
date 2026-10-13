@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 
-import { mapChannelModelAction, searchInternalProductsAction, unmapChannelModelAction } from "./actions";
+import { changeUsedChannelModelMappingAction, mapChannelModelAction, searchInternalProductsAction, unmapChannelModelAction } from "./actions";
 
 /** Serializable subset of the listing row needed by the dialogs (no secrets exist on it). */
 export type ModelRowView = {
@@ -33,6 +33,8 @@ export type ModelRowView = {
   internalSku: string | null;
   internalProductName: string | null;
   mappingLabel: string;
+  /** Order lines already resolved through this unit (> 0 → unmap blocked, remap needs a reason). */
+  orderItemCount: number;
 };
 
 type ProductOption = { id: string; sku: string; name: string; isActive: boolean };
@@ -41,8 +43,11 @@ function MapDialog({ row, open, onOpenChange }: { row: ModelRowView; open: boole
   const [term, setTerm] = useState(row.modelSku ?? row.itemSku ?? "");
   const [options, setOptions] = useState<ProductOption[]>([]);
   const [selected, setSelected] = useState<ProductOption | null>(null);
+  const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  // Already mapped AND used by orders → only the audited, reason-required flow (admin).
+  const controlled = row.orderItemCount > 0 && row.internalSku !== null;
 
   useEffect(() => {
     if (!open) return;
@@ -54,7 +59,9 @@ function MapDialog({ row, open, onOpenChange }: { row: ModelRowView; open: boole
     if (!selected) return;
     setError(null);
     startTransition(async () => {
-      const res = await mapChannelModelAction({ channelModelId: row.channelModelId, internalProductId: selected.id });
+      const res = controlled
+        ? await changeUsedChannelModelMappingAction({ channelModelId: row.channelModelId, internalProductId: selected.id, reason })
+        : await mapChannelModelAction({ channelModelId: row.channelModelId, internalProductId: selected.id });
       if (res.ok) onOpenChange(false);
       else setError(res.message);
     });
@@ -90,12 +97,21 @@ function MapDialog({ row, open, onOpenChange }: { row: ModelRowView; open: boole
             ))
           )}
         </div>
+        {controlled && (
+          <div className="space-y-1.5 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            <p>
+              Đã có {row.orderItemCount} dòng đơn hàng dùng mapping hiện tại ({row.internalSku}). Đổi mapping chỉ áp dụng cho đơn mới —
+              đơn cũ giữ nguyên SKU đã ghi. Bắt buộc ghi lý do (được lưu lịch sử).
+            </p>
+            <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Lý do điều chỉnh (tối thiểu 5 ký tự)" />
+          </div>
+        )}
         {error && <p className="text-sm text-destructive">{error}</p>}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             Hủy
           </Button>
-          <Button onClick={save} disabled={!selected || pending}>
+          <Button onClick={save} disabled={!selected || pending || (controlled && reason.trim().length < 5)}>
             {pending ? "Đang lưu..." : selected ? `Ghép với ${selected.sku}` : "Chọn sản phẩm"}
           </Button>
         </DialogFooter>
@@ -120,6 +136,7 @@ function DetailDialog({ row, open, onOpenChange }: { row: ModelRowView; open: bo
     ["Đồng bộ lần cuối", row.lastSyncedText],
     ["SKU nội bộ", row.internalSku ? `${row.internalSku} — ${row.internalProductName ?? ""}` : "Chưa ghép"],
     ["Trạng thái ghép", row.mappingLabel],
+    ["Dòng đơn hàng dùng mapping", row.orderItemCount > 0 ? `${row.orderItemCount} (khóa bỏ ghép)` : "0"],
   ];
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -141,7 +158,10 @@ function DetailDialog({ row, open, onOpenChange }: { row: ModelRowView; open: bo
   );
 }
 
-export function ModelRowActions({ row, canMap }: { row: ModelRowView; canMap: boolean }) {
+export function ModelRowActions({ row, canMap, canManage }: { row: ModelRowView; canMap: boolean; canManage: boolean }) {
+  const usedByOrders = row.orderItemCount > 0 && row.internalSku !== null;
+  // Remapping a unit used by orders is an audited admin-only adjustment.
+  const canChangeMapping = canMap && (!usedByOrders || canManage);
   const [mapOpen, setMapOpen] = useState(false);
   const [mapKey, setMapKey] = useState(0);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -169,17 +189,17 @@ export function ModelRowActions({ row, canMap }: { row: ModelRowView; canMap: bo
           <DropdownMenuItem onClick={() => setDetailOpen(true)}>
             <Info /> Chi tiết
           </DropdownMenuItem>
-          {canMap && (
+          {canChangeMapping && (
             <DropdownMenuItem
               onClick={() => {
                 setMapKey((k) => k + 1);
                 setMapOpen(true);
               }}
             >
-              <Link2 /> {row.internalSku ? "Đổi SKU nội bộ" : "Ghép SKU nội bộ"}
+              <Link2 /> {usedByOrders ? "Điều chỉnh mapping (có lý do)" : row.internalSku ? "Đổi SKU nội bộ" : "Ghép SKU nội bộ"}
             </DropdownMenuItem>
           )}
-          {canMap && row.internalSku && (
+          {canMap && row.internalSku && !usedByOrders && (
             <DropdownMenuItem variant="destructive" onClick={() => setConfirmOpen(true)}>
               <Unlink /> Bỏ ghép
             </DropdownMenuItem>
@@ -188,7 +208,7 @@ export function ModelRowActions({ row, canMap }: { row: ModelRowView; canMap: bo
       </DropdownMenu>
 
       <DetailDialog row={row} open={detailOpen} onOpenChange={setDetailOpen} />
-      {canMap && <MapDialog key={mapKey} row={row} open={mapOpen} onOpenChange={setMapOpen} />}
+      {canChangeMapping && <MapDialog key={mapKey} row={row} open={mapOpen} onOpenChange={setMapOpen} />}
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent>

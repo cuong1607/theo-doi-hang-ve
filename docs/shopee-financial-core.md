@@ -592,8 +592,39 @@ products**:
   server kiểm tra model + product tồn tại, chỉ nhận 2 id từ trình duyệt; ghi
   `manual_mapped`, `mapped_at`, `mapped_by`. Có thể ghép với sản phẩm ngừng hoạt động
   (hiện badge cảnh báo).
-- **Bỏ ghép** (`unmapChannelModel`): về `unmapped`, xoá `mapped_*`. ⚠️ **Phải siết lại
-  ở SHOPEE-3**: khi đã có order dùng mapping này, không cho bỏ ghép/đổi ghép âm thầm.
+- **Bỏ ghép** (`unmapChannelModel`): về `unmapped`, xoá `mapped_*` — **chỉ** khi chưa
+  có dòng đơn hàng nào dùng mapping (xem "Bảo vệ lịch sử mapping").
+
+### Bảo vệ lịch sử mapping (migration 00041 — điều kiện trước SHOPEE-3)
+
+Một dòng đơn hàng đã được resolve vào SKU nội bộ nào thì lịch sử **không bao giờ**
+đổi ngoài ý muốn. Thực thi ở **DB** (trigger), không chỉ ở UI:
+
+- `channel_order_items.channel_model_id` → đơn vị bán mà dòng order được resolve qua
+  (SHOPEE-3 sẽ ghi khi đã xác nhận identity bằng payload thật). Mỗi dòng order còn
+  giữ **snapshot riêng** `internal_product_id`.
+- Khi **có bất kỳ** `channel_order_items` trỏ tới đơn vị bán:
+  - bỏ ghép (`internal_product_id → NULL`) → **từ chối**, SQLSTATE `CM001`;
+  - đổi sang sản phẩm khác bằng lệnh UPDATE thường → **từ chối**, `CM002` (kể cả service role).
+- **Điều chỉnh có kiểm soát**: RPC `change_channel_model_mapping(model, product, reason,
+  changed_by)` — bắt buộc sản phẩm mới (không thể dùng để bỏ ghép, `CM003`) và lý do
+  ≥ 5 ký tự; chỉ admin (`channel:manage`) trên UI ("Điều chỉnh mapping (có lý do)").
+  Chỉ áp dụng cho **đơn mới**; dòng order cũ giữ nguyên snapshot.
+- `channel_model_mapping_history`: trigger ghi **mọi** thay đổi (map / unmap / remap /
+  status / controlled_remap) kèm sản phẩm cũ-mới, lý do, người đổi, số dòng order lúc đổi.
+- `channel_order_items.internal_product_id` / `channel_return_items.internal_product_id`
+  đổi từ `ON DELETE SET NULL` sang `NO ACTION`: xoá sản phẩm nội bộ không còn âm thầm
+  xoá snapshot lịch sử (sản phẩm đã có order → không xoá được).
+- Auto-map chỉ chạm dòng `unmapped`/`mapping_conflict` → không bao giờ đụng mapping đã dùng.
+
+### Quy tắc COGS cho đơn vị chưa ghép (áp dụng từ SHOPEE-3)
+
+- Dòng order của đơn vị `unmapped`/`mapping_conflict` → `internal_product_id = NULL`,
+  **không** tự đoán COGS; Financial Engine phải nhận biết COGS đang **thiếu** (không coi
+  là 0) và báo cáo P&L phải hiển thị order đó là "thiếu giá vốn".
+- **Không bao giờ** fallback sang: tên sản phẩm, giá bán, SKU gần giống, fuzzy match.
+- Trước khi bật xử lý order production: rà các model NORMAL đang bán, ưu tiên model
+  có đơn thường xuyên, đảm bảo đã ghép (không bắt buộc 100% catalog).
 
 ### Màn hình `/shopee/products`
 
@@ -660,6 +691,185 @@ payout/return (giữ lịch sử lâu dài).
 - [ ] Phân trang: `next_offset`, `total_count`, giới hạn offset tối đa
 - [ ] Cách truyền `item_status` (lặp key?) và `item_id_list` (dấu phẩy?) trên query
 - [ ] Rate limit thực tế của các API product
+
+## Order Sync Architecture (SHOPEE-3)
+
+> **Trạng thái: FIXTURE-FIRST.** Chạy và test hoàn toàn bằng fixture dựng từ tài
+> liệu (`tests/fixtures/shopee/order`). Chưa từng chạy với API Shopee thật.
+
+### Thành phần
+
+```
+ShopeeOrderProvider (port)              src/lib/channels/shopee/order-provider.ts
+ ├─ RealShopeeOrderProvider   → ShopeeClient + token (SHOPEE-1)
+ └─ FixtureShopeeOrderProvider → fixtures (filterByTime cho test nhiều cửa sổ)
+        │ raw JSON
+        ▼
+order-adapter.ts + dto/order.ts         ← NƠI DUY NHẤT biết field order Shopee
+        │ MappedOrder (canonical) + provider_line_key
+        ▼
+ShopeeOrderSyncService (order-sync.ts)  — 1 implementation cho live + fixture
+        ├─ core/order-store.ts   resolve identity, upsert đơn + dòng (snapshot lịch sử)
+        ├─ core/snapshots.ts     saveMeaningfulOrderSnapshot
+        ├─ core/time-windows.ts  chia cửa sổ ≤ 15 ngày, giới hạn đồng thời
+        ├─ core/sync-log.ts      state/log (sync_type = order)
+        └─ ShopeeProductSyncService.ensureItems  (lấy listing còn thiếu)
+```
+
+### Discovery: `update_time`, cửa sổ 15 ngày, cursor
+
+- `time_range_field = update_time`: đơn cũ đổi trạng thái vẫn được thấy lại.
+- **Incremental** (`sync`): `[last_success_at − 10 phút, now]` (`ORDER_SYNC_OVERLAP_SECONDS`);
+  chưa có checkpoint → 15 ngày gần nhất. **Backfill** (`backfill({shopId, from, to})`):
+  khoảng bất kỳ, **không** tiến checkpoint incremental. Chưa nối cron.
+- Mọi khoảng được tự chia thành cửa sổ ≤ 15 ngày (`splitTimeWindows`).
+- Mỗi cửa sổ: `cursor = ""` → lặp tới `more = false`, `page_size = 100`. `next_cursor`
+  rỗng/lặp lại trong khi `more = true` → **cửa sổ đó thất bại an toàn** (log
+  `SHOPEE_ORDER_PAGINATION_ANOMALY`), các cửa sổ khác vẫn chạy; tối đa 500 trang/cửa sổ.
+- order_sn trùng giữa trang/cửa sổ được gộp (Map).
+
+### Chiến lược chi tiết (strategy B)
+
+Mọi order_sn có trong cửa sổ `update_time` đều được lấy lại `get_order_detail` —
+ưu tiên **đúng** hơn tối ưu (chưa bỏ qua đơn "không đổi trạng thái"). Theo lô
+`ORDER_DETAIL_BATCH_SIZE = 50` (giới hạn tài liệu, **chưa kiểm chứng**), tối đa
+`ORDER_DETAIL_CONCURRENCY = 3` lô song song (cộng thêm semaphore 4 request của client).
+Không `Promise.all` không giới hạn.
+
+**PII**: live chỉ yêu cầu `item_list, pay_time, pickup_done_time, package_list,
+shipping_carrier, payment_method, total_amount, estimated/reverse_shipping_fee,
+fulfillment_flag` — **không** lấy `recipient_address`, thông tin người mua, SĐT → không
+lưu, kể cả trong raw snapshot.
+
+### Upsert đơn
+
+`channel_orders` theo `UNIQUE(shop_id, external_order_sn)`: trạng thái, tiền tệ, phương
+thức thanh toán, COD, `channel_total_amount` (**tổng tiền đơn của Shopee — không phải
+settlement / thu nhập / lợi nhuận**), phí ship ước tính, các mốc thời gian,
+`shipping_carrier`. `financial_status` **không** bị sync ghi: đơn mới = `pending`
+(mặc định DB), đơn cũ giữ nguyên. **Ý nghĩa `pending`**: chưa có dữ liệu tài chính nào
+(chưa có ước tính phí/settlement). SHOPEE-3 **không** dùng `estimated`.
+
+Trạng thái giữ nguyên text của Shopee; helper `isOrderActive / isOrderCompleted /
+isOrderCancelled` (`order-status.ts`). Đơn **CANCELLED vẫn được lưu**, không xoá, không
+giả định doanh thu/phí = 0. **COMPLETED ≠ đã quyết toán**: chỉ đánh dấu
+`financial_sync_eligible` cho SHOPEE-5 (không gọi API thanh toán nào).
+
+### Định danh dòng đơn (CHƯA chốt — chờ payload thật)
+
+- Không dùng `order_item_id` đơn lẻ (Shopee dùng chung cho cả bundle deal).
+- `provider_line_key` = `order_item_id|item_id|model_id` (`-` khi thiếu), **chỉ khi** bộ
+  ba này lặp lại trong cùng một đơn mới thêm `#2, #3…` theo thứ tự payload (fallback,
+  không phải định danh ổn định đảm bảo).
+- `UNIQUE(order_id, provider_line_key)` là ràng buộc trên **khoá do mình dựng**, luôn
+  unique theo cách dựng → không bao giờ chặn dữ liệu hợp lệ; chỉ để re-sync idempotent.
+- Dòng không còn trong payload mới của đơn → xoá (cấu trúc cũ còn trong snapshot lịch sử).
+- **Nếu payload thật chứng minh khoá chưa đủ**: KHÔNG sửa migration cũ; tạo migration mới
+  thêm cột khoá mới (vd `identity_hash`) + backfill an toàn, rồi chuyển upsert sang cột đó.
+
+### Khớp dòng đơn → đơn vị bán → sản phẩm nội bộ
+
+- Theo **danh tính provider**: `shop + external_item_id + external_model_id`; `model_id`
+  0/null/thiếu → đơn vị synthetic `NO_MODEL` của SHOPEE-2. **Không** khớp theo chuỗi SKU,
+  tên, giá, SKU gần giống.
+- Listing chưa có trong catalog → `ensureItems()` (lấy `get_item_base_info`/`get_model_list`
+  của đúng item đó qua product sync cùng nguồn) **một lần mỗi lô**, rồi resolve lại.
+  Vẫn không có → dòng được lưu với `channel_model_id = NULL`, `internal_product_id = NULL`
+  (UI: "Chưa có trong danh mục"). Không bao giờ tạo sản phẩm nội bộ giả, không làm hỏng đơn.
+- Đơn vẫn được đồng bộ dù mapping chưa hoàn chỉnh.
+
+### Snapshot mapping lịch sử
+
+- `channel_product_models.internal_product_id` = mapping **hiện tại**.
+- `channel_order_items.internal_product_id` = **snapshot** lúc sync dòng đơn.
+- Re-sync **không** ghi đè snapshot khác NULL; dòng NULL được điền khi đơn vị đã có mapping.
+- `backfillUnmappedOrderItemsForModel(channelModelId)` chạy sau mỗi lần ghép (tay, auto,
+  điều chỉnh có kiểm soát) — **chỉ** cập nhật dòng `internal_product_id IS NULL`, trả về số dòng.
+- Bỏ ghép / đổi ghép đơn vị đã có dòng đơn → bị DB chặn (CM001/CM002, migration 00041),
+  thông báo: "Không thể bỏ ghép biến thể này vì đã có đơn hàng sử dụng mapping." /
+  "Mapping đã được sử dụng trong đơn hàng lịch sử. Không thể đổi trực tiếp."
+  Luồng điều chỉnh có lý do (admin, 00041) vẫn tồn tại theo yêu cầu trước SHOPEE-3; nó chỉ
+  áp dụng cho đơn mới, không đổi lịch sử.
+
+### Readiness (tính trong view `v_channel_order_summary`)
+
+| | Giá trị |
+|---|---|
+| `mapping_readiness` | `complete` (mọi dòng có `internal_product_id`) · `partial` · `unmapped` · `no_items` |
+| `cogs_readiness` | `incomplete` (mapping chưa đủ) · `pending` (mapping đủ, chưa có `total_cogs`) · `complete` |
+| `financial_sync_eligible` | `order_status = 'COMPLETED'` |
+
+**NULL = chưa biết, 0 = đã xác nhận bằng 0** — áp dụng mọi nơi: COGS hiển thị "Chưa tính",
+không bao giờ "0 đ". Phase này không tính COGS (`cost_*`, `total_cogs` luôn NULL).
+
+### Chỉ số ước tính an toàn (không phải lợi nhuận)
+
+Trong view, NUMERIC chính xác, trả về text:
+`item_gross_value = Σ(discounted_unit_price × quantity)`,
+`original_item_value = Σ(original_unit_price × quantity)`, `total_item_quantity = Σ quantity`.
+Có dòng thiếu giá → giá trị = NULL ("Chưa xác định"), không cộng một phần.
+**Không** ghi gì vào `order_financials`, không ước tính phí sàn, không gọi là lợi nhuận.
+
+### Raw snapshot đơn
+
+`saveMeaningfulOrderSnapshot`: fingerprint = hash(`order_status`, `update_time`, cấu trúc
+dòng: khoá + số lượng + giá). Fingerprint giống bản mới nhất → cập nhật tại chỗ (polling
+không làm phình bảng); khác → thêm dòng mới, **giữ** bản cũ làm lịch sử chuyển trạng thái.
+Thay đổi không quan trọng (package/tracking) chỉ thay payload của bản mới nhất. Chưa có
+cron dọn dẹp.
+
+### Log / lỗi từng phần
+
+`sync_type = order`: `records_fetched` = số đơn phát hiện, `created/updated` = đơn,
+`failed` = đơn lỗi; metadata `windowsProcessed, windowsFailed, pagesFetched, detailsFetched,
+ordersCompleted, ordersCancelled, mappingComplete/Partial/Unmapped, linesUnresolved,
+providerMode, failures[≤50]`. Lô/đơn lỗi không rollback phần đã lưu → `partial`; chỉ lượt
+incremental `success` mới tiến `last_success_at` → lần sau tự quét lại (lỗi tạm thời được
+thử lại). Mọi cửa sổ discovery lỗi → `failed`. Đơn có dòng thiếu `item_id`/số lượng hợp lệ
+→ không lưu (tránh tổng sai), ghi vào failures.
+
+### UI
+
+- `/shopee/orders`: banner fixture ("Đang sử dụng dữ liệu fixture/test. Shopee production
+  API chưa được kích hoạt."), khối đồng bộ (admin: "Đồng bộ đơn mới", "Backfill 30 ngày"),
+  lọc shop / khoảng ngày / trạng thái / mapping / trạng thái tài chính / mã đơn / SKU-sản phẩm;
+  cột Ngày đơn, Shop, Mã đơn, Trạng thái, Số lượng, Giá trị SP, Mapping SKU (Đầy đủ / Thiếu x/y
+  / Chưa ghép), COGS ("Chưa tính"), Tài chính.
+- `/shopee/orders/[id]`: thông tin đơn, bảng dòng (SKU Shopee, tên, biến thể, SL, giá gốc,
+  giá bán, SKU nội bộ, mapping, COGS "Chưa tính"), nút ghép SKU **dùng lại** dialog SHOPEE-2,
+  khối tài chính (giá trị SP, giá trị theo giá gốc, "Lợi nhuận: Chưa có",
+  "Phí Shopee / settlement sẽ được đồng bộ ở SHOPEE-5.").
+
+### Order real-payload validation (bắt buộc ngay khi Go-Live)
+
+get_order_list:
+- [ ] lọc theo `update_time` hoạt động đúng; giới hạn 15 ngày thật
+- [ ] hành vi `cursor` / `next_cursor` / `more`; có thứ tự đảm bảo không
+- [ ] tập giá trị `order_status` thật
+- [ ] cách truyền `response_optional_fields`
+
+get_order_detail:
+- [ ] giới hạn số `order_sn_list` mỗi lần (đang giả định 50); cách truyền (dấu phẩy?)
+- [ ] `model_id` của sản phẩm không biến thể (0? null? thiếu?)
+- [ ] package split (một đơn nhiều kiện) ảnh hưởng `item_list`?
+- [ ] bundle / add-on / kit / quà tặng thể hiện thế nào
+- [ ] SKU trống: `""` hay thiếu field
+- [ ] số tiền VND: số nguyên? có phần thập phân?
+- [ ] đơn huỷ / hoàn thành có trả đủ field không
+
+
+
+Order: `order_sn`, `order_item_id`, `item_id`, `model_id`, `item_sku`, `model_sku`,
+quantity, `order_status`, `update_time`. Product: `item_id`, `model_id`, `model_sku`,
+sản phẩm không biến thể. Đặc biệt xác nhận:
+
+- [ ] `order_item_id` có ổn định và unique trong một order không
+- [ ] một model có thể xuất hiện nhiều dòng trong cùng order không
+- [ ] bundle / add-on / kit ảnh hưởng identity thế nào
+- [ ] partial return tham chiếu order item ra sao
+
+Chưa khoá constraint / identity strategy dựa trên Response Example trước khi có
+payload thật.
 
 ## Snapshot retention (thiết kế — chưa triển khai)
 

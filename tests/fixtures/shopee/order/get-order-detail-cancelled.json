@@ -1,0 +1,24 @@
+{
+  "error": "",
+  "message": "",
+  "warning": "",
+  "request_id": "fixture-order-detail-cancelled",
+  "response": {
+    "order_list": [
+      {
+        "order_sn": "251013CANCEL05",
+        "order_status": "CANCELLED",
+        "create_time": 1760350000,
+        "update_time": 1760360000,
+        "currency": "VND",
+        "cod": true,
+        "payment_method": "Cash on Delivery",
+        "total_amount": 105000,
+        "estimated_shipping_fee": 15000,
+        "item_list": [
+          { "order_item_id": 500001, "item_id": 800000102, "item_name": "Bao vệ đệm thường", "item_sku": "BVD-THUONG", "model_id": 9000001021, "model_name": "1m6x2m", "model_sku": "bao_ve_dem_thuong_m6x2m", "model_original_price": 99000, "model_discounted_price": 90000, "model_quantity_purchased": 1 }
+        ]
+      }
+    ]
+  }
+}

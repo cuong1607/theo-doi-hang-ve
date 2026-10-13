@@ -234,12 +234,71 @@ export class ShopeeProductSyncService {
     setModels: (n: number) => void;
     setAutoMap: (r: AutoMapResult) => void;
   }): Promise<ProductSyncResult> {
-    const { shopId, ctx, discovered, counts, failures, failedItemIds, addIssues, finish } = s;
-    const shop = { currency: s.currency };
+    const { shopId, ctx, discovered, failures, finish } = s;
 
     // ---- 3–5. details, models, snapshots
     const itemIds = [...discovered.keys()];
     const kitByItemId = new Map([...discovered].map(([id, v]) => [id, v.isKit]));
+    const anyItemSucceeded = await this.storeItems(shopId, ctx, s.currency, itemIds, kitByItemId, s);
+
+    // ---- 6. mapping (also when partial: what did sync is mappable)
+    try {
+      s.setAutoMap(await autoMapChannelModels(this.db, shopId, this.now()));
+      await refreshMappingReviewFlags(this.db, shopId);
+    } catch (err) {
+      failures.push({ externalId: null, reason: `auto-map: ${errorInfo(err).message}` });
+    }
+
+    if (failures.length === 0) return finish("success");
+    return finish(anyItemSucceeded || itemIds.length === 0 ? "partial" : "failed");
+  }
+
+  /**
+   * Fetch + store specific listings (no discovery, no sync log) — used by
+   * order sync when an order references an item not in the catalog yet.
+   * Same data-source guard as sync(); runs auto-map afterwards.
+   */
+  async ensureItems(shopId: string, externalItemIds: string[]): Promise<{ failures: Array<{ externalId: string | null; reason: string }> }> {
+    const ids = [...new Set(externalItemIds)];
+    if (ids.length === 0) return { failures: [] };
+    const { data: shop } = await this.db
+      .from("shops")
+      .select("id, channel, external_shop_id, data_source, currency")
+      .eq("id", shopId)
+      .maybeSingle<{ id: string; channel: string; external_shop_id: string; data_source: string; currency: string | null }>();
+    if (!shop || shop.channel !== "shopee" || shop.data_source !== this.provider.mode) {
+      return { failures: ids.map((id) => ({ externalId: id, reason: "ensureItems: shop không hợp lệ cho provider này" })) };
+    }
+    const acc = {
+      counts: { fetched: ids.length, created: 0, updated: 0, failed: 0 },
+      failures: [] as Array<{ externalId: string | null; reason: string }>,
+      failedItemIds: new Set<string>(),
+      addIssues(issues: ParseIssue[]) {
+        issues.forEach((i) => acc.failures.push({ externalId: i.externalId, reason: `${i.apiName}: ${i.reason}` }));
+      },
+      setModels() {},
+    };
+    await this.storeItems(shopId, { shopId, externalShopId: shop.external_shop_id }, shop.currency, ids, new Map(), acc);
+    await autoMapChannelModels(this.db, shopId, this.now());
+    return { failures: acc.failures };
+  }
+
+  private async storeItems(
+    shopId: string,
+    ctx: ProductProviderContext,
+    currency: string | null,
+    itemIds: string[],
+    kitByItemId: Map<string, boolean | null>,
+    s: {
+      counts: SyncCounts;
+      failures: Array<{ externalId: string | null; reason: string }>;
+      failedItemIds: Set<string>;
+      addIssues: (issues: ParseIssue[]) => void;
+      setModels: (n: number) => void;
+    },
+  ): Promise<boolean> {
+    const { counts, failures, failedItemIds, addIssues } = s;
+    const shop = { currency };
     let anyItemSucceeded = false;
 
     for (let i = 0; i < itemIds.length; i += BASE_INFO_BATCH_SIZE) {
@@ -335,16 +394,6 @@ export class ShopeeProductSyncService {
         }
       }
     }
-
-    // ---- 6. mapping (also when partial: what did sync is mappable)
-    try {
-      s.setAutoMap(await autoMapChannelModels(this.db, shopId, this.now()));
-      await refreshMappingReviewFlags(this.db, shopId);
-    } catch (err) {
-      failures.push({ externalId: null, reason: `auto-map: ${errorInfo(err).message}` });
-    }
-
-    if (failures.length === 0) return finish("success");
-    return finish(anyItemSucceeded || itemIds.length === 0 ? "partial" : "failed");
+    return anyItemSucceeded;
   }
 }

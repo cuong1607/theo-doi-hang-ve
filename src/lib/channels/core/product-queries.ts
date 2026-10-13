@@ -42,6 +42,8 @@ export interface ChannelModelListRow {
   internalSku: string | null;
   internalProductName: string | null;
   lastSyncedAt: string | null;
+  /** Order lines resolved through this unit — > 0 locks unmap / free remap (migration 00041). */
+  orderItemCount: number;
 }
 
 export interface ChannelModelFilters {
@@ -57,7 +59,7 @@ const COLUMNS =
   "channel_model_id, shop_id, shop_name, data_source, external_item_id, item_name, item_sku, item_status, is_kit, " +
   "external_model_id, is_synthetic, model_name, model_sku, model_status, channel_sku, channel_current_price, " +
   "channel_original_price, available_stock, reserved_stock, mapping_status, mapping_review_required, mapped_at, " +
-  "removed_at, is_active, internal_product_id, internal_sku, internal_product_name, last_synced_at";
+  "removed_at, is_active, internal_product_id, internal_sku, internal_product_name, last_synced_at, order_item_count";
 
 type ViewRow = {
   channel_model_id: string;
@@ -88,6 +90,7 @@ type ViewRow = {
   internal_sku: string | null;
   internal_product_name: string | null;
   last_synced_at: string | null;
+  order_item_count: number | string;
 };
 
 function toRow(r: ViewRow): ChannelModelListRow {
@@ -120,6 +123,7 @@ function toRow(r: ViewRow): ChannelModelListRow {
     internalSku: r.internal_sku,
     internalProductName: r.internal_product_name,
     lastSyncedAt: r.last_synced_at,
+    orderItemCount: Number(r.order_item_count ?? 0), // a count, not money
   };
 }
 
@@ -186,6 +190,16 @@ export async function getUnmappedShopeeModels(shopId: string, limit = 100): Prom
   return (data ?? []).map(toRow);
 }
 
+export async function getChannelModelsByIds(ids: string[]): Promise<Map<string, ChannelModelListRow>> {
+  const result = new Map<string, ChannelModelListRow>();
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return result;
+  const { data, error } = await createAdminClient().from("v_channel_model_listing").select(COLUMNS).in("channel_model_id", unique).returns<ViewRow[]>();
+  if (error) throw new Error(error.message);
+  for (const r of data ?? []) result.set(r.channel_model_id, toRow(r));
+  return result;
+}
+
 export async function getChannelModelById(channelModelId: string): Promise<ChannelModelListRow | null> {
   const { data, error } = await createAdminClient()
     .from("v_channel_model_listing")
@@ -207,15 +221,15 @@ export interface LastProductSync {
   sourceMode: string | null;
 }
 
-/** Latest product sync log per shop (one query for all shops). */
-export async function getLastProductSyncs(shopIds: string[]): Promise<Map<string, LastProductSync>> {
+/** Latest sync log of `syncType` per shop (one query for all shops). */
+export async function getLastProductSyncs(shopIds: string[], syncType: "product" | "order" = "product"): Promise<Map<string, LastProductSync>> {
   const result = new Map<string, LastProductSync>();
   if (shopIds.length === 0) return result;
   const { data, error } = await createAdminClient()
     .from("channel_sync_logs")
     .select("shop_id, status, started_at, completed_at, records_fetched, records_failed, error_code, error_message, metadata")
     .in("shop_id", shopIds)
-    .eq("sync_type", "product")
+    .eq("sync_type", syncType)
     .order("started_at", { ascending: false })
     .limit(shopIds.length * 5);
   if (error) throw new Error(error.message);
@@ -230,7 +244,8 @@ export async function getLastProductSyncs(shopIds: string[]): Promise<Map<string
       recordsFailed: r.records_failed as number,
       errorCode: (r.error_code as string | null) ?? null,
       errorMessage: (r.error_message as string | null) ?? null,
-      sourceMode: ((r.metadata as Record<string, unknown> | null)?.sourceMode as string | undefined) ?? null,
+      sourceMode:
+        (((r.metadata as Record<string, unknown> | null)?.sourceMode ?? (r.metadata as Record<string, unknown> | null)?.providerMode) as string | undefined) ?? null,
     });
   }
   return result;

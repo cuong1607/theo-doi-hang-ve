@@ -1,0 +1,28 @@
+{
+  "error": "",
+  "message": "",
+  "warning": "",
+  "request_id": "fixture-order-detail-multi-item",
+  "response": {
+    "order_list": [
+      {
+        "order_sn": "251013MULTI002",
+        "order_status": "PROCESSED",
+        "create_time": 1760310000,
+        "update_time": 1760311000,
+        "pay_time": 1760310100,
+        "currency": "VND",
+        "cod": true,
+        "payment_method": "Cash on Delivery",
+        "total_amount": 264000,
+        "estimated_shipping_fee": 20000,
+        "shipping_carrier": "GHN",
+        "item_list": [
+          { "order_item_id": 200001, "item_id": 800000101, "item_name": "Ga chống thấm 1m6x2m cao 10cm", "item_sku": "GA_CHONG_THAM_1M6X2MX10CM", "model_id": 0, "model_original_price": 59000, "model_discounted_price": 45000, "model_quantity_purchased": 1 },
+          { "order_item_id": 200002, "item_id": 800000106, "item_name": "Combo 2 bao vệ đệm thường", "item_sku": "COMBO_BVD_2", "model_id": 0, "model_original_price": 180000, "model_discounted_price": 159000, "model_quantity_purchased": 1 },
+          { "order_item_id": 200003, "item_id": 800000103, "item_name": "Phụ kiện không có SKU", "item_sku": "", "model_id": 0, "model_original_price": 15000, "model_discounted_price": 15000, "model_quantity_purchased": 3 }
+        ]
+      }
+    ]
+  }
+}

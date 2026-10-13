@@ -1,0 +1,16 @@
+{
+  "error": "",
+  "message": "",
+  "warning": "",
+  "request_id": "fixture-order-list-1",
+  "response": {
+    "more": true,
+    "next_cursor": "fixture-cursor-2",
+    "order_list": [
+      { "order_sn": "251013NORMAL01", "order_status": "READY_TO_SHIP" },
+      { "order_sn": "251013MULTI002", "order_status": "PROCESSED" },
+      { "order_sn": "251013MODELS03", "order_status": "SHIPPED" },
+      { "order_sn": "251013UNMAP004", "order_status": "READY_TO_SHIP" }
+    ]
+  }
+}

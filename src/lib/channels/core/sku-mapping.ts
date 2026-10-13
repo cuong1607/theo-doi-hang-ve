@@ -118,6 +118,9 @@ export async function autoMapChannelModels(db: SupabaseClient, shopId: string, n
       if (r.error) throw new Error(`Không ghép được SKU: ${r.error.message}`);
       result.mapped += r.data?.length ?? 0;
     }
+    for (const r of results) {
+      for (const row of (r.data ?? []) as Array<{ id: string }>) await backfillUnmappedOrderItemsForModel(db, row.id);
+    }
   }
   result.unmapped = toUnmapped.length;
   result.conflicts = toConflict.length;
@@ -149,7 +152,48 @@ export async function refreshMappingReviewFlags(db: SupabaseClient, shopId: stri
   return rows.filter((r) => normalizeSku(r.channel_sku) !== normalizeSku(r.internal_sku)).length;
 }
 
-export type MappingActionResult = { ok: true } | { ok: false; message: string };
+/**
+ * After a unit gains a mapping: fill the product snapshot of its order lines
+ * that were synced while it was unmapped (internal_product_id IS NULL) — and
+ * ONLY those. Non-null historical snapshots are never touched.
+ */
+export async function backfillUnmappedOrderItemsForModel(db: SupabaseClient, channelModelId: string): Promise<number> {
+  const { data: model, error } = await db.from("channel_product_models").select("internal_product_id").eq("id", channelModelId).maybeSingle<{ internal_product_id: string | null }>();
+  if (error) throw new Error(`Không đọc được biến thể: ${error.message}`);
+  if (!model?.internal_product_id) return 0;
+  const { data, error: updError } = await db
+    .from("channel_order_items")
+    .update({ internal_product_id: model.internal_product_id })
+    .eq("channel_model_id", channelModelId)
+    .is("internal_product_id", null)
+    .select("id");
+  if (updError) throw new Error(`Không cập nhật được dòng đơn: ${updError.message}`);
+  return data?.length ?? 0;
+}
+
+export type MappingActionResult =
+  | { ok: true }
+  | { ok: false; message: string; code?: "used_by_orders_unmap" | "used_by_orders_remap" | "invalid" | "not_found" };
+
+/** Maps the DB guard's SQLSTATEs (migration 00041) to user-facing results. */
+function guardError(error: { code?: string; message?: string } | null, fallback: string): MappingActionResult {
+  switch (error?.code) {
+    case "CM001":
+      return { ok: false, code: "used_by_orders_unmap", message: "Không thể bỏ ghép biến thể này vì đã có đơn hàng sử dụng mapping." };
+    case "CM002":
+      return {
+        ok: false,
+        code: "used_by_orders_remap",
+        message: "Mapping đã được sử dụng trong đơn hàng lịch sử. Không thể đổi trực tiếp (chỉ admin điều chỉnh có ghi lý do).",
+      };
+    case "CM003":
+      return { ok: false, code: "invalid", message: error.message ?? fallback };
+    case "CM004":
+      return { ok: false, code: "not_found", message: error.message ?? fallback };
+    default:
+      return { ok: false, message: fallback };
+  }
+}
 
 /** Manual mapping. Both ids are re-validated server-side; nothing else from the browser is trusted. */
 export async function mapChannelModelToProduct(
@@ -173,13 +217,14 @@ export async function mapChannelModelToProduct(
       mapping_review_required: false,
     })
     .eq("id", input.channelModelId);
-  return error ? { ok: false, message: "Không lưu được mapping." } : { ok: true };
+  if (error) return guardError(error, "Không lưu được mapping.");
+  await backfillUnmappedOrderItemsForModel(db, input.channelModelId);
+  return { ok: true };
 }
 
 /**
- * Unmap. TODO(SHOPEE-3): once channel_order_items reference mapped units,
- * refuse to unmap (or require an explicit re-map) when orders already use
- * this mapping, so historical COGS/identity is never silently changed.
+ * Unmap. Refused by the database (CM001) once any order item was resolved
+ * through this unit — historical order lines must keep their product.
  */
 export async function unmapChannelModel(db: SupabaseClient, input: { channelModelId: string }): Promise<MappingActionResult> {
   const { data, error } = await db
@@ -187,7 +232,28 @@ export async function unmapChannelModel(db: SupabaseClient, input: { channelMode
     .update({ internal_product_id: null, mapping_status: "unmapped", mapped_at: null, mapped_by: null, mapping_review_required: false })
     .eq("id", input.channelModelId)
     .select("id");
-  if (error) return { ok: false, message: "Không bỏ ghép được." };
-  if (!data || data.length === 0) return { ok: false, message: "Không tìm thấy biến thể Shopee." };
+  if (error) return guardError(error, "Không bỏ ghép được.");
+  if (!data || data.length === 0) return { ok: false, code: "not_found", message: "Không tìm thấy biến thể Shopee." };
+  return { ok: true };
+}
+
+/**
+ * Controlled remap of a unit that orders already use: new product required,
+ * written reason required, recorded in channel_model_mapping_history.
+ * Affects FUTURE order lines only — existing order items keep their own
+ * internal_product_id snapshot.
+ */
+export async function changeChannelModelMappingControlled(
+  db: SupabaseClient,
+  input: { channelModelId: string; internalProductId: string; reason: string; changedBy: string },
+): Promise<MappingActionResult> {
+  const { error } = await db.rpc("change_channel_model_mapping", {
+    p_channel_model_id: input.channelModelId,
+    p_internal_product_id: input.internalProductId,
+    p_reason: input.reason,
+    p_changed_by: input.changedBy,
+  });
+  if (error) return guardError(error, "Không điều chỉnh được mapping.");
+  await backfillUnmappedOrderItemsForModel(db, input.channelModelId); // only NULL lines
   return { ok: true };
 }

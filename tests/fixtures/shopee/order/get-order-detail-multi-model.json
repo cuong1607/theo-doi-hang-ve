@@ -1,0 +1,29 @@
+{
+  "error": "",
+  "message": "",
+  "warning": "",
+  "request_id": "fixture-order-detail-multi-model",
+  "response": {
+    "order_list": [
+      {
+        "order_sn": "251013MODELS03",
+        "order_status": "SHIPPED",
+        "create_time": 1760320000,
+        "update_time": 1760330000,
+        "pay_time": 1760320100,
+        "pickup_done_time": 1760325000,
+        "currency": "VND",
+        "cod": false,
+        "payment_method": "ShopeePay",
+        "total_amount": 420000,
+        "estimated_shipping_fee": 25000,
+        "shipping_carrier": "SPX Express",
+        "item_list": [
+          { "order_item_id": 300001, "item_id": 800000102, "item_name": "Bao vệ đệm thường", "item_sku": "BVD-THUONG", "model_id": 9000001021, "model_name": "1m6x2m", "model_sku": "bao_ve_dem_thuong_m6x2m", "model_original_price": 99000, "model_discounted_price": 90000, "model_quantity_purchased": 1 },
+          { "order_item_id": 300002, "item_id": 800000102, "item_name": "Bao vệ đệm thường", "item_sku": "BVD-THUONG", "model_id": 9000001022, "model_name": "1m8x2m", "model_sku": "bao_ve_dem_thuong_m8x2m", "model_original_price": 109000, "model_discounted_price": 100000, "model_quantity_purchased": 2 },
+          { "order_item_id": 300003, "item_id": 800000102, "item_name": "Bao vệ đệm thường", "item_sku": "BVD-THUONG", "model_id": 9000001023, "model_name": "2mx2m2", "model_sku": "", "model_original_price": 125000, "model_discounted_price": 115000, "model_quantity_purchased": 1 }
+        ]
+      }
+    ]
+  }
+}

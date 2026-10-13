@@ -1,0 +1,29 @@
+{
+  "error": "",
+  "message": "SYNTHETIC fixture: bundle deal lines share one order_item_id; an add-on line repeats the same item/model/order_item_id as its main line. Real provider behaviour UNVERIFIED.",
+  "warning": "",
+  "request_id": "fixture-order-detail-bundle-addon",
+  "response": {
+    "order_list": [
+      {
+        "order_sn": "251013BUNDLE07",
+        "order_status": "READY_TO_SHIP",
+        "create_time": 1760380000,
+        "update_time": 1760380300,
+        "pay_time": 1760380100,
+        "currency": "VND",
+        "cod": false,
+        "payment_method": "Online Payment",
+        "total_amount": 315000,
+        "estimated_shipping_fee": 15000,
+        "shipping_carrier": "SPX Express",
+        "item_list": [
+          { "order_item_id": 700001, "item_id": 800000101, "item_name": "Ga chống thấm 1m6x2m cao 10cm", "item_sku": "GA_CHONG_THAM_1M6X2MX10CM", "model_id": 0, "model_original_price": 59000, "model_discounted_price": 40000, "model_quantity_purchased": 1, "promotion_type": "bundle_deal", "promotion_id": 9001 },
+          { "order_item_id": 700001, "item_id": 800000102, "item_name": "Bao vệ đệm thường", "item_sku": "BVD-THUONG", "model_id": 9000001021, "model_name": "1m6x2m", "model_sku": "bao_ve_dem_thuong_m6x2m", "model_original_price": 99000, "model_discounted_price": 80000, "model_quantity_purchased": 1, "promotion_type": "bundle_deal", "promotion_id": 9001 },
+          { "order_item_id": 700002, "item_id": 800000102, "item_name": "Bao vệ đệm thường", "item_sku": "BVD-THUONG", "model_id": 9000001022, "model_name": "1m8x2m", "model_sku": "bao_ve_dem_thuong_m8x2m", "model_original_price": 109000, "model_discounted_price": 100000, "model_quantity_purchased": 1, "add_on_deal": true, "add_on_deal_id": 9002, "main_item": true },
+          { "order_item_id": 700002, "item_id": 800000102, "item_name": "Bao vệ đệm thường", "item_sku": "BVD-THUONG", "model_id": 9000001022, "model_name": "1m8x2m", "model_sku": "bao_ve_dem_thuong_m8x2m", "model_original_price": 109000, "model_discounted_price": 80000, "model_quantity_purchased": 1, "add_on_deal": true, "add_on_deal_id": 9002, "main_item": false }
+        ]
+      }
+    ]
+  }
+}

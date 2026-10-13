@@ -1,0 +1,27 @@
+{
+  "error": "",
+  "message": "",
+  "warning": "",
+  "request_id": "fixture-order-detail-unmapped",
+  "response": {
+    "order_list": [
+      {
+        "order_sn": "251013UNMAP004",
+        "order_status": "READY_TO_SHIP",
+        "create_time": 1760340000,
+        "update_time": 1760340500,
+        "pay_time": 1760340100,
+        "currency": "VND",
+        "cod": false,
+        "payment_method": "Online Payment",
+        "total_amount": 98000,
+        "estimated_shipping_fee": 15000,
+        "shipping_carrier": "SPX Express",
+        "item_list": [
+          { "order_item_id": 400001, "item_id": 800000104, "item_name": "Ga cũ ngừng bán", "item_sku": "SKU_KHONG_TON_TAI_TRONG_HE_THONG", "model_id": 0, "model_original_price": 49000, "model_discounted_price": 49000, "model_quantity_purchased": 1 },
+          { "order_item_id": 400002, "item_id": 800000199, "item_name": "Sản phẩm chưa có trong danh mục Shopee đã đồng bộ", "item_sku": "SP_MOI_CHUA_SYNC", "model_id": 0, "model_original_price": 49000, "model_discounted_price": 49000, "model_quantity_purchased": 1 }
+        ]
+      }
+    ]
+  }
+}

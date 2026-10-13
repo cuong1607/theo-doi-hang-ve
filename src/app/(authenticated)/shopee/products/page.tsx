@@ -8,9 +8,8 @@ import {
   getShopeeProductMappingSummary,
   getShopeeProducts,
   type ChannelModelFilters,
-  type ChannelModelListRow,
 } from "@/lib/channels/core/product-queries";
-import { isMappingStatus, type MappingStatus } from "@/lib/channels/core/types";
+import { isMappingStatus } from "@/lib/channels/core/types";
 import { getShopeeConfig } from "@/lib/channels/shopee/config";
 import { getShopeeProviderMode } from "@/lib/channels/shopee/provider-mode";
 import { Badge } from "@/components/ui/badge";
@@ -18,67 +17,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ListPagination } from "@/components/list-pagination";
 
-import { ModelRowActions, type ModelRowView } from "./model-row-actions";
+import { fmtDate, formatDecimal, MAPPING_LABELS, MAPPING_VARIANT, toModelView } from "../shared";
+import { ModelRowActions } from "./model-row-actions";
 import { ShopeeProductFilters } from "./product-filters";
 import { CreateFixtureShopButton, ShopSyncControls } from "./sync-controls";
 
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 20;
-
-const MAPPING_LABELS: Record<MappingStatus, string> = {
-  unmapped: "Chưa ghép",
-  auto_mapped: "Tự động ghép",
-  manual_mapped: "Ghép thủ công",
-  mapping_conflict: "Xung đột",
-};
-
-const MAPPING_VARIANT: Record<MappingStatus, "default" | "secondary" | "destructive" | "outline"> = {
-  unmapped: "secondary",
-  auto_mapped: "outline",
-  manual_mapped: "default",
-  mapping_conflict: "destructive",
-};
-
-const dateTime = new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-const fmtDate = (iso: string | null) => (iso ? dateTime.format(new Date(iso)) : "—");
-
-/** Formats a NUMERIC string for display without converting it to a float. */
-function formatDecimal(value: string | null, unit = ""): string {
-  if (value === null) return "—";
-  const [intPart, frac = ""] = value.replace(/^-/, "").split(".");
-  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  const trimmedFrac = frac.replace(/0+$/, "");
-  return `${value.startsWith("-") ? "-" : ""}${grouped}${trimmedFrac ? `,${trimmedFrac}` : ""}${unit}`;
-}
-
-function toView(row: ChannelModelListRow): ModelRowView {
-  return {
-    channelModelId: row.channelModelId,
-    shopName: row.shopName,
-    externalItemId: row.externalItemId,
-    externalModelId: row.externalModelId,
-    isSynthetic: row.isSynthetic,
-    itemName: row.itemName,
-    modelName: row.modelName,
-    itemSku: row.itemSku,
-    modelSku: row.modelSku,
-    itemStatus: row.itemStatus,
-    modelStatus: row.modelStatus,
-    isKit: row.isKit,
-    priceText:
-      row.channelCurrentPrice === row.channelOriginalPrice || !row.channelOriginalPrice
-        ? formatDecimal(row.channelCurrentPrice, " ₫")
-        : `${formatDecimal(row.channelCurrentPrice, " ₫")} (gốc ${formatDecimal(row.channelOriginalPrice, " ₫")})`,
-    availableStock: row.availableStock === null ? null : formatDecimal(row.availableStock),
-    reservedStock: row.reservedStock === null ? null : formatDecimal(row.reservedStock),
-    lastSyncedText: fmtDate(row.lastSyncedAt),
-    removed: row.removedAt !== null,
-    internalSku: row.internalSku,
-    internalProductName: row.internalProductName,
-    mappingLabel: `${MAPPING_LABELS[row.mappingStatus]}${row.mappingReviewRequired ? " · cần kiểm tra lại" : ""}`,
-  };
-}
 
 function SummaryCard({ label, value, tone }: { label: string; value: number; tone?: "warn" | "danger" }) {
   const color = tone === "danger" && value > 0 ? "text-destructive" : tone === "warn" && value > 0 ? "text-amber-600" : "";
@@ -248,7 +194,7 @@ export default async function ShopeeProductsPage({
                 </TableHeader>
                 <TableBody>
                   {rows.map((row) => {
-                    const view = toView(row);
+                    const view = toModelView(row);
                     return (
                       <TableRow key={row.channelModelId} className={row.isActive ? "" : "opacity-60"}>
                         <TableCell className="whitespace-nowrap">
@@ -287,7 +233,7 @@ export default async function ShopeeProductsPage({
                         <TableCell className="text-xs">{row.itemStatus ?? "—"}</TableCell>
                         <TableCell className="text-xs whitespace-nowrap">{fmtDate(row.lastSyncedAt)}</TableCell>
                         <TableCell className="text-right">
-                          <ModelRowActions row={view} canMap={canMap} />
+                          <ModelRowActions row={view} canMap={canMap} canManage={canManage} />
                         </TableCell>
                       </TableRow>
                     );
