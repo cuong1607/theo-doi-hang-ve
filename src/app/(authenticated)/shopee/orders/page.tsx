@@ -15,9 +15,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ListPagination } from "@/components/list-pagination";
 
 import { fmtDate, formatDecimal } from "../shared";
-import { COGS_LABELS, FINANCIAL_STATUS_LABELS, READINESS_LABELS, READINESS_VARIANT } from "./labels";
+import { COGS_LABELS, COGS_VARIANT, FINANCIAL_STATUS_LABELS, READINESS_LABELS, READINESS_VARIANT } from "./labels";
 import { OrderFilters } from "./order-filters";
-import { OrderSyncControls } from "./order-sync-controls";
+import { BackfillCogsButton, OrderSyncControls } from "./order-sync-controls";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +30,7 @@ type Params = { shop?: string; status?: string; mapping?: string; financial?: st
 export default async function ShopeeOrdersPage({ searchParams }: { searchParams: Promise<Params> }) {
   const auth = await requirePermission("channel:view");
   const canManage = hasPermission(auth.profile.role, "channel:manage");
+  const canManageCost = hasPermission(auth.profile.role, "cost:manage");
   const params = await searchParams;
   const page = Math.max(1, Number(params.page) || 1);
 
@@ -116,6 +117,7 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                 </div>
               );
             })}
+            {canManageCost && <BackfillCogsButton />}
           </CardContent>
         </Card>
       )}
@@ -185,7 +187,12 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                           {o.mappingReadiness === "partial" ? ` ${o.mappedLines}/${o.lineCount}` : ""}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{COGS_LABELS[o.cogsReadiness]}</TableCell>
+                      <TableCell>
+                        <Badge variant={COGS_VARIANT[o.cogsReadiness]}>
+                          {COGS_LABELS[o.cogsReadiness]}
+                          {o.cogsReadiness === "partial" ? ` ${o.costedLines}/${o.lineCount}` : ""}
+                        </Badge>
+                      </TableCell>
                       <TableCell className="text-xs">{FINANCIAL_STATUS_LABELS[o.financialStatus] ?? o.financialStatus}</TableCell>
                     </TableRow>
                   ))}

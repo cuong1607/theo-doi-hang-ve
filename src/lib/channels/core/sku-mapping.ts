@@ -166,8 +166,15 @@ export async function backfillUnmappedOrderItemsForModel(db: SupabaseClient, cha
     .update({ internal_product_id: model.internal_product_id })
     .eq("channel_model_id", channelModelId)
     .is("internal_product_id", null)
-    .select("id");
+    .select("id, order_id");
   if (updError) throw new Error(`Không cập nhật được dòng đơn: ${updError.message}`);
+  // SHOPEE-4: the newly mapped lines can now be costed (immutable snapshots
+  // elsewhere in those orders are untouched by the SQL engine).
+  const orderIds = [...new Set(((data ?? []) as Array<{ order_id: string }>).map((r) => r.order_id))];
+  for (const orderId of orderIds) {
+    const { error: costError } = await db.rpc("cost_process_order", { p_order_id: orderId });
+    if (costError) console.warn(JSON.stringify({ source: "cost", event: "COGS_AFTER_MAPPING_FAILED", orderId, message: costError.message }));
+  }
   return data?.length ?? 0;
 }
 

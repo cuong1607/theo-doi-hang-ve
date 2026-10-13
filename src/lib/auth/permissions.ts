@@ -33,6 +33,7 @@ export const PERMISSIONS = {
   "product:view": ALL,
   "supplier:view": ALL,
   "channel:view": ALL, // sales-channel data (Shopee shops, orders, financials)
+  "cost:view": ALL, // inventory cost ledger / moving average (read-only audit)
 
   // Day-to-day operations — admin + staff.
   "receipt:create": OPERATORS,
@@ -49,6 +50,7 @@ export const PERMISSIONS = {
   "notification:manage": ADMIN, // recipients, retry, test sends, report sends
   "integration:manage": ADMIN, // Zalo OA connect / test message
   "channel:manage": ADMIN, // shops, channel connections/tokens, sync config
+  "cost:manage": ADMIN, // rebuild cost ledger, backfill order COGS
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

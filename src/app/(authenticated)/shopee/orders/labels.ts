@@ -16,9 +16,22 @@ export const READINESS_VARIANT: Record<MappingReadiness, "default" | "secondary"
 
 /** COGS is never shown as 0 when unknown. */
 export const COGS_LABELS: Record<CogsReadiness, string> = {
-  complete: "Đã tính",
-  pending: "Chưa tính",
-  incomplete: "Chưa tính (thiếu mapping)",
+  complete: "Đầy đủ",
+  partial: "Một phần",
+  incomplete: "Chưa tính",
+};
+
+export const COGS_VARIANT: Record<CogsReadiness, "default" | "secondary" | "destructive" | "outline"> = {
+  complete: "outline",
+  partial: "destructive",
+  incomplete: "secondary",
+};
+
+export const COST_METHOD_LABELS: Record<string, string> = {
+  moving_average: "Bình quân di động",
+  fifo: "FIFO",
+  manual: "Thủ công",
+  unknown: "Không rõ",
 };
 
 export const FINANCIAL_STATUS_LABELS: Record<string, string> = {

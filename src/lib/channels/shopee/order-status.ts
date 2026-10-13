@@ -20,6 +20,18 @@ export function isOrderCancelled(status: string | null | undefined): boolean {
   return status === "CANCELLED";
 }
 
+/**
+ * Statuses whose lines leave costing inventory (sale_out). Mirror of the
+ * database rule public.cost_order_status_eligible() — the DB is
+ * authoritative and a test asserts both agree. UNPAID never posts;
+ * CANCELLED reverses a previous posting.
+ */
+const INVENTORY_OUT = new Set(["READY_TO_SHIP", "PROCESSED", "RETRY_SHIP", "SHIPPED", "TO_CONFIRM_RECEIVE", "COMPLETED"]);
+
+export function isOrderEligibleForInventoryOut(status: string | null | undefined): boolean {
+  return !!status && INVENTORY_OUT.has(status);
+}
+
 /** COMPLETED orders become eligible for escrow/income sync (SHOPEE-5) — nothing is called yet. */
 export function isFinancialSyncEligible(status: string | null | undefined): boolean {
   return isOrderCompleted(status);

@@ -277,7 +277,8 @@ test("16 + 17 + 18 + 21. readiness complete / partial / unmapped; SKU text never
     ]),
   ).service.sync(shopId);
   const by = Object.fromEntries((await summary(shopId)).map((r) => [r.external_order_sn, r]));
-  assert.deepEqual([by[`${TAG}ALL`].mapping_readiness, by[`${TAG}ALL`].cogs_readiness], ["complete", "pending"], "mapped but no cost yet → COGS pending");
+  // SHOPEE-4 semantics: no line has COGS (the product has no receipts → no known cost) → incomplete.
+  assert.deepEqual([by[`${TAG}ALL`].mapping_readiness, by[`${TAG}ALL`].cogs_readiness], ["complete", "incomplete"], "mapped but no known cost → COGS incomplete");
   assert.deepEqual([by[`${TAG}PART`].mapping_readiness, by[`${TAG}PART`].cogs_readiness], ["partial", "incomplete"]);
   assert.deepEqual([by[`${TAG}NONE`].mapping_readiness, by[`${TAG}NONE`].cogs_readiness], ["unmapped", "incomplete"]);
   const none = await lines(`${TAG}NONE`, shopId);

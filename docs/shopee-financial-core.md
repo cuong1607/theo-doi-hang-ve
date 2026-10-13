@@ -871,6 +871,145 @@ sản phẩm không biến thể. Đặc biệt xác nhận:
 Chưa khoá constraint / identity strategy dựa trên Response Example trước khi có
 payload thật.
 
+## Inventory Cost & COGS Engine (SHOPEE-4)
+
+Migration `00043_inventory_cost_engine.sql`; facade `src/lib/inventory-cost/engine.ts`
+(`CostEngine`: `postPurchase`, `postSale` / `calculateOrderItemCogs`, `postSaleReversal`,
+`processOrder`, `getCurrentCost`, `rebuildProduct`, `rebuildAll`, `backfillOrderCogs`);
+queries `src/lib/inventory-cost/queries.ts`; UI `/inventory/costs`, `/inventory/costs/[productId]`.
+
+### Vì sao Moving Weighted Average (bình quân di động)
+
+Đơn giản, tất định, phù hợp hàng đồng chất (ga, bao đệm…) và không cần theo dõi lô.
+FIFO **không** làm ở v1. Giá vốn là dữ liệu **nội bộ** — không dùng giá bán / giá gốc
+Shopee, `cost_of_goods_sold` của Shopee hay `products.current_price`.
+
+### Kiến trúc: toàn bộ phép tính nằm trong PostgreSQL
+
+```
+receipt_items ──trigger──► purchase_in ┐
+channel_order_items ──► sale_out       ├─► inventory_cost_ledger ─replay─► product_cost_state
+huỷ đơn ──► sale_reversal_in           │                         └─► COGS snapshot trên dòng đơn
+tồn đầu kỳ / điều chỉnh (thủ công) ────┘
+```
+
+- Mọi phép tính (bình quân, làm tròn) là hàm PL/pgSQL trên **NUMERIC** chính xác, chạy
+  trong transaction có khoá dòng. JS **không** làm toán tiền — chỉ truyền id và đọc chuỗi.
+  Vì vậy không cần thêm thư viện decimal.
+- `inventory_cost_ledger` = lịch sử; `product_cost_state` = vị trí hiện tại (đọc nhanh).
+- Ledger là **cấp sản phẩm nội bộ**, không theo shop: mọi kênh dùng chung một giá vốn.
+
+### Công thức
+
+- **IN** (purchase, tồn đầu kỳ, hoàn kho, hàng trả, điều chỉnh tăng — đơn giá `c` đã biết):
+  `avg_mới = round((SL_cũ × avg_cũ + SL_vào × c) / (SL_cũ + SL_vào), 4)`.
+  Nếu `SL_cũ ≤ 0` hoặc chưa có avg → `avg_mới = c` (phần âm đã được tính giá vốn khi bán).
+- **OUT** (sale, điều chỉnh giảm): `COGS = round(SL_ra × avg, 2)`, avg **giữ nguyên**,
+  `giá trị tồn = round(SL × avg, 2)`.
+- Ví dụ: 100 @ 100.000 + 50 @ 130.000 → 150 @ 110.000 (16.500.000); bán 3 → COGS 330.000,
+  còn 147 @ 110.000 (16.170.000); nhập 10 @ 140.000 → 157 @ 111.910,8280.
+
+### Loại sự kiện
+
+`opening_balance`, `purchase_in`, `sale_out`, `sale_reversal_in`, `return_in`,
+`adjustment_in`, `adjustment_out` (CHECK). IN bắt buộc có đơn giá; dấu số lượng: IN dương,
+OUT âm. `source_type` ∈ `receipt_item`, `channel_order_item`, `manual_adjustment`,
+`opening_balance`, `return_item`; `source_id` là tham chiếu logic (đa hình → không FK).
+
+### Thứ tự sự kiện (tất định)
+
+Mỗi sản phẩm luôn được tính theo `(event_time, order_key, id)`:
+- Phiếu nhập: `event_time = receipt_date 00:00 (Asia/Ho_Chi_Minh)`,
+  `order_key = "1|receipt.created_at|item.created_at|item.id"` → đúng thứ tự
+  receipt_date → receipt.created_at → item.created_at → id. Hàng nhập trong ngày được
+  tính **trước** đơn bán cùng ngày.
+- Tồn đầu kỳ `0|…`, bán `2|order_sn|line_key`, hoàn kho `3|…`, điều chỉnh `4|…`.
+- Sự kiện đến muộn (phiếu nhập lùi ngày, đơn cũ sync sau) được chèn đúng chỗ rồi
+  **replay** toàn bộ sản phẩm → kết quả không phụ thuộc thứ tự nhập liệu.
+
+### Thời điểm tính giá vốn của đơn
+
+`order_cost_event_time = paid_at_channel ?? created_at_channel`. Trạng thái được trừ kho
+(một nơi duy nhất: SQL `cost_order_status_eligible`, mirror TS
+`isOrderEligibleForInventoryOut`, có test so khớp): `READY_TO_SHIP, PROCESSED, RETRY_SHIP,
+SHIPPED, TO_CONFIRM_RECEIVE, COMPLETED`. `UNPAID` / `IN_CANCEL` / `TO_RETURN` không trừ;
+`CANCELLED` → hoàn kho. Order sync tự gọi `cost_process_order` sau mỗi đơn (lỗi giá vốn
+không làm hỏng đồng bộ đơn). Ghép SKU muộn → backfill dòng NULL rồi tính COGS ngay.
+
+### Snapshot COGS bất biến
+
+Dòng đơn lưu `cost_method = moving_average`, `cost_per_unit_snapshot` (4 dp), `total_cogs`
+(2 dp), `cogs_calculated_at`. Sau khi chốt, **DB chặn** đổi sản phẩm / số lượng / các cột giá
+vốn (`CG001`) và xoá riêng dòng đó (`CG002`; xoá cả đơn/shop vẫn cascade). Nhập hàng mới,
+rebuild, đổi `current_price`, đổi mapping đều **không** ghi đè snapshot. Đính chính = luồng
+điều chỉnh tương lai.
+
+### Âm kho / thiếu giá vốn
+
+- **Âm kho được phép nhưng gắn cờ**: có avg → vẫn tính COGS theo avg, SL có thể âm,
+  `metadata.negative_inventory = true`; UI cảnh báo "Tồn kho giá vốn đang âm…".
+- **Không có avg** tại thời điểm bán → **không** ghi sự kiện bán, COGS = NULL ("Chưa tính"),
+  dòng đơn để `incomplete`. Không fallback sang `products.current_price` hay giá bán.
+  Phiếu nhập sau đó (lùi ngày trước thời điểm bán) → lần xử lý sau sẽ tính được.
+- **NULL ≠ 0**: giá nhập 0 đ là giá vốn 0 đã xác nhận; chưa có dữ liệu là NULL.
+
+### Hủy đơn
+
+Sự kiện `sale_reversal_in` **thêm vào** (không xoá `sale_out`), số lượng dương, đơn giá =
+**snapshot gốc** của dòng đơn; bình quân được tính lại như IN. Dòng đơn giữ snapshot và
+có `cogs_reversed_at`. Idempotent (một lần duy nhất).
+
+### Mức đơn hàng
+
+`v_channel_order_summary.cogs_readiness`: `complete` (mọi dòng có COGS) / `partial` /
+`incomplete`; `total_cogs` chỉ có khi complete (không tính dòng đã hoàn kho);
+`partial_cogs_sum` chỉ để chẩn đoán. `order_financials.internal_cogs` chỉ được ghi khi
+**mọi** dòng đã có COGS, ngược lại NULL. **Chưa tính lợi nhuận** (SHOPEE-5).
+
+### Phiếu nhập: tích hợp & rebuild
+
+- Trigger (statement-level) trên `receipt_items` INSERT/UPDATE/DELETE và đổi `receipt_date`
+  → `cost_rebuild_product_safe` cho sản phẩm bị ảnh hưởng, **cùng transaction** với phiếu.
+  Dùng `received_qty` (không dùng `delivered_qty`) và `receipt_items.unit_price`.
+- Sửa / xoá phiếu = rebuild sản phẩm (tất định): sự kiện mua được dựng lại từ phiếu hiện tại,
+  sự kiện bán / hoàn / thủ công giữ nguyên, rồi replay. Snapshot COGS đơn cũ **không đổi** →
+  ledger (bản dựng lại hiện tại) có thể khác snapshot lịch sử — **chủ đích**.
+- Lỗi giá vốn **không chặn** lưu phiếu: savepoint huỷ phần giá vốn, sản phẩm được gắn
+  `needs_rebuild` + `last_error` (UI "Cần tính lại"); admin bấm "Tính lại giá vốn".
+- Mọi lần tính lại ghi `inventory_cost_rebuilds` (lý do, người, trạng thái trước/sau).
+- **Sau khi deploy**: dữ liệu phiếu nhập cũ chưa có trong sổ cho tới khi admin bấm
+  "Tính lại giá vốn toàn bộ" (`cost_rebuild_all`) — rồi "Tính COGS còn thiếu" cho đơn.
+
+### Khoá / đồng thời / idempotency
+
+- Mọi thao tác khoá dòng `product_cost_state` (`SELECT … FOR UPDATE`) trước khi tính;
+  `cost_process_order` khoá trước mọi sản phẩm của đơn theo thứ tự id (tránh deadlock);
+  dòng đơn khoá `FOR UPDATE` → không bao giờ trừ kho 2 lần.
+- `UNIQUE(source_type, source_id, event_type) WHERE source_id IS NOT NULL` (partial vì NULL
+  khác nhau trong unique index; sự kiện thủ công không có source).
+- Hàm chỉ `service_role` gọi được; bảng chỉ đọc với user đã đăng nhập (RLS); không ghi trực tiếp.
+
+### Làm tròn (tập trung)
+
+`cost_round_cost` / `cost_round_qty` = 4 chữ số, `cost_round_money` = 2 chữ số (SQL). Hiển thị
+VND không làm tròn thêm phần nguyên; UI định dạng chuỗi, không đổi sang float.
+
+### Lưu ý về số lượng
+
+`quantity_on_hand` là **"SL tính giá vốn"** = hàng nhập đã biết − hàng bán đã ghi nhận.
+**Không** phải tồn kho thực tế cho tới khi có kiểm kê / nhập tồn đầu kỳ (`opening_balance`
+qua `cost_post_manual_event`, chưa có import tự động).
+
+### Giới hạn & mở rộng sau
+
+- Giá vốn đầu vào = `receipt_items.unit_price`; **chưa** phân bổ VAT công ty / chiết khấu hộ
+  kinh doanh từ hoá đơn NCC (landed cost) — làm ở phase riêng nếu cần. Không trộn chiết khấu
+  Shopee với chiết khấu mua hàng.
+- Hàng trả (SHOPEE-6): `return_in` dùng **snapshot gốc** của dòng đơn khi hàng nhập lại kho.
+- Đổi số lượng của dòng đơn đã chốt giá vốn bị chặn (`CG001`) → lượt sync đó báo lỗi cho đơn
+  để xử lý tay.
+- Không có kho/địa điểm, không đối soát tồn thực tế, không FIFO.
+
 ## Snapshot retention (thiết kế — chưa triển khai)
 
 Áp dụng **trước khi** bật sync định kỳ trên production (carry-forward #6). Chưa

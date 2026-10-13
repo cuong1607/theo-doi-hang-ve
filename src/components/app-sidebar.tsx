@@ -17,6 +17,7 @@ import {
   Store,
   ShoppingBag,
   ReceiptText,
+  Calculator,
 } from "lucide-react";
 
 import {
@@ -107,6 +108,12 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
         title: "Nhà cung cấp",
         href: "/suppliers",
         icon: Truck,
+      },
+      {
+        title: "Giá vốn",
+        href: "/inventory/costs",
+        icon: Calculator,
+        permission: "cost:view",
       },
       {
         title: "Sản phẩm Shopee",

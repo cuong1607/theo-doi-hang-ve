@@ -5,7 +5,20 @@ import { AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
-import { syncShopeeOrdersAction, type OrderActionResult } from "./actions";
+import { backfillOrderCogsAction, syncShopeeOrdersAction, type OrderActionResult } from "./actions";
+
+export function BackfillCogsButton() {
+  const [pending, startTransition] = useTransition();
+  const [result, setResult] = useState<OrderActionResult | null>(null);
+  return (
+    <div className="space-y-2 border-t pt-4">
+      <Button size="sm" variant="outline" disabled={pending} onClick={() => startTransition(async () => setResult(await backfillOrderCogsAction()))}>
+        {pending ? "Đang tính..." : "Tính COGS còn thiếu"}
+      </Button>
+      {result && <p className={`text-sm ${result.ok ? "text-primary" : "text-destructive"}`}>{result.message}</p>}
+    </div>
+  );
+}
 
 export function OrderSyncControls({ shopId, disabled }: { shopId: string; disabled?: boolean }) {
   const [pending, startTransition] = useTransition();

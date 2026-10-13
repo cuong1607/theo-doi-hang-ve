@@ -32,6 +32,7 @@ import { saveMeaningfulOrderSnapshot } from "../core/snapshots.ts";
 import { finishSyncLog, getSyncState, hasRunningSync, saveSyncState, startSyncLog, type SyncCounts } from "../core/sync-log.ts";
 import { mapWithConcurrency, splitTimeWindows, type TimeWindow } from "../core/time-windows.ts";
 import type { SyncLogStatus } from "../core/types.ts";
+import { CostEngine } from "../../inventory-cost/engine.ts";
 import { consoleShopeeLogger, type ShopeeLogger } from "./client.ts";
 import { ShopeeApiError } from "./errors.ts";
 import { orderFingerprint, parseOrderDetails, parseOrderListPage } from "./order-adapter.ts";
@@ -70,6 +71,8 @@ export interface OrderSyncResult {
   ordersCancelled: number;
   mapping: { complete: number; partial: number; unmapped: number };
   linesUnresolved: number;
+  /** COGS outcomes per line (calculated, no_cost, unmapped, ineligible, already, reversed, …). */
+  cogs: Record<string, number>;
   failures: Array<{ externalId: string | null; reason: string }>;
   errorCode?: string;
   errorMessage?: string;
@@ -105,6 +108,7 @@ export class ShopeeOrderSyncService {
   private readonly now: () => Date;
   private readonly log: ShopeeLogger;
   private readonly detailConcurrency: number;
+  private readonly costs: Pick<CostEngine, "processOrder">;
 
   constructor(deps: {
     db: SupabaseClient;
@@ -113,8 +117,10 @@ export class ShopeeOrderSyncService {
     now?: () => Date;
     logger?: ShopeeLogger;
     detailConcurrency?: number;
+    costs?: Pick<CostEngine, "processOrder">;
   }) {
     this.db = deps.db;
+    this.costs = deps.costs ?? new CostEngine({ db: deps.db, logger: () => {} });
     this.provider = deps.provider;
     this.products = deps.products ?? null;
     this.now = deps.now ?? (() => new Date());
@@ -174,7 +180,16 @@ export class ShopeeOrderSyncService {
     const counts: SyncCounts = { fetched: 0, created: 0, updated: 0, failed: 0 };
     const failures: Array<{ externalId: string | null; reason: string }> = [];
     const failedSns = new Set<string>();
-    const stats = { windowsProcessed: 0, windowsFailed: 0, pagesFetched: 0, detailsFetched: 0, ordersCompleted: 0, ordersCancelled: 0, linesUnresolved: 0 };
+    const stats = {
+      windowsProcessed: 0,
+      windowsFailed: 0,
+      pagesFetched: 0,
+      detailsFetched: 0,
+      ordersCompleted: 0,
+      ordersCancelled: 0,
+      linesUnresolved: 0,
+      cogs: {} as Record<string, number>,
+    };
     const mapping = { complete: 0, partial: 0, unmapped: 0 };
     let storedOrders = 0;
 
@@ -203,6 +218,7 @@ export class ShopeeOrderSyncService {
           mappingPartial: mapping.partial,
           mappingUnmapped: mapping.unmapped,
           linesUnresolved: stats.linesUnresolved,
+          cogs: stats.cogs,
           failures: failures.slice(0, MAX_FAILURES_IN_LOG),
         },
       });
@@ -228,6 +244,7 @@ export class ShopeeOrderSyncService {
         ordersCancelled: stats.ordersCancelled,
         mapping,
         linesUnresolved: stats.linesUnresolved,
+        cogs: stats.cogs,
         failures,
         errorCode: first?.code,
         errorMessage: first?.message,
@@ -299,6 +316,15 @@ export class ShopeeOrderSyncService {
           try {
             const saved = await upsertChannelOrder(this.db, shopId, order, syncedIso);
             const items = await upsertChannelOrderItems(this.db, saved.orderId, order, units);
+            // SHOPEE-4: post COGS (eligible status) or reverse it (CANCELLED). A cost
+            // problem never fails the order sync — it only leaves COGS "chưa tính".
+            try {
+              const cogs = await this.costs.processOrder(saved.orderId);
+              for (const [key, n] of Object.entries(cogs)) stats.cogs[key] = (stats.cogs[key] ?? 0) + n;
+            } catch (err) {
+              stats.cogs.error = (stats.cogs.error ?? 0) + 1;
+              failures.push({ externalId: null, reason: `COGS ${order.externalOrderSn}: ${errorInfo(err).message}` });
+            }
             if (saved.created) counts.created++;
             else counts.updated++;
             storedOrders++;

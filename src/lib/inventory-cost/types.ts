@@ -1,27 +1,55 @@
 // ============================================================
-// PHASE SHOPEE-0: Internal Cost Engine — boundary only.
+// Internal Cost Engine — shared types (SHOPEE-0 boundary, implemented in
+// SHOPEE-4 by ./engine.ts + migration 00043).
 //
-// The future source of COGS for channel order lines: unit cost derived from
-// OUR purchase history (receipts/invoices), as of the order date. Never the
-// channel selling price, never products.current_price (that is today's
-// price, not a historical cost). Not implemented in SHOPEE-0.
+// COGS of a sale line = moving weighted average cost of the internal product
+// at the costing moment, derived from OUR receipts — never the channel
+// selling price, never products.current_price.
 // ============================================================
 import type { CostMethod, Decimal, Timestamp, Uuid } from "../channels/core/types.ts";
 
-export interface UnitCostQuery {
-  internalProductId: Uuid;
-  quantity: Decimal;
-  /** Cost is resolved as of this moment (order creation/pickup time). */
-  asOf: Timestamp;
+export const COST_EVENT_TYPES = [
+  "opening_balance",
+  "purchase_in",
+  "sale_out",
+  "sale_reversal_in",
+  "return_in",
+  "adjustment_in",
+  "adjustment_out",
+] as const;
+export type CostEventType = (typeof COST_EVENT_TYPES)[number];
+
+export const COST_EVENT_LABELS: Record<CostEventType, string> = {
+  opening_balance: "Tồn đầu kỳ",
+  purchase_in: "Nhập hàng",
+  sale_out: "Bán",
+  sale_reversal_in: "Hoàn kho (huỷ đơn)",
+  return_in: "Hàng trả về",
+  adjustment_in: "Điều chỉnh tăng",
+  adjustment_out: "Điều chỉnh giảm",
+};
+
+export interface CostLedgerEntry {
+  id: Uuid;
+  productId: Uuid;
+  eventType: CostEventType;
+  sourceType: string;
+  sourceId: Uuid | null;
+  sourceExternalId: string | null;
+  eventTime: Timestamp;
+  quantityChange: Decimal;
+  unitCost: Decimal | null;
+  movementCost: Decimal | null;
+  qtyBefore: Decimal;
+  qtyAfter: Decimal;
+  avgCostBefore: Decimal | null;
+  avgCostAfter: Decimal | null;
+  note: string | null;
+  negativeInventory: boolean;
 }
 
 export interface UnitCostResult {
   costMethod: CostMethod;
-  /** Frozen into channel_order_items.cost_per_unit_snapshot. */
   costPerUnit: Decimal;
   totalCost: Decimal;
-}
-
-export interface CostResolver {
-  resolveUnitCost(query: UnitCostQuery): Promise<UnitCostResult | null>;
 }
