@@ -9,12 +9,12 @@ const EXPECTED: Record<Role, Permission[]> = {
   admin: Object.keys(PERMISSIONS) as Permission[],
   staff: [
     "dashboard:view", "receipt:view", "invoice:view", "outstanding:view", "debt:view", "payment:view",
-    "product:view", "supplier:view", "receipt:create", "receipt:edit", "invoice:create", "invoice:edit",
+    "product:view", "supplier:view", "channel:view", "receipt:create", "receipt:edit", "invoice:create", "invoice:edit",
     "payment:create",
   ],
   viewer: [
     "dashboard:view", "receipt:view", "invoice:view", "outstanding:view", "debt:view", "payment:view",
-    "product:view", "supplier:view",
+    "product:view", "supplier:view", "channel:view",
   ],
 };
 

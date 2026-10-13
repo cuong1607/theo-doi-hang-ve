@@ -14,6 +14,7 @@ import {
   Wallet,
   Receipt,
   Bell,
+  Store,
 } from "lucide-react";
 
 import {
@@ -121,6 +122,12 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
         href: "/settings/notifications",
         icon: Bell,
         permission: "notification:manage",
+      },
+      {
+        title: "Tích hợp Shopee",
+        href: "/settings/shopee",
+        icon: Store,
+        permission: "channel:manage",
       },
     ],
   },
