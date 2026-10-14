@@ -19,6 +19,7 @@ import type { FinancialComponentCategory, FundedBy } from "../../financial/types
 import {
   ADJUSTMENT_ROW,
   ESCROW_FIELDS,
+  FINANCIAL_CALCULATION_VERSION,
   IGNORED_FIELD_PATTERNS,
   SIGNED_COLUMNS,
   type EscrowColumn,
@@ -47,7 +48,7 @@ export interface ParsedEscrow {
   /** order_financials columns; absent key = unknown (NULL). */
   fields: Partial<Record<EscrowColumn, Decimal>>;
   components: EscrowComponentInput[];
-  /** order_income fields not in the dictionary (stored as unverified components). */
+  /** NON-ZERO order_income fields not in the dictionary (stored as unverified components). */
   unknownFields: string[];
   /** Hash of the financially meaningful payload — unchanged → no rewrite. */
   fingerprint: string;
@@ -55,7 +56,8 @@ export interface ParsedEscrow {
   sanitized: unknown;
 }
 
-const PII_KEYS = new Set(["buyer_user_name"]);
+/** Never stored: buyer identity, and the seller tax / personal ID number. */
+const PII_KEYS = new Set(["buyer_user_name", "tax_registration_code"]);
 
 export function negate(d: Decimal): Decimal {
   if (/^-?0+(\.0+)?$/.test(d)) return d.replace(/^-/, "");
@@ -135,10 +137,11 @@ export function parseEscrowDetail(raw: unknown, options: { currency?: string | n
     const decimal = toDecimalString(value);
     if (decimal === null) continue; // non-numeric scalar (ids, flags) — not money
     const known = ESCROW_FIELDS[key];
-    if (!known) unknownFields.push(key);
     const def: EscrowFieldDefinition = known ?? { ...UNKNOWN_FIELD, type: key };
     if (def.column) fields[def.column] = SIGNED_COLUMNS.has(def.column) ? decimal : abs(decimal);
     if (isZero(decimal)) continue;
+    // Only NON-ZERO unknown fields matter: other markets' fields arrive as 0 on every VN order.
+    if (!known) unknownFields.push(key);
     components.push({
       component_key: key,
       component_type: def.type,
@@ -184,7 +187,8 @@ export function parseEscrowDetail(raw: unknown, options: { currency?: string | n
     fields,
     components,
     unknownFields,
-    fingerprint: sha({ order_income: (sanitized as { response: Record<string, unknown> }).response.order_income }),
+    // version included: a dictionary change must recompute even when Shopee's payload is identical
+    fingerprint: sha({ version: FINANCIAL_CALCULATION_VERSION, order_income: (sanitized as { response: Record<string, unknown> }).response.order_income }),
     sanitized,
   };
 }

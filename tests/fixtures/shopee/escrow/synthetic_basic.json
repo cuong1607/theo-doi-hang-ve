@@ -1,5 +1,5 @@
 {
-  "_note": "SYNTHETIC fixture built from the documented v2.payment.get_escrow_detail shape - NOT a real Shopee payload. Replace/extend with sanitized real payloads (docs/shopee-financial-validation.md).",
+  "_note": "SYNTHETIC fixture (documented shape, numbers consistent with the formula verified on real VN payloads: 200000-20000-9000-6000-4000-7000-3000+15000-15000 = 151000) - NOT a real Shopee payload.",
   "error": "",
   "message": "",
   "request_id": "fixture-escrow-basic",
@@ -15,7 +15,7 @@
       "order_discounted_price": 170000,
       "seller_discount": 20000,
       "shopee_discount": 5000,
-      "voucher_from_seller": 10000,
+      "voucher_from_seller": 0,
       "voucher_from_shopee": 0,
       "coins": 0,
       "buyer_paid_shipping_fee": 15000,
@@ -28,7 +28,7 @@
       "seller_lost_compensation": 0,
       "seller_coin_cash_back": 0,
       "escrow_tax": 0,
-      "final_shipping_fee": 0,
+      "final_shipping_fee": -15000,
       "actual_shipping_fee": 15000,
       "shopee_shipping_rebate": 0,
       "shipping_fee_discount_from_3pl": 0,
@@ -47,7 +47,18 @@
       "total_adjustment_amount": 0,
       "escrow_amount_after_adjustment": 151000,
       "order_adjustment": [],
-      "items": [{ "item_id": 1, "model_id": 0, "quantity_purchased": 1, "original_price": 200000, "discounted_price": 170000 }]
+      "items": [
+        {
+          "item_id": 1,
+          "model_id": 0,
+          "quantity_purchased": 1,
+          "original_price": 200000,
+          "discounted_price": 170000
+        }
+      ],
+      "withholding_vat_tax": 7000,
+      "withholding_pit_tax": 3000,
+      "credit_card_transaction_fee": 4000
     }
   }
 }

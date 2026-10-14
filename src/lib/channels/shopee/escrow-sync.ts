@@ -213,6 +213,7 @@ export class EscrowSyncJobRunner implements SyncJobRunner {
           p_refresh_window_days: config.escrowRefreshWindowDays,
           p_refresh_interval_hours: config.escrowRefreshIntervalHours,
           p_error_backoff_hours: config.escrowErrorBackoffHours,
+          p_calculation_version: FINANCIAL_CALCULATION_VERSION,
         });
         if (error) throw new Error(`Không đọc được đơn cần đồng bộ tài chính: ${error.message}`);
         batch = ((data ?? []) as Array<{ order_id: string }>).filter((r) => !seenThisSlice.has(r.order_id)).map((r) => ({ id: r.order_id, force: false }));

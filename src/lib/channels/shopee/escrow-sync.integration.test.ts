@@ -120,15 +120,17 @@ test("1. sync stores escrow columns, signed components, snapshot without buyer i
   assert.equal(num(f.escrow_amount), 151000);
   assert.equal(num(f.actual_shopee_income), 151000, "after_adjustment ?? escrow");
   assert.equal(num(f.commission_fee), 9000);
-  assert.equal(f.calculation_version, "shopee-fin-v1");
-  assert.equal(f.calculated_settlement, null, "no verified member yet → no calculated settlement");
-  assert.equal(f.reconciliation_status, null);
-  assert.ok(num(f.unverified_component_amount) !== null, "unverified total stored separately");
+  assert.equal(f.calculation_version, FINANCIAL_CALCULATION_VERSION);
+  assert.equal(num(f.calculated_settlement), 151000, "verified formula members");
+  assert.equal(num(f.settlement_variance), 0);
+  assert.equal(f.reconciliation_status, "matched");
+  assert.equal(f.unverified_component_amount, null, "nothing unverified in this payload");
   assert.equal(f.internal_cogs, null);
   assert.equal(f.profit_after_cogs, null, "no COGS → no profit (unknown ≠ 0)");
   const c = await components(o.id);
   assert.equal(c.find((x) => x.component_key === "commission_fee")!.amount, -9000);
-  assert.ok(c.every((x) => x.included_in_settlement === false));
+  assert.equal(c.find((x) => x.component_key === "commission_fee")!.included_in_settlement, true);
+  assert.equal(c.find((x) => x.component_key === "credit_card_transaction_fee")!.included_in_settlement, false, "duplicate of seller_transaction_fee");
   assert.equal((await orderRow(o.id)).financial_status, "settlement_available");
   const { data: snaps } = await db.from("channel_api_snapshots").select("payload, entity_type").eq("shop_id", s).eq("entity_type", "escrow");
   assert.equal(snaps!.length, 1);
@@ -421,6 +423,40 @@ test("16. security: anon / authenticated cannot run escrow RPCs or read raw escr
   assert.ok(r3.error || (r3.data ?? []).length === 0, "raw snapshots not readable");
   const r4 = await anon.from("order_financial_components").select("id").eq("order_id", o.id);
   assert.ok(r4.error || (r4.data ?? []).length === 0);
+});
+
+test("18. real returned order: negative settlement stored signed, matched, loss when COGS is known", async () => {
+  const s = await shop();
+  const o = await order(s);
+  const raw = JSON.parse(readFileSync(path.join(FIXTURE_DIR, "realvn_returned.json"), "utf8"));
+  raw.response.order_sn = o.sn;
+  await db.from("order_financials").insert({ order_id: o.id, internal_cogs: "0" });
+  const r = await service(new Map([[o.sn, raw]])).syncOrder(o.id);
+  assert.equal(r.reconciliationStatus, "matched");
+  const f = (await fin(o.id))!;
+  assert.equal(num(f.actual_shopee_income), -2700, "seller owes 2700 — not +2700");
+  assert.equal(num(f.calculated_settlement), -2700);
+  assert.equal(num(f.profit_after_cogs), -2700);
+  const { data: v } = await db.from("v_channel_order_summary").select("profit_state").eq("order_id", o.id).single();
+  assert.equal(v!.profit_state, "loss");
+});
+
+test("19. calculation version bump: synced orders become candidates again ('version_changed') and are recalculated", async () => {
+  const s = await shop();
+  const o = await order(s, { updatedAt: new Date(Date.now() - 40 * 86400_000).toISOString() }); // outside the refresh window
+  await service(new Map([[o.sn, escrow(o.sn)]])).syncOrder(o.id);
+  const cands = async (version: string | null) =>
+    ((await db.rpc("get_orders_needing_escrow_sync", { p_shop_id: s, p_limit: 10, p_calculation_version: version })).data ?? []) as Array<{ order_id: string; reason: string }>;
+  assert.equal((await cands(FINANCIAL_CALCULATION_VERSION)).length, 0, "current version → stable");
+  await db.from("order_financials").update({ calculation_version: "shopee-fin-v1" }).eq("order_id", o.id);
+  const c = await cands(FINANCIAL_CALCULATION_VERSION);
+  assert.deepEqual(c.map((x) => x.reason), ["version_changed"]);
+  assert.equal((await cands(null)).length, 0, "no version passed → old behaviour");
+  // re-sync recomputes even though Shopee's payload is identical (fingerprint carries the version)
+  await db.from("order_financials").update({ escrow_fingerprint: "old-v1-fingerprint" }).eq("order_id", o.id);
+  const r = await service(new Map([[o.sn, escrow(o.sn)]])).syncOrder(o.id);
+  assert.equal(r.status, "applied");
+  assert.equal((await fin(o.id))!.calculation_version, FINANCIAL_CALCULATION_VERSION);
 });
 
 test("17. parse → apply round trip keeps component sum consistent with the stored payload", async () => {
