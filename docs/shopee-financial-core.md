@@ -1118,6 +1118,51 @@ ghi lại khi không đổi).
 claim `product`/`order` (`RUNNABLE_SYNC_TYPES`). Thêm loại mới = một runner
 mới + đăng ký trong `createShopeeRunnerFactory`.
 
+## Escrow, Financial Dictionary & Order P&L (SHOPEE-5)
+
+```
+get_escrow_detail ─► ShopeePaymentProvider ─► escrow-adapter (+ financial-dictionary)
+   ─► snapshot (entity "escrow", bỏ PII) ─► apply_order_escrow() [1 transaction]
+        ├─ order_financial_components (khoá cố định, có dấu theo tác động người bán)
+        ├─ order_financials (cột escrow; internal_cogs KHÔNG đụng tới)
+        ├─ trigger derive_order_financials → profit_after_cogs, đối soát
+        └─ channel_orders.financial_status = settlement_available | mismatch
+```
+
+- **Từ điển** `src/lib/channels/shopee/financial-dictionary.ts` là nơi duy nhất
+  hiểu tên trường tiền của Shopee: cột đích, category, tác động
+  (inflow/outflow/signed/info), ai chịu, có thuộc công thức không, đã kiểm chứng
+  chưa. Kiểm chứng: `docs/shopee-financial-validation.md`.
+- **Thu nhập thực tế** = `escrow_amount_after_adjustment ?? escrow_amount` (cột
+  generated `actual_shopee_income`) — không bao giờ tự cộng lại từ component.
+- `calculated_settlement` = Σ component `included_in_settlement` (= thuộc công
+  thức **và** đã kiểm chứng); khoản chưa kiểm chứng → `unverified_component_amount`.
+  `settlement_variance = actual − calculated`, trạng thái matched/warning/mismatch
+  theo `financial_settlement_tolerance()`.
+- **Cột** order_financials là độ lớn dương (trừ `total_adjustment_amount`,
+  variance, profit có dấu). **Component** có dấu theo tác động người bán.
+  NULL = chưa biết, 0 = Shopee xác nhận 0.
+- **P&L**: trigger chạy mỗi lần ghi order_financials (escrow đến **hoặc** COGS
+  đổi) → `profit_after_cogs` chỉ có khi cả thu nhập và COGS đều có;
+  `contribution_profit`, `actual_margin` = NULL (chưa định nghĩa). Refund không
+  đảo COGS; `cost_of_goods_sold` của Shopee không phải COGS nội bộ.
+- **Idempotency**: fingerprint payload không đổi → chỉ cập nhật thời điểm sync;
+  component upsert theo `(order_id, source, component_key)`, khoản biến mất bị
+  xoá; adjustment mỗi dòng 1 component (`order_adjustment#i:hash`).
+- **Job** `sync_type = 'escrow'` trong hàng đợi PERF-1: mỗi lượt hỏi DB
+  `get_orders_needing_escrow_sync` (chưa sync / đơn đổi sau lần sync / còn trong
+  cửa sổ làm mới; bỏ qua đơn lỗi trong thời gian back-off), lấy tối đa
+  `escrowBatchSize` đơn trong ngân sách API, checkpoint sau mỗi đơn. Repair theo
+  danh sách `orderSns`; escrow không có backfill. Số liệu job:
+  `ordersChecked, escrowFetched, settlementAvailable, matched/warning/mismatch,
+  missingCogs, notReady, errors, unknownFields`.
+- **UI**: `/shopee/orders/[id]` (thu nhập, COGS, lợi nhuận, "Chi tiết tính
+  toán", bảng từng khoản); `/shopee/orders` (cột + bộ lọc tài chính, tổng hợp
+  tính trong DB qua `get_channel_order_financial_summary`). Nút "Đồng bộ tài
+  chính" chỉ thêm job vào hàng đợi.
+- **Ngoài phạm vi**: `released` / payout (`get_income_*`, `get_payout_detail`),
+  returns (SHOPEE-6).
+
 ## Snapshot retention (thiết kế — chưa triển khai)
 
 Áp dụng **trước khi** bật sync định kỳ trên production (carry-forward #6). Chưa

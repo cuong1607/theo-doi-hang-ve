@@ -69,6 +69,8 @@ export interface ChannelOrderFilters {
   reconciliation?: "matched" | "warning" | "mismatch";
   settlementState?: "missing" | "available";
   cogsReadiness?: CogsReadiness;
+  /** internal_cogs unknown (incomplete OR partial lines), same rule as the summary count. */
+  cogsMissing?: boolean;
 }
 
 export interface OrderFinancialSummary {
@@ -185,7 +187,7 @@ export async function getChannelOrders(filters: ChannelOrderFilters, page: numbe
   // Line-derived filter (mapping readiness) → count through the view. Otherwise
   // count channel_orders directly: same rows (every order has its shop), but
   // without aggregating lines for the whole filtered set just to count it.
-  const countOnBase = !filters.mappingReadiness && !filters.profitState && !filters.reconciliation && !filters.settlementState && !filters.cogsReadiness;
+  const countOnBase = !filters.mappingReadiness && !filters.profitState && !filters.reconciliation && !filters.settlementState && !filters.cogsReadiness && !filters.cogsMissing;
   const db = createAdminClient();
   let query = db
     .from("v_channel_order_summary")
@@ -229,6 +231,7 @@ export async function getChannelOrders(filters: ChannelOrderFilters, page: numbe
   if (filters.reconciliation) query = query.eq("reconciliation_status", filters.reconciliation);
   if (filters.settlementState) query = query.eq("settlement_state", filters.settlementState);
   if (filters.cogsReadiness) query = query.eq("cogs_readiness", filters.cogsReadiness);
+  if (filters.cogsMissing) query = query.is("internal_cogs", null);
   const [list, counted] = await Promise.all([query.returns<SummaryRow[]>(), countOnBase ? countQuery : null]);
   if (list.error) throw new Error(list.error.message);
   if (counted?.error) throw new Error(counted.error.message);
@@ -259,6 +262,7 @@ export async function getOrderFinancialSummary(filters: ChannelOrderFilters): Pr
       p_reconciliation: filters.reconciliation ?? null,
       p_settlement_state: filters.settlementState ?? null,
       p_cogs_readiness: filters.cogsReadiness ?? null,
+      p_cogs_missing: filters.cogsMissing ?? null,
       p_order_ids: orderIds,
     })
     .single<{

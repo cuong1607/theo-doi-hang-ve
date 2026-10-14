@@ -1,0 +1,32 @@
+{
+  "_note": "SYNTHETIC fixture (adjustments, taxes, refund, an unknown field) - NOT a real Shopee payload.",
+  "error": "",
+  "message": "",
+  "request_id": "fixture-escrow-adjusted",
+  "response": {
+    "order_sn": "FXESCROW0002",
+    "buyer_user_name": "fixture_buyer_2",
+    "order_income": {
+      "escrow_amount": "100000",
+      "original_price": "180000",
+      "seller_discount": "0",
+      "voucher_from_seller": "0",
+      "commission_fee": "12000",
+      "service_fee": "8000",
+      "seller_transaction_fee": "5000",
+      "withholding_vat_tax": "1000",
+      "withholding_pit_tax": "500",
+      "seller_return_refund": "50000",
+      "reverse_shipping_fee": "3500",
+      "final_shipping_fee": "0",
+      "mystery_fee": "1234.5",
+      "original_price_pri": "180000",
+      "total_adjustment_amount": "-3000",
+      "escrow_amount_after_adjustment": "97000",
+      "order_adjustment": [
+        { "amount": "-5000", "currency": "VND", "date": 1760000000, "adjustment_reason": "Phí điều chỉnh" },
+        { "amount": "2000", "currency": "VND", "date": 1760086400, "adjustment_reason": "Hoàn phí" }
+      ]
+    }
+  }
+}

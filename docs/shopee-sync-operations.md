@@ -252,6 +252,28 @@ Giá trị sai → dùng mặc định và hiện cảnh báo ở thẻ "Cấu h
 | `SHOPEE_SYNC_PRODUCT_INTERVAL_MINUTES` | 60 | 60 |
 | Lịch | pg_cron 5 / 2 phút | như cũ (hoặc Vercel Cron khi lên Pro) |
 
+## 12b. Job tài chính (escrow, SHOPEE-5)
+
+- `sync_type = 'escrow'`, lên lịch mỗi `SHOPEE_SYNC_ESCROW_INTERVAL_MINUTES`
+  (mặc định 60) cùng scheduler; nút "Đồng bộ tài chính" ở `/shopee/sync` và
+  `/shopee/orders` chỉ thêm job.
+- Mỗi lượt: hỏi DB các đơn cần lấy escrow (chỉ `COMPLETED`), tối đa
+  `SHOPEE_SYNC_ESCROW_BATCH_SIZE` (20) đơn / lô, 1 lệnh `get_escrow_detail` / đơn.
+- Làm mới: đơn hoàn tất trong `SHOPEE_SYNC_ESCROW_REFRESH_WINDOW_DAYS` (14) ngày
+  được lấy lại mỗi `SHOPEE_SYNC_ESCROW_REFRESH_INTERVAL_HOURS` (24) giờ; đơn cũ
+  ổn định không lấy lại (dùng repair nếu cần).
+- Shopee trả "chưa có escrow" → ghi lỗi trên đơn, chờ
+  `SHOPEE_SYNC_ESCROW_ERROR_BACKOFF_HOURS` (6) giờ mới thử lại.
+- Repair: `requestShopeeSync({ syncType: "escrow", mode: "repair", orderSns })`
+  (tối đa 200 đơn) — lấy lại bắt buộc, kể cả đơn vừa sync. Dùng sau khi đổi
+  `financial-dictionary.ts` / `FINANCIAL_CALCULATION_VERSION`.
+- Kiểm tra nhanh:
+  ```sql
+  select reconciliation_status, count(*) from public.order_financials group by 1;
+  select escrow_last_error_code, count(*) from public.order_financials
+  where escrow_last_error_code is not null group by 1;
+  ```
+
 ## 13. Lưu giữ dữ liệu
 
 - `channel_sync_jobs`: giữ job `success` 30–90 ngày, job `failed` lâu hơn

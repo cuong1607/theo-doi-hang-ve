@@ -41,7 +41,7 @@ function finFilter(fin: string | undefined): Partial<ChannelOrderFilters> {
     case "mismatch":
       return { reconciliation: "mismatch" };
     case "cogs_missing":
-      return { settlementState: "available", cogsReadiness: "incomplete" };
+      return { settlementState: "available", cogsMissing: true };
     case "settlement_missing":
       return { settlementState: "missing" };
     default:
