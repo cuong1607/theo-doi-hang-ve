@@ -15,9 +15,6 @@ import {
   unmapChannelModel,
   type AutoMapResult,
 } from "@/lib/channels/core/sku-mapping";
-import { ShopeeConfigError } from "@/lib/channels/shopee/config";
-import { ProductSyncRefusedError } from "@/lib/channels/shopee/product-sync";
-import { getShopeeProductSync } from "@/lib/channels/shopee/server";
 import { getShopeeProviderMode } from "@/lib/channels/shopee/provider-mode";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -27,29 +24,8 @@ const uuid = z.string().uuid();
 
 export type ActionResult<T = undefined> = { ok: true; message: string; data?: T } | { ok: false; message: string };
 
-export async function syncShopeeProductsAction(shopId: string, mode: "full" | "incremental"): Promise<ActionResult> {
-  const authz = await authorizeAction("channel:manage");
-  if (!authz.ok) return { ok: false, message: authz.message };
-  if (!uuid.safeParse(shopId).success || (mode !== "full" && mode !== "incremental")) return { ok: false, message: "Dữ liệu không hợp lệ." };
-
-  let sync;
-  try {
-    ({ sync } = getShopeeProductSync());
-  } catch (err) {
-    return { ok: false, message: err instanceof ShopeeConfigError ? `Chưa kết nối API Shopee: ${err.message}` : (err as Error).message };
-  }
-  try {
-    const result = await sync.sync(shopId, { mode });
-    revalidatePath(PATH, "layout");
-    const base = `Đã quét ${result.itemsDiscovered} sản phẩm (${result.pagesFetched} trang, ${result.modelsFetched} biến thể). Tự ghép ${result.autoMap?.mapped ?? 0}.`;
-    if (result.status === "success") return { ok: true, message: `Đồng bộ xong. ${base}` };
-    if (result.status === "partial") return { ok: true, message: `Đồng bộ một phần: ${result.counts.failed} lỗi. ${base} ${result.errorMessage ?? ""}`.trim() };
-    return { ok: false, message: `Đồng bộ thất bại [${result.errorCode}]: ${result.errorMessage ?? ""}` };
-  } catch (err) {
-    if (err instanceof ProductSyncRefusedError) return { ok: false, message: err.message };
-    return { ok: false, message: "Đồng bộ thất bại do lỗi hệ thống." };
-  }
-}
+// SHOPEE-PERF-1: product sync is no longer run from a request — the screen
+// enqueues a job (../sync/actions.ts) and the background worker syncs.
 
 export async function autoMapShopeeProductsAction(shopId: string): Promise<ActionResult<AutoMapResult>> {
   const authz = await authorizeAction("channel:manage");

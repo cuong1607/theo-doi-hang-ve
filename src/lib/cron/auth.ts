@@ -18,3 +18,12 @@ export function isAuthorizedCronSecret(authHeader: string | null, expectedSecret
   if (!expectedSecret) return false; // fail closed — misconfiguration must never mean "open to anyone"
   return authHeader === `Bearer ${expectedSecret}`;
 }
+
+/**
+ * SHOPEE-PERF-1 internal endpoints (/api/internal/*): SYNC_WORKER_SECRET
+ * (for pg_cron / an external scheduler / the worker's own chaining) or
+ * CRON_SECRET (what Vercel Cron sends). Both unset → always refused.
+ */
+export function isAuthorizedInternalRequest(authHeader: string | null, env: Record<string, string | undefined>): boolean {
+  return isAuthorizedCronSecret(authHeader, env.SYNC_WORKER_SECRET) || isAuthorizedCronSecret(authHeader, env.CRON_SECRET);
+}

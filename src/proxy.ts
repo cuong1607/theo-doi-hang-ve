@@ -15,6 +15,7 @@ import { createServerClient } from "@supabase/ssr";
 const PUBLIC_PATHS = ["/login"];
 const PUBLIC_PREFIXES = [
   "/api/cron/", // Vercel Cron — own CRON_SECRET check, no user session
+  "/api/internal/", // background sync scheduler/worker — own SYNC_WORKER_SECRET/CRON_SECRET check
   "/api/health", // technical health check
 ];
 // "/" stays public on purpose: it's a plain HTML page (see app/page.tsx,

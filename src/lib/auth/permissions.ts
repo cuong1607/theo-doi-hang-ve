@@ -42,6 +42,7 @@ export const PERMISSIONS = {
   "invoice:edit": OPERATORS,
   "payment:create": OPERATORS,
   "channel:map": OPERATORS, // map / unmap a Shopee variation to an internal SKU
+  "channel:sync": OPERATORS, // request a normal (incremental) Shopee sync — enqueue only, never inline
 
   // Master data + system administration — admin only.
   "product:manage": ADMIN,
@@ -49,7 +50,7 @@ export const PERMISSIONS = {
   "user:manage": ADMIN,
   "notification:manage": ADMIN, // recipients, retry, test sends, report sends
   "integration:manage": ADMIN, // Zalo OA connect / test message
-  "channel:manage": ADMIN, // shops, channel connections/tokens, sync config
+  "channel:manage": ADMIN, // shops, connections/tokens, sync config, backfill / repair / retry / cancel sync jobs
   "cost:manage": ADMIN, // rebuild cost ledger, backfill order COGS
 } as const satisfies Record<string, readonly Role[]>;
 

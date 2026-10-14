@@ -210,47 +210,6 @@ export async function getChannelModelById(channelModelId: string): Promise<Chann
   return data ? toRow(data) : null;
 }
 
-export interface LastProductSync {
-  status: string;
-  startedAt: string;
-  completedAt: string | null;
-  recordsFetched: number;
-  recordsFailed: number;
-  errorCode: string | null;
-  errorMessage: string | null;
-  sourceMode: string | null;
-}
-
-/** Latest sync log of `syncType` per shop (one query for all shops). */
-export async function getLastProductSyncs(shopIds: string[], syncType: "product" | "order" = "product"): Promise<Map<string, LastProductSync>> {
-  const result = new Map<string, LastProductSync>();
-  if (shopIds.length === 0) return result;
-  const { data, error } = await createAdminClient()
-    .from("channel_sync_logs")
-    .select("shop_id, status, started_at, completed_at, records_fetched, records_failed, error_code, error_message, metadata")
-    .in("shop_id", shopIds)
-    .eq("sync_type", syncType)
-    .order("started_at", { ascending: false })
-    .limit(shopIds.length * 5);
-  if (error) throw new Error(error.message);
-  for (const r of (data ?? []) as Array<Record<string, unknown>>) {
-    const shopId = r.shop_id as string;
-    if (result.has(shopId)) continue;
-    result.set(shopId, {
-      status: r.status as string,
-      startedAt: r.started_at as string,
-      completedAt: (r.completed_at as string | null) ?? null,
-      recordsFetched: r.records_fetched as number,
-      recordsFailed: r.records_failed as number,
-      errorCode: (r.error_code as string | null) ?? null,
-      errorMessage: (r.error_message as string | null) ?? null,
-      sourceMode:
-        (((r.metadata as Record<string, unknown> | null)?.sourceMode ?? (r.metadata as Record<string, unknown> | null)?.providerMode) as string | undefined) ?? null,
-    });
-  }
-  return result;
-}
-
 export interface InternalProductOption {
   id: string;
   sku: string;

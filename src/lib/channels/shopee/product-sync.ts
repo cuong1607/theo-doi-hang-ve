@@ -30,15 +30,18 @@ import { autoMapChannelModels, refreshMappingReviewFlags, type AutoMapResult } f
 import { saveLatestChannelSnapshot } from "../core/snapshots.ts";
 import { finishSyncLog, getSyncState, hasRunningSync, saveSyncState, startSyncLog, type SyncCounts } from "../core/sync-log.ts";
 import type { SyncLogStatus } from "../core/types.ts";
+import { mapWithConcurrency } from "../core/time-windows.ts";
 import { consoleShopeeLogger, type ShopeeLogger } from "./client.ts";
 import { SHOPEE_ITEM_STATUSES } from "./dto/product.ts";
-import { ShopeeApiError } from "./errors.ts";
+import { errorInfo, isJobLevelProviderError } from "./sync-errors.ts";
 import { parseItemBaseInfo, parseItemListPage, parseModelList, ShopeePayloadError, syntheticModelFor, type ParseIssue } from "./product-adapter.ts";
 import { BASE_INFO_BATCH_SIZE, ITEM_LIST_PAGE_SIZE, type ProductProviderContext, type ShopeeProductProvider } from "./product-provider.ts";
 
 export const PRODUCT_SYNC_TYPE = "product";
 /** Incremental runs start this long before the last successful run (boundary safety). */
 export const PRODUCT_SYNC_OVERLAP_SECONDS = 5 * 60;
+/** get_model_list calls in flight per batch (SHOPEE-PERF-1: never unbounded). */
+export const PRODUCT_DETAIL_CONCURRENCY = 3;
 const MAX_DISCOVERY_PAGES = 1000;
 const MAX_FAILURES_IN_LOG = 50;
 
@@ -71,24 +74,32 @@ export class ProductSyncRefusedError extends Error {
   }
 }
 
-function errorInfo(err: unknown): { code: string; message: string } {
-  if (err instanceof ShopeeApiError) return { code: err.errorCode, message: `${err.message}${err.requestId ? ` (request_id: ${err.requestId})` : ""}` };
-  if (err instanceof ShopeePayloadError) return { code: "provider_parse_error", message: err.message };
-  if (err instanceof Error) return { code: "sync_error", message: err.message.slice(0, 300) };
-  return { code: "sync_error", message: "Lỗi không xác định." };
-}
 
 export class ShopeeProductSyncService {
   private readonly db: SupabaseClient;
   private readonly provider: ShopeeProductProvider;
   private readonly now: () => Date;
   private readonly log: ShopeeLogger;
+  private readonly detailConcurrency: number;
 
-  constructor(deps: { db: SupabaseClient; provider: ShopeeProductProvider; now?: () => Date; logger?: ShopeeLogger }) {
+  constructor(deps: { db: SupabaseClient; provider: ShopeeProductProvider; now?: () => Date; logger?: ShopeeLogger; detailConcurrency?: number }) {
     this.db = deps.db;
     this.provider = deps.provider;
     this.now = deps.now ?? (() => new Date());
     this.log = deps.logger ?? consoleShopeeLogger;
+    this.detailConcurrency = deps.detailConcurrency ?? PRODUCT_DETAIL_CONCURRENCY;
+  }
+
+  /** One get_item_list page (parsed), all statuses, optional update_time window (Unix seconds). */
+  async fetchItemListPage(ctx: ProductProviderContext, offset: number, window?: { from: number; to: number } | null) {
+    const payload = await this.provider.listItems(ctx, {
+      offset,
+      pageSize: ITEM_LIST_PAGE_SIZE,
+      itemStatus: SHOPEE_ITEM_STATUSES,
+      updateTimeFrom: window?.from,
+      updateTimeTo: window?.to,
+    });
+    return parseItemListPage(payload.raw);
   }
 
   /** Throws ProductSyncRefusedError when the run must not start (nothing is written then). */
@@ -283,7 +294,14 @@ export class ShopeeProductSyncService {
     return { failures: acc.failures };
   }
 
-  private async storeItems(
+  /**
+   * get_item_base_info in batches of 50 → channel_products; per listing
+   * get_model_list (at most `detailConcurrency` in flight) → units + latest
+   * snapshots. Record-level failures go to `s`; with rethrowProviderErrors
+   * (job runner) a job-level provider failure (rate limit / transient /
+   * auth / signature) is thrown so the job retries from its checkpoint.
+   */
+  async storeItems(
     shopId: string,
     ctx: ProductProviderContext,
     currency: string | null,
@@ -296,6 +314,7 @@ export class ShopeeProductSyncService {
       addIssues: (issues: ParseIssue[]) => void;
       setModels: (n: number) => void;
     },
+    options: { rethrowProviderErrors?: boolean } = {},
   ): Promise<boolean> {
     const { counts, failures, failedItemIds, addIssues } = s;
     const shop = { currency };
@@ -309,6 +328,7 @@ export class ShopeeProductSyncService {
         const payload = await this.provider.getItemBaseInfo(ctx, { itemIds: batch });
         parsed = parseItemBaseInfo(payload.raw, { currency: shop.currency, kitByItemId });
       } catch (err) {
+        if (options.rethrowProviderErrors && isJobLevelProviderError(err)) throw err;
         const { code, message } = errorInfo(err);
         for (const id of batch) {
           failedItemIds.add(id);
@@ -341,9 +361,9 @@ export class ShopeeProductSyncService {
         continue;
       }
 
-      for (const product of parsed.products) {
+      await mapWithConcurrency(parsed.products, this.detailConcurrency, async (product) => {
         const channelProductId = idByExternalId.get(product.externalItemId);
-        if (!channelProductId) continue;
+        if (!channelProductId) return;
         try {
           await saveLatestChannelSnapshot(this.db, {
             shopId,
@@ -388,11 +408,12 @@ export class ShopeeProductSyncService {
           }
           anyItemSucceeded = true;
         } catch (err) {
+          if (options.rethrowProviderErrors && isJobLevelProviderError(err)) throw err;
           const { code, message } = errorInfo(err);
           failedItemIds.add(product.externalItemId);
           failures.push({ externalId: product.externalItemId, reason: `get_model_list/lưu model [${code}] ${message}` });
         }
-      }
+      });
     }
     return anyItemSucceeded;
   }

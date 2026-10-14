@@ -9,7 +9,7 @@ import path from "node:path";
 import type { ShopeeClient } from "./client.ts";
 import { ShopeeApiError } from "./errors.ts";
 import type { ProductProviderContext, ProviderMode, ProviderPayload } from "./product-provider.ts";
-import type { ShopeeConnectionService } from "./token.ts";
+import type { ShopeeTokenSource } from "./token.ts";
 
 export type OrderProviderContext = ProductProviderContext;
 
@@ -60,9 +60,9 @@ export const ORDER_DETAIL_OPTIONAL_FIELDS = [
 export class RealShopeeOrderProvider implements ShopeeOrderProvider {
   readonly mode = "live" as const;
   private readonly client: ShopeeClient;
-  private readonly connections: ShopeeConnectionService;
+  private readonly connections: ShopeeTokenSource;
 
-  constructor(deps: { client: ShopeeClient; connections: ShopeeConnectionService }) {
+  constructor(deps: { client: ShopeeClient; connections: ShopeeTokenSource }) {
     this.client = deps.client;
     this.connections = deps.connections;
   }

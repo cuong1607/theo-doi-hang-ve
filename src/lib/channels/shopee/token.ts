@@ -161,6 +161,9 @@ export async function getShopeeConnectionHealth(
   };
 }
 
+/** What a provider needs from the token service (lets a sync job cache the token — see sync-instrumentation.ts). */
+export type ShopeeTokenSource = Pick<ShopeeConnectionService, "getValidAccessToken" | "recordApiFailure">;
+
 export class ShopeeConnectionService {
   private readonly db: SupabaseClient;
   private readonly client: ShopeeClient;

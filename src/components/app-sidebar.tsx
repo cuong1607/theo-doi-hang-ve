@@ -18,6 +18,7 @@ import {
   ShoppingBag,
   ReceiptText,
   Calculator,
+  RefreshCw,
 } from "lucide-react";
 
 import {
@@ -49,7 +50,7 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
   {
     items: [
       {
-        title: "Dashboard",
+        title: "Tổng Quan",
         href: "/dashboard",
         icon: LayoutDashboard,
       },
@@ -125,6 +126,12 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
         title: "Đơn hàng Shopee",
         href: "/shopee/orders",
         icon: ReceiptText,
+        permission: "channel:view",
+      },
+      {
+        title: "Đồng bộ Shopee",
+        href: "/shopee/sync",
+        icon: RefreshCw,
         permission: "channel:view",
       },
     ],

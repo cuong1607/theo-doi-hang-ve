@@ -43,7 +43,6 @@ test("TS allowed-value lists match the migration CHECK constraints", () => {
     ["financial_status", FINANCIAL_STATUSES],
     ["cost_method", COST_METHODS],
     ["inventory_disposition", INVENTORY_DISPOSITIONS],
-    ["status", SYNC_LOG_STATUSES],
     ["category", FINANCIAL_COMPONENT_CATEGORIES],
     ["funded_by", FUNDED_BY],
     ["reconciliation_status", RECONCILIATION_STATUSES],
@@ -51,6 +50,13 @@ test("TS allowed-value lists match the migration CHECK constraints", () => {
   for (const [column, values] of cases) {
     assert.deepEqual(checkList(column), [...values], column);
   }
+});
+
+test("sync log statuses match the constraint redefined by migration 00045 (job cancellation)", () => {
+  const m45 = readFileSync(new URL("../../../../supabase/migrations/00045_channel_sync_jobs.sql", import.meta.url), "utf8");
+  const match = m45.match(/channel_sync_logs_status_check CHECK \(status IN \(([^)]*)\)\)/);
+  assert.ok(match, "channel_sync_logs_status_check not found in 00045");
+  assert.deepEqual([...match[1].matchAll(/'([^']+)'/g)].map((x) => x[1]), [...SYNC_LOG_STATUSES]);
 });
 
 test("type guards accept known values only", () => {

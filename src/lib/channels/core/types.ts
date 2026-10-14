@@ -56,7 +56,7 @@ export type CostMethod = (typeof COST_METHODS)[number];
 export const INVENTORY_DISPOSITIONS = ["pending", "restock", "damaged", "lost", "disposed"] as const;
 export type InventoryDisposition = (typeof INVENTORY_DISPOSITIONS)[number];
 
-export const SYNC_LOG_STATUSES = ["running", "success", "partial", "failed"] as const;
+export const SYNC_LOG_STATUSES = ["running", "success", "partial", "failed", "cancelled"] as const;
 export type SyncLogStatus = (typeof SYNC_LOG_STATUSES)[number];
 
 /** Where channel data came from (shops.data_source, channel_api_snapshots.source_mode). */

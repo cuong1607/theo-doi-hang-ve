@@ -144,23 +144,53 @@ export async function getChannelOrders(filters: ChannelOrderFilters, page: numbe
     if (restrictIds.length === 0) return { rows: [] as ChannelOrderListRow[], total: 0 };
   }
   const from = (page - 1) * pageSize;
-  let query = createAdminClient()
+  // Line-derived filter (mapping readiness) → count through the view. Otherwise
+  // count channel_orders directly: same rows (every order has its shop), but
+  // without aggregating lines for the whole filtered set just to count it.
+  const countOnBase = !filters.mappingReadiness;
+  const db = createAdminClient();
+  let query = db
     .from("v_channel_order_summary")
-    .select(COLUMNS, { count: "exact" })
+    .select(COLUMNS, countOnBase ? undefined : { count: "exact" })
     .order("created_at_channel", { ascending: false, nullsFirst: false })
     .order("external_order_sn")
     .range(from, from + pageSize - 1);
-  if (filters.shopId) query = query.eq("shop_id", filters.shopId);
-  if (filters.dateFrom) query = query.gte("created_at_channel", vnDayStart(filters.dateFrom));
-  if (filters.dateTo) query = query.lt("created_at_channel", new Date(new Date(vnDayStart(filters.dateTo)).getTime() + 86_400_000).toISOString());
-  if (filters.orderStatus) query = query.eq("order_status", filters.orderStatus);
+  let countQuery = db.from("channel_orders").select("id", { count: "exact", head: true });
+  const dateTo = filters.dateTo ? new Date(new Date(vnDayStart(filters.dateTo)).getTime() + 86_400_000).toISOString() : null;
+  const sn = filters.orderSn ? `%${escapeIlikeTerm(filters.orderSn)}%` : null;
+  if (filters.shopId) {
+    query = query.eq("shop_id", filters.shopId);
+    countQuery = countQuery.eq("shop_id", filters.shopId);
+  }
+  if (filters.dateFrom) {
+    query = query.gte("created_at_channel", vnDayStart(filters.dateFrom));
+    countQuery = countQuery.gte("created_at_channel", vnDayStart(filters.dateFrom));
+  }
+  if (dateTo) {
+    query = query.lt("created_at_channel", dateTo);
+    countQuery = countQuery.lt("created_at_channel", dateTo);
+  }
+  if (filters.orderStatus) {
+    query = query.eq("order_status", filters.orderStatus);
+    countQuery = countQuery.eq("order_status", filters.orderStatus);
+  }
+  if (filters.financialStatus) {
+    query = query.eq("financial_status", filters.financialStatus);
+    countQuery = countQuery.eq("financial_status", filters.financialStatus);
+  }
+  if (sn) {
+    query = query.ilike("external_order_sn", sn);
+    countQuery = countQuery.ilike("external_order_sn", sn);
+  }
+  if (restrictIds) {
+    query = query.in("order_id", restrictIds);
+    countQuery = countQuery.in("id", restrictIds);
+  }
   if (filters.mappingReadiness) query = query.eq("mapping_readiness", filters.mappingReadiness);
-  if (filters.financialStatus) query = query.eq("financial_status", filters.financialStatus);
-  if (filters.orderSn) query = query.ilike("external_order_sn", `%${escapeIlikeTerm(filters.orderSn)}%`);
-  if (restrictIds) query = query.in("order_id", restrictIds);
-  const { data, error, count } = await query.returns<SummaryRow[]>();
-  if (error) throw new Error(error.message);
-  return { rows: (data ?? []).map(toRow), total: count ?? 0 };
+  const [list, counted] = await Promise.all([query.returns<SummaryRow[]>(), countOnBase ? countQuery : null]);
+  if (list.error) throw new Error(list.error.message);
+  if (counted?.error) throw new Error(counted.error.message);
+  return { rows: (list.data ?? []).map(toRow), total: (countOnBase ? counted?.count : list.count) ?? 0 };
 }
 
 export async function getOrderMappingReadiness(orderId: string): Promise<ChannelOrderListRow | null> {

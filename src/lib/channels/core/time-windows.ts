@@ -22,16 +22,27 @@ export function splitTimeWindows(fromSeconds: number, toSeconds: number, maxSeco
   return windows;
 }
 
-/** Runs `fn` over `items` with at most `limit` in flight (no unbounded Promise.all). */
+/**
+ * Runs `fn` over `items` with at most `limit` in flight (no unbounded
+ * Promise.all). After the first failure no new item starts; in-flight items
+ * are awaited, then the first error is rethrown (nothing keeps running in
+ * the background after the caller has moved on).
+ */
 export async function mapWithConcurrency<T, R>(items: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
   const results = new Array<R>(items.length);
   let next = 0;
+  let failure: { error: unknown } | null = null;
   const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
-    while (next < items.length) {
+    while (next < items.length && !failure) {
       const index = next++;
-      results[index] = await fn(items[index], index);
+      try {
+        results[index] = await fn(items[index], index);
+      } catch (error) {
+        failure ??= { error };
+      }
     }
   });
   await Promise.all(workers);
+  if (failure) throw (failure as { error: unknown }).error;
   return results;
 }

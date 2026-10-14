@@ -1010,6 +1010,114 @@ qua `cost_post_manual_event`, chưa có import tự động).
   để xử lý tay.
 - Không có kho/địa điểm, không đối soát tồn thực tế, không FIFO.
 
+## Multi-Shop Sync Architecture (SHOPEE-PERF-1)
+
+Vận hành (lịch chạy, cấu hình, rollout, xử lý sự cố): `docs/shopee-sync-operations.md`.
+
+### Nguyên tắc
+
+```
+Shopee API → sync job (worker nền) → database → UI
+```
+
+- UI **chỉ đọc** bảng canonical (`channel_orders`, `channel_order_items`,
+  `channel_products`, `channel_product_models`, `channel_sync_states`,
+  `channel_sync_jobs`). Không page/server action nào gọi provider; một test
+  tĩnh (`sync-pure.test.ts`) chặn page import provider/token/sync service.
+- "Đồng bộ ngay" = `requestShopeeSync()` → thêm job (mode `manual`, ưu tiên 5)
+  rồi trả lời ngay; worker được kích sau response bằng `after()`.
+- Trước phase này, server action chạy **toàn bộ** sync trong request (đợi
+  hàng trăm lệnh gọi Shopee) — nguyên nhân chính của việc "load/sync chậm".
+  Các entry point đó (`getShopeeOrderSync`/`getShopeeProductSync`,
+  `syncShopee*Action`) đã bị gỡ.
+
+### Thành phần (`src/lib/channels/core` — không phụ thuộc kênh bán)
+
+| File | Vai trò |
+|---|---|
+| `sync-jobs.ts` | enqueue (idempotent), claim, recover, `JobLease` (checkpoint = heartbeat, continue, succeed, fail, cancelled), cancel, retry |
+| `sync-worker.ts` | `runOne()` = claim 1 job + chạy 1 lượt; `runBurst()` = thu hồi job treo + lặp tới hết ngân sách thời gian; ghi log + sync state khi job kết thúc |
+| `sync-runner.ts` | hợp đồng runner ↔ worker (`more` / `done` / `cancelled`; lỗi ném ra = lỗi cấp job) |
+| `sync-progress.ts` | tiến độ trong bộ nhớ → `records_*` + `metadata` (checkpoint, stats, apiCalls, failures giới hạn 50) |
+| `retry-policy.ts` | backoff 1/5/15 phút + jitter, `decideFailure`, `ExecutionBudget` |
+| `sync-config.ts` | mọi tham số (env + mặc định an toàn), độ ưu tiên |
+| `sync-status-queries.ts` | đọc trạng thái cho UI (số truy vấn cố định, không N+1) |
+
+Phía Shopee (`src/lib/channels/shopee`): `order-sync-job.ts`,
+`product-sync-job.ts` (runner theo lượt, tái dùng `processDetailBatch()` /
+`storeItems()` / `fetch*Page()` của service SHOPEE-2/3 — một bộ logic lưu dữ
+liệu duy nhất), `sync-decisions.ts` (khi nào cần gọi chi tiết),
+`sync-instrumentation.ts` (đếm lệnh gọi theo API, cache token theo job),
+`sync-errors.ts` (phân loại retryable / fatal), `sync-service.ts` (enqueue,
+runner factory, scheduler), `server.ts` (wiring: client riêng cho worker,
+retry trong request tối đa 1 lần / 2 s).
+
+### Bảng `channel_sync_jobs` (migration 00045)
+
+Đúng các cột của spec, thêm `cancel_requested` / `cancelled_at` /
+`cancelled_by`. `channel_sync_logs` thêm `job_id` và trạng thái `cancelled`.
+RLS: service_role toàn quyền, admin đang hoạt động được đọc (giống
+`channel_sync_logs`). Mọi hàm (`enqueue_sync_job`, `claim_next_sync_job`,
+`recover_stale_sync_jobs`) là SECURITY INVOKER và được **GRANT EXECUTE tường
+minh cho service_role** — cloud Supabase không có default privilege như
+Docker local (bài học từ 00043/00044).
+
+- **Duy nhất (v1)**: partial unique index
+  `(shop_id, sync_type, (mode = 'backfill')) WHERE status IN ('pending','running','retry')`
+  → 1 job đang hoạt động mỗi shop + loại + làn (live | backfill). Backfill có
+  làn riêng để không chặn (và không bị nhân đôi bởi) incremental.
+- **Claim**: một advisory lock giao dịch tuần tự hóa các lần claim (vài lookup
+  có index), nên "đếm job running" (cap toàn cục) và "shop + loại này đang
+  running?" không bị race; `FOR UPDATE SKIP LOCKED` giữ hàng an toàn trước
+  cancel/enqueue đồng thời. Sắp xếp `priority ASC, created_at ASC`. Tham số
+  `p_shop_ids` cho rollout từng shop (`SHOPEE_SYNC_SHOP_IDS`).
+- **Lease**: mọi lệnh ghi của worker có điều kiện `status = 'running' AND
+  lock_owner = <worker>`; mất lease → `LeaseLostError`, worker dừng chạm vào job.
+- `attempt_count` = số lần liên tiếp chưa tiến triển (reset khi một lượt có
+  tiến triển) để job dài nhiều lượt không bị coi là "hết lượt thử".
+
+### Checkpoint & resume
+
+- Đơn: `cursor` (cursor của `get_order_list`) + `metadata.checkpoint`
+  (`windowIndex` trong các cửa sổ ≤ 15 ngày của [window_from, window_to],
+  `pendingSns` = đơn của trang vừa đọc cần gọi chi tiết, `seenCursors` để phát
+  hiện cursor lặp). Trang được đọc và danh sách cần tải được lưu **trong cùng
+  một lệnh ghi**.
+- Sản phẩm: `offset_value` + `pendingItemIds` + cờ `kit` của các mã đang chờ.
+- Lỗi cấp job trong lô chi tiết (rate limit, 5xx, auth) **không** đánh dấu
+  các đơn trong lô là lỗi: chúng ở lại `pendingSns`, job retry từ đúng chỗ đó.
+- `channel_sync_states.last_success_at` = `window_to` của job incremental /
+  manual (đơn) hoặc lần quét đầy đủ (sản phẩm) **không có lỗi nào**.
+
+### Bỏ qua bản ghi không đổi
+
+Xem `shouldRefreshOrderDetail()` / `shouldRefreshProductDetail()` và
+`docs/shopee-sync-operations.md` §5. Snapshot thô giữ chính sách cũ (không
+ghi lại khi không đổi).
+
+### Truy vấn UI (đo trên 20k đơn / 50k dòng, 5 shop)
+
+- `v_channel_order_summary` viết lại bằng `LEFT JOIN LATERAL`-tương đương
+  (`CROSS JOIN LATERAL` với aggregate luôn trả 1 dòng): trang 1 mọi shop
+  **68 ms → 0,3 ms** (trước đó gom nhóm mọi dòng đơn trước khi lấy 25 đơn —
+  tăng tuyến tính theo lịch sử). Kết quả giống hệt bản cũ (so `EXCEPT` cả 2
+  chiều = 0 dòng). Thêm index `(created_at_channel DESC NULLS LAST,
+  external_order_sn)` cho sắp xếp toàn cục.
+- Đếm tổng (`count exact`) chạy trên `channel_orders` khi không lọc theo
+  mapping (cùng điều kiện lọc), chỉ đếm qua view khi lọc `mapping_readiness`.
+- Danh sách sản phẩm (`v_channel_model_listing`, 20k biến thể): trang 1 ≈ 23 ms,
+  subquery đếm dòng đơn chỉ chạy cho 20 dòng trả về — chưa cần đổi.
+- Trạng thái đồng bộ đọc từ `channel_sync_states` + view
+  `v_channel_sync_latest_jobs` (DISTINCT ON shop, loại) + job đang hoạt động:
+  3 truy vấn cho mọi số shop. Thay cho `getLastProductSyncs()` cũ (giới hạn
+  `shops × 5` dòng log nên có thể bỏ sót shop khi một shop có nhiều log).
+
+### Ranh giới với SHOPEE-5+
+
+`sync_type` đã cho phép `escrow`, `income`, `return`, `payout`; worker chỉ
+claim `product`/`order` (`RUNNABLE_SYNC_TYPES`). Thêm loại mới = một runner
+mới + đăng ký trong `createShopeeRunnerFactory`.
+
 ## Snapshot retention (thiết kế — chưa triển khai)
 
 Áp dụng **trước khi** bật sync định kỳ trên production (carry-forward #6). Chưa

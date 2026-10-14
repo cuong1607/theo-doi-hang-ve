@@ -3,12 +3,8 @@ import { AlertTriangle, FlaskConical, PackageSearch } from "lucide-react";
 import { requirePermission } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { listShops } from "@/lib/channels/core/queries";
-import {
-  getLastProductSyncs,
-  getShopeeProductMappingSummary,
-  getShopeeProducts,
-  type ChannelModelFilters,
-} from "@/lib/channels/core/product-queries";
+import { getShopeeProductMappingSummary, getShopeeProducts, type ChannelModelFilters } from "@/lib/channels/core/product-queries";
+import { getSyncStatuses } from "@/lib/channels/core/sync-status-queries";
 import { isMappingStatus } from "@/lib/channels/core/types";
 import { getShopeeConfig } from "@/lib/channels/shopee/config";
 import { getShopeeProviderMode } from "@/lib/channels/shopee/provider-mode";
@@ -18,11 +14,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ListPagination } from "@/components/list-pagination";
 
 import { fmtDate, formatDecimal, MAPPING_LABELS, MAPPING_VARIANT, toModelView } from "../shared";
+import { BackfillButton, SyncNowButton } from "../sync/sync-buttons";
+import { FreshnessSummary, SyncFreshness } from "../sync/sync-status";
 import { ModelRowActions } from "./model-row-actions";
 import { ShopeeProductFilters } from "./product-filters";
-import { CreateFixtureShopButton, ShopSyncControls } from "./sync-controls";
+import { AutoMapButton, CreateFixtureShopButton } from "./sync-controls";
 
 export const dynamic = "force-dynamic";
+// "Đồng bộ ngay" kicks the background worker after responding (after()).
+export const maxDuration = 60;
 
 const PAGE_SIZE = 20;
 
@@ -46,6 +46,7 @@ export default async function ShopeeProductsPage({
   const auth = await requirePermission("channel:view");
   const role = auth.profile.role;
   const canManage = hasPermission(role, "channel:manage");
+  const canSync = hasPermission(role, "channel:sync");
   const canMap = hasPermission(role, "channel:map");
   const params = await searchParams;
   const page = Math.max(1, Number(params.page) || 1);
@@ -72,10 +73,13 @@ export default async function ShopeeProductsPage({
     internalSku: params.isku?.trim() || undefined,
   };
 
-  const [{ rows, total }, summary, lastSyncs] = await Promise.all([
+  const [{ rows, total }, summary, syncStatuses] = await Promise.all([
     getShopeeProducts(filters, page, PAGE_SIZE),
     getShopeeProductMappingSummary(shopFilter),
-    getLastProductSyncs(shops.map((s) => s.id)),
+    getSyncStatuses(
+      shops.map((s) => s.id),
+      ["product"],
+    ),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hasFilter = Object.values(filters).some(Boolean);
@@ -87,6 +91,7 @@ export default async function ShopeeProductsPage({
         <p className="text-muted-foreground">
           Đồng bộ sản phẩm / biến thể từ Shopee và ghép với SKU nội bộ. Giá và tồn kho Shopee chỉ để tham khảo — không phải giá vốn hay tồn kho nội bộ.
         </p>
+        <FreshnessSummary shops={shops} statuses={syncStatuses} syncType="product" />
       </div>
 
       {modeConfig.mode === "fixture" ? (
@@ -101,7 +106,7 @@ export default async function ShopeeProductsPage({
         </p>
       ) : null}
 
-      {canManage && (
+      {(canSync || canManage) && (
         <Card>
           <CardHeader>
             <CardTitle>Shop &amp; đồng bộ</CardTitle>
@@ -109,8 +114,7 @@ export default async function ShopeeProductsPage({
           <CardContent className="space-y-4">
             {shops.length === 0 && <p className="text-sm text-muted-foreground">Chưa có shop Shopee nào. Kết nối shop ở trang Tích hợp Shopee.</p>}
             {shops.map((shop) => {
-              const last = lastSyncs.get(shop.id);
-              const sourceMatches = shop.dataSource === modeConfig.mode && !liveProblem && !modeConfig.problem;
+              const sourceMatches = shop.isActive && shop.dataSource === modeConfig.mode && !liveProblem && !modeConfig.problem;
               return (
                 <div key={shop.id} className="flex flex-col gap-3 border-b pb-4 last:border-b-0 last:pb-0 md:flex-row md:items-start md:justify-between">
                   <div className="space-y-1 text-sm">
@@ -119,25 +123,18 @@ export default async function ShopeeProductsPage({
                       <Badge variant={shop.dataSource === "fixture" ? "secondary" : "outline"}>{shop.dataSource === "fixture" ? "FIXTURE" : "LIVE"}</Badge>
                       <span className="text-muted-foreground">#{shop.externalShopId}</span>
                     </p>
-                    <p className="text-muted-foreground">
-                      Lần đồng bộ gần nhất:{" "}
-                      {last ? (
-                        <>
-                          {fmtDate(last.startedAt)} · <span className={last.status === "success" ? "" : "text-destructive"}>{last.status}</span> · {last.recordsFetched} sản phẩm
-                          {last.recordsFailed ? `, ${last.recordsFailed} lỗi` : ""}
-                          {last.errorMessage && last.status !== "success" ? ` — ${last.errorMessage}` : ""}
-                        </>
-                      ) : (
-                        "chưa đồng bộ"
-                      )}
-                    </p>
+                    <SyncFreshness status={syncStatuses.get(`${shop.id}|product`)} canSeeErrors={canManage} />
                     {!sourceMatches && (
                       <p className="text-xs text-muted-foreground">
                         {shop.dataSource === "fixture" ? "Shop fixture chỉ đồng bộ được ở fixture mode." : "Shop thật chỉ đồng bộ được khi API Shopee (live) đã được cấu hình."}
                       </p>
                     )}
                   </div>
-                  <ShopSyncControls shopId={shop.id} disabled={!sourceMatches} />
+                  <div className="flex flex-wrap items-start gap-2">
+                    {canSync && <SyncNowButton shopId={shop.id} syncType="product" disabled={!sourceMatches} />}
+                    {canManage && <BackfillButton shopId={shop.id} syncType="product" label="Quét toàn bộ" disabled={!sourceMatches} />}
+                    {canManage && <AutoMapButton shopId={shop.id} />}
+                  </div>
                 </div>
               );
             })}

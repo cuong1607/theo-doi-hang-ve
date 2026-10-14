@@ -18,7 +18,7 @@ import path from "node:path";
 import type { SourceMode } from "../core/types.ts";
 import type { ShopeeClient } from "./client.ts";
 import type { ShopeeItemStatus } from "./dto/product.ts";
-import type { ShopeeConnectionService } from "./token.ts";
+import type { ShopeeTokenSource } from "./token.ts";
 import { ShopeeApiError } from "./errors.ts";
 
 export type ProviderMode = SourceMode;
@@ -66,9 +66,9 @@ export const BASE_INFO_BATCH_SIZE = 50;
 export class RealShopeeProductProvider implements ShopeeProductProvider {
   readonly mode = "live" as const;
   private readonly client: ShopeeClient;
-  private readonly connections: ShopeeConnectionService;
+  private readonly connections: ShopeeTokenSource;
 
-  constructor(deps: { client: ShopeeClient; connections: ShopeeConnectionService }) {
+  constructor(deps: { client: ShopeeClient; connections: ShopeeTokenSource }) {
     this.client = deps.client;
     this.connections = deps.connections;
   }

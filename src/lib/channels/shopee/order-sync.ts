@@ -34,7 +34,7 @@ import { mapWithConcurrency, splitTimeWindows, type TimeWindow } from "../core/t
 import type { SyncLogStatus } from "../core/types.ts";
 import { CostEngine } from "../../inventory-cost/engine.ts";
 import { consoleShopeeLogger, type ShopeeLogger } from "./client.ts";
-import { ShopeeApiError } from "./errors.ts";
+import { errorInfo, isJobLevelProviderError } from "./sync-errors.ts";
 import { orderFingerprint, parseOrderDetails, parseOrderListPage } from "./order-adapter.ts";
 import { MAX_ORDER_WINDOW_SECONDS, ORDER_DETAIL_BATCH_SIZE, ORDER_LIST_PAGE_SIZE, type OrderProviderContext, type ShopeeOrderProvider } from "./order-provider.ts";
 import { isOrderCancelled, isOrderCompleted } from "./order-status.ts";
@@ -92,11 +92,22 @@ export interface ProductEnsurer {
   ensureItems(shopId: string, externalItemIds: string[]): Promise<{ failures: Array<{ externalId: string | null; reason: string }> }>;
 }
 
-function errorInfo(err: unknown): { code: string; message: string } {
-  if (err instanceof ShopeeApiError) return { code: err.errorCode, message: `${err.message}${err.requestId ? ` (request_id: ${err.requestId})` : ""}` };
-  if (err instanceof ShopeePayloadError) return { code: "provider_parse_error", message: err.message };
-  if (err instanceof Error) return { code: "sync_error", message: err.message.slice(0, 300) };
-  return { code: "sync_error", message: "Lỗi không xác định." };
+export interface OrderBatchStats {
+  detailsFetched: number;
+  ordersCompleted: number;
+  ordersCancelled: number;
+  linesUnresolved: number;
+  cogs: Record<string, number>;
+}
+
+/** Mutable totals a detail batch adds to (shared by sync() and the job runner). */
+export interface OrderBatchAccumulator {
+  counts: SyncCounts;
+  failures: Array<{ externalId: string | null; reason: string }>;
+  failedSns: Set<string>;
+  stats: OrderBatchStats;
+  mapping: { complete: number; partial: number; unmapped: number };
+  storedOrders: number;
 }
 
 const toSeconds = (d: Date) => Math.floor(d.getTime() / 1000);
@@ -272,90 +283,124 @@ export class ShopeeOrderSyncService {
       const batches: string[][] = [];
       for (let i = 0; i < sns.length; i += ORDER_DETAIL_BATCH_SIZE) batches.push(sns.slice(i, i + ORDER_DETAIL_BATCH_SIZE));
 
-      await mapWithConcurrency(batches, this.detailConcurrency, async (batch) => {
-        const syncedIso = this.now().toISOString();
-        let parsed: ReturnType<typeof parseOrderDetails>;
-        try {
-          const payload = await this.provider.getOrderDetails(ctx, { orderSns: batch });
-          parsed = parseOrderDetails(payload.raw, { fallbackCurrency: shop.currency });
-        } catch (err) {
-          const { code, message } = errorInfo(err);
-          for (const sn of batch) {
-            failedSns.add(sn);
-            failures.push({ externalId: sn, reason: `get_order_detail [${code}] ${message}` });
-          }
-          return;
-        }
-        stats.detailsFetched += parsed.orders.length;
-        for (const issue of parsed.issues) {
-          if (issue.externalId) failedSns.add(issue.externalId);
-          failures.push({ externalId: issue.externalId, reason: `${issue.apiName}: ${issue.reason}` });
-        }
-        const returned = new Set(parsed.orders.map((o) => o.externalOrderSn));
-        for (const sn of batch) {
-          if (!returned.has(sn) && !failedSns.has(sn)) {
-            failedSns.add(sn);
-            failures.push({ externalId: sn, reason: "get_order_detail: đơn không có trong phản hồi" });
-          }
-        }
-
-        // Resolve identities for the whole batch; fetch unknown listings once.
-        const lines = parsed.orders.flatMap((o) => o.items);
-        let units: Map<string, ResolvedUnit> = await resolveChannelUnits(this.db, shopId, lines);
-        const missingItems = [...new Set(lines.filter((l) => !units.has(unitKey(l.externalItemId, l.externalModelId))).map((l) => l.externalItemId))];
-        if (missingItems.length > 0 && this.products) {
-          try {
-            await this.products.ensureItems(shopId, missingItems);
-            units = await resolveChannelUnits(this.db, shopId, lines);
-          } catch (err) {
-            failures.push({ externalId: null, reason: `ensureItems: ${errorInfo(err).message}` });
-          }
-        }
-
-        for (const order of parsed.orders) {
-          try {
-            const saved = await upsertChannelOrder(this.db, shopId, order, syncedIso);
-            const items = await upsertChannelOrderItems(this.db, saved.orderId, order, units);
-            // SHOPEE-4: post COGS (eligible status) or reverse it (CANCELLED). A cost
-            // problem never fails the order sync — it only leaves COGS "chưa tính".
-            try {
-              const cogs = await this.costs.processOrder(saved.orderId);
-              for (const [key, n] of Object.entries(cogs)) stats.cogs[key] = (stats.cogs[key] ?? 0) + n;
-            } catch (err) {
-              stats.cogs.error = (stats.cogs.error ?? 0) + 1;
-              failures.push({ externalId: null, reason: `COGS ${order.externalOrderSn}: ${errorInfo(err).message}` });
-            }
-            if (saved.created) counts.created++;
-            else counts.updated++;
-            storedOrders++;
-            stats.linesUnresolved += items.unresolvedLines;
-            if (items.totalLines > 0 && items.mappedLines === items.totalLines) mapping.complete++;
-            else if (items.mappedLines === 0) mapping.unmapped++;
-            else mapping.partial++;
-            if (isOrderCompleted(order.orderStatus)) stats.ordersCompleted++;
-            if (isOrderCancelled(order.orderStatus)) stats.ordersCancelled++;
-            await saveMeaningfulOrderSnapshot(this.db, {
-              shopId,
-              orderSn: order.externalOrderSn,
-              apiName: "v2.order.get_order_detail",
-              payload: parsed.rawBySn.get(order.externalOrderSn) ?? null,
-              fingerprint: orderFingerprint(order),
-              sourceMode: this.provider.mode,
-              sourceUpdatedAt: order.updatedAtChannel,
-              syncedAt: syncedIso,
-            });
-          } catch (err) {
-            failedSns.add(order.externalOrderSn);
-            failures.push({ externalId: order.externalOrderSn, reason: `lưu đơn: ${errorInfo(err).message}` });
-          }
-        }
-      });
+      const acc: OrderBatchAccumulator = { counts, failures, failedSns, stats, mapping, storedOrders: 0 };
+      await mapWithConcurrency(batches, this.detailConcurrency, (batch) => this.processDetailBatch({ shopId, ctx, currency: shop.currency }, batch, acc));
+      storedOrders = acc.storedOrders;
     } catch (err) {
       return finish("failed", errorInfo(err));
     }
 
     if (failures.length === 0) return finish("success");
     return finish(storedOrders > 0 || counts.fetched === 0 ? "partial" : "failed");
+  }
+
+  /**
+   * One get_order_detail batch → parse → resolve units (ensureItems once for
+   * unknown listings) → upsert order + lines → COGS → meaningful snapshot.
+   * Order-level problems are recorded in `acc` and never stop the batch.
+   *
+   * rethrowProviderErrors (job runner): a provider failure of the WHOLE batch
+   * that is job-level — retryable (rate limit / transient) or auth/signature —
+   * is thrown so the job is retried / stopped with its checkpoint intact,
+   * instead of marking every order of the batch failed.
+   */
+  async processDetailBatch(
+    target: { shopId: string; ctx: OrderProviderContext; currency: string | null },
+    batch: readonly string[],
+    acc: OrderBatchAccumulator,
+    options: { rethrowProviderErrors?: boolean } = {},
+  ): Promise<void> {
+    const { shopId, ctx } = target;
+    const { counts, failures, failedSns, stats, mapping } = acc;
+    const syncedIso = this.now().toISOString();
+    let parsed: ReturnType<typeof parseOrderDetails>;
+    try {
+      const payload = await this.provider.getOrderDetails(ctx, { orderSns: batch });
+      parsed = parseOrderDetails(payload.raw, { fallbackCurrency: target.currency });
+    } catch (err) {
+      if (options.rethrowProviderErrors && isJobLevelProviderError(err)) throw err;
+      const { code, message } = errorInfo(err);
+      for (const sn of batch) {
+        failedSns.add(sn);
+        failures.push({ externalId: sn, reason: `get_order_detail [${code}] ${message}` });
+      }
+      return;
+    }
+    stats.detailsFetched += parsed.orders.length;
+    for (const issue of parsed.issues) {
+      if (issue.externalId) failedSns.add(issue.externalId);
+      failures.push({ externalId: issue.externalId, reason: `${issue.apiName}: ${issue.reason}` });
+    }
+    const returned = new Set(parsed.orders.map((o) => o.externalOrderSn));
+    for (const sn of batch) {
+      if (!returned.has(sn) && !failedSns.has(sn)) {
+        failedSns.add(sn);
+        failures.push({ externalId: sn, reason: "get_order_detail: đơn không có trong phản hồi" });
+      }
+    }
+
+    // Resolve identities for the whole batch; fetch unknown listings once.
+    const lines = parsed.orders.flatMap((o) => o.items);
+    let units: Map<string, ResolvedUnit> = await resolveChannelUnits(this.db, shopId, lines);
+    const missingItems = [...new Set(lines.filter((l) => !units.has(unitKey(l.externalItemId, l.externalModelId))).map((l) => l.externalItemId))];
+    if (missingItems.length > 0 && this.products) {
+      try {
+        await this.products.ensureItems(shopId, missingItems);
+        units = await resolveChannelUnits(this.db, shopId, lines);
+      } catch (err) {
+        failures.push({ externalId: null, reason: `ensureItems: ${errorInfo(err).message}` });
+      }
+    }
+
+    for (const order of parsed.orders) {
+      try {
+        const saved = await upsertChannelOrder(this.db, shopId, order, syncedIso);
+        const items = await upsertChannelOrderItems(this.db, saved.orderId, order, units);
+        // SHOPEE-4: post COGS (eligible status) or reverse it (CANCELLED). A cost
+        // problem never fails the order sync — it only leaves COGS "chưa tính".
+        try {
+          const cogs = await this.costs.processOrder(saved.orderId);
+          for (const [key, n] of Object.entries(cogs)) stats.cogs[key] = (stats.cogs[key] ?? 0) + n;
+        } catch (err) {
+          stats.cogs.error = (stats.cogs.error ?? 0) + 1;
+          failures.push({ externalId: null, reason: `COGS ${order.externalOrderSn}: ${errorInfo(err).message}` });
+        }
+        if (saved.created) counts.created++;
+        else counts.updated++;
+        acc.storedOrders++;
+        stats.linesUnresolved += items.unresolvedLines;
+        if (items.totalLines > 0 && items.mappedLines === items.totalLines) mapping.complete++;
+        else if (items.mappedLines === 0) mapping.unmapped++;
+        else mapping.partial++;
+        if (isOrderCompleted(order.orderStatus)) stats.ordersCompleted++;
+        if (isOrderCancelled(order.orderStatus)) stats.ordersCancelled++;
+        await saveMeaningfulOrderSnapshot(this.db, {
+          shopId,
+          orderSn: order.externalOrderSn,
+          apiName: "v2.order.get_order_detail",
+          payload: parsed.rawBySn.get(order.externalOrderSn) ?? null,
+          fingerprint: orderFingerprint(order),
+          sourceMode: this.provider.mode,
+          sourceUpdatedAt: order.updatedAtChannel,
+          syncedAt: syncedIso,
+        });
+      } catch (err) {
+        failedSns.add(order.externalOrderSn);
+        failures.push({ externalId: order.externalOrderSn, reason: `lưu đơn: ${errorInfo(err).message}` });
+      }
+    }
+  }
+
+  /** One get_order_list page (parsed). Pagination anomalies are the caller's to judge. */
+  async fetchOrderListPage(ctx: OrderProviderContext, window: TimeWindow, cursor: string) {
+    const payload = await this.provider.listOrders(ctx, {
+      timeRangeField: "update_time",
+      timeFrom: window.from,
+      timeTo: window.to,
+      pageSize: ORDER_LIST_PAGE_SIZE,
+      cursor,
+    });
+    return parseOrderListPage(payload.raw);
   }
 
   private async discoverWindow(
@@ -369,14 +414,7 @@ export class ShopeeOrderSyncService {
     const seenCursors = new Set<string>([cursor]);
     for (let page = 0; ; page++) {
       if (page >= MAX_PAGES_PER_WINDOW) throw new ShopeePayloadError("v2.order.get_order_list", "vượt số trang tối đa trong một cửa sổ");
-      const payload = await this.provider.listOrders(ctx, {
-        timeRangeField: "update_time",
-        timeFrom: window.from,
-        timeTo: window.to,
-        pageSize: ORDER_LIST_PAGE_SIZE,
-        cursor,
-      });
-      const parsed = parseOrderListPage(payload.raw);
+      const parsed = await this.fetchOrderListPage(ctx, window, cursor);
       stats.pagesFetched++;
       parsed.issues.forEach((i) => onIssue({ externalId: i.externalId, reason: `${i.apiName}: ${i.reason}` }));
       for (const o of parsed.orders) discovered.set(o.orderSn, o.orderStatus);

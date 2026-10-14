@@ -4,8 +4,8 @@ import { AlertTriangle, FlaskConical, ReceiptText } from "lucide-react";
 import { requirePermission } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { getChannelOrders, type ChannelOrderFilters, type MappingReadiness } from "@/lib/channels/core/order-queries";
-import { getLastProductSyncs } from "@/lib/channels/core/product-queries";
 import { listShops } from "@/lib/channels/core/queries";
+import { getSyncStatuses } from "@/lib/channels/core/sync-status-queries";
 import { getShopeeConfig } from "@/lib/channels/shopee/config";
 import { ORDER_STATUS_LABELS } from "@/lib/channels/shopee/order-status";
 import { getShopeeProviderMode } from "@/lib/channels/shopee/provider-mode";
@@ -16,10 +16,14 @@ import { ListPagination } from "@/components/list-pagination";
 
 import { fmtDate, formatDecimal } from "../shared";
 import { COGS_LABELS, COGS_VARIANT, FINANCIAL_STATUS_LABELS, READINESS_LABELS, READINESS_VARIANT } from "./labels";
+import { BackfillButton, SyncNowButton } from "../sync/sync-buttons";
+import { FreshnessSummary, SyncFreshness } from "../sync/sync-status";
 import { OrderFilters } from "./order-filters";
-import { BackfillCogsButton, OrderSyncControls } from "./order-sync-controls";
+import { BackfillCogsButton } from "./order-sync-controls";
 
 export const dynamic = "force-dynamic";
+// "Đồng bộ ngay" kicks the background worker after responding (after()).
+export const maxDuration = 60;
 
 const PAGE_SIZE = 25;
 const READINESS = new Set(["complete", "partial", "unmapped"]);
@@ -30,6 +34,7 @@ type Params = { shop?: string; status?: string; mapping?: string; financial?: st
 export default async function ShopeeOrdersPage({ searchParams }: { searchParams: Promise<Params> }) {
   const auth = await requirePermission("channel:view");
   const canManage = hasPermission(auth.profile.role, "channel:manage");
+  const canSync = hasPermission(auth.profile.role, "channel:sync");
   const canManageCost = hasPermission(auth.profile.role, "cost:manage");
   const params = await searchParams;
   const page = Math.max(1, Number(params.page) || 1);
@@ -55,7 +60,13 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
     dateFrom: DAY.test(params.from ?? "") ? params.from : undefined,
     dateTo: DAY.test(params.to ?? "") ? params.to : undefined,
   };
-  const [{ rows, total }, lastSyncs] = await Promise.all([getChannelOrders(filters, page, PAGE_SIZE), getLastProductSyncs(shops.map((s) => s.id), "order")]);
+  const [{ rows, total }, syncStatuses] = await Promise.all([
+    getChannelOrders(filters, page, PAGE_SIZE),
+    getSyncStatuses(
+      shops.map((s) => s.id),
+      ["order"],
+    ),
+  ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hasFilter = Object.values(filters).some(Boolean);
 
@@ -66,6 +77,7 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
         <p className="text-muted-foreground">
           Đơn hàng đồng bộ từ Shopee. Giá trị sản phẩm là giá trị đơn trên Shopee — chưa phải doanh thu thực nhận hay lợi nhuận.
         </p>
+        <FreshnessSummary shops={shops} statuses={syncStatuses} syncType="order" />
       </div>
 
       {modeConfig.mode === "fixture" ? (
@@ -80,15 +92,14 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
         </p>
       ) : null}
 
-      {canManage && shops.length > 0 && (
+      {(canSync || canManage) && shops.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Đồng bộ đơn hàng</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {shops.map((shop) => {
-              const last = lastSyncs.get(shop.id);
-              const usable = shop.dataSource === modeConfig.mode && !liveProblem && !modeConfig.problem;
+              const usable = shop.isActive && shop.dataSource === modeConfig.mode && !liveProblem && !modeConfig.problem;
               return (
                 <div key={shop.id} className="flex flex-col gap-3 border-b pb-4 last:border-b-0 last:pb-0 md:flex-row md:items-start md:justify-between">
                   <div className="space-y-1 text-sm">
@@ -96,24 +107,17 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                       {shop.shopName}
                       <Badge variant={shop.dataSource === "fixture" ? "secondary" : "outline"}>{shop.dataSource === "fixture" ? "FIXTURE" : "LIVE"}</Badge>
                     </p>
-                    <p className="text-muted-foreground">
-                      Lần đồng bộ đơn gần nhất:{" "}
-                      {last ? (
-                        <>
-                          {fmtDate(last.startedAt)} · <span className={last.status === "success" ? "" : "text-destructive"}>{last.status}</span> · {last.recordsFetched} đơn
-                          {last.recordsFailed ? `, ${last.recordsFailed} lỗi` : ""}
-                        </>
-                      ) : (
-                        "chưa đồng bộ"
-                      )}
-                    </p>
+                    <SyncFreshness status={syncStatuses.get(`${shop.id}|order`)} canSeeErrors={canManage} />
                     {!usable && (
                       <p className="text-xs text-muted-foreground">
                         {shop.dataSource === "fixture" ? "Shop fixture chỉ đồng bộ được ở fixture mode." : "Shop thật chỉ đồng bộ được khi API Shopee (live) đã được cấu hình."}
                       </p>
                     )}
                   </div>
-                  <OrderSyncControls shopId={shop.id} disabled={!usable} />
+                  <div className="flex flex-wrap items-start gap-2">
+                    {canSync && <SyncNowButton shopId={shop.id} syncType="order" disabled={!usable} />}
+                    {canManage && <BackfillButton shopId={shop.id} syncType="order" days={30} label="Backfill 30 ngày" disabled={!usable} />}
+                  </div>
                 </div>
               );
             })}

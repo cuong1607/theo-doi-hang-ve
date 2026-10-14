@@ -58,10 +58,17 @@ export async function hasRunningSync(db: SupabaseClient, shopId: string, syncTyp
   return (count ?? 0) > 0;
 }
 
-export async function startSyncLog(db: SupabaseClient, shopId: string, syncType: string, startedAt: string, metadata: Record<string, unknown>): Promise<string> {
+export async function startSyncLog(
+  db: SupabaseClient,
+  shopId: string,
+  syncType: string,
+  startedAt: string,
+  metadata: Record<string, unknown>,
+  jobId: string | null = null,
+): Promise<string> {
   const { data, error } = await db
     .from("channel_sync_logs")
-    .insert({ shop_id: shopId, sync_type: syncType, started_at: startedAt, status: "running", metadata })
+    .insert({ shop_id: shopId, sync_type: syncType, started_at: startedAt, status: "running", metadata, job_id: jobId })
     .select("id")
     .single();
   if (error || !data) throw new Error(`Không tạo được sync log: ${error?.message ?? "unknown"}`);

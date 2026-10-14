@@ -7,55 +7,111 @@
 // ============================================================
 import "server-only";
 
+import { randomUUID } from "node:crypto";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { getSyncConfig } from "../core/sync-config.ts";
+import { SyncWorker, type BurstReport } from "../core/sync-worker.ts";
 import { ShopeeClient } from "./client.ts";
-import { getShopeeConfig, type ShopeeConfig } from "./config.ts";
+import { getShopeeConfig, ShopeeConfigError, type ShopeeConfig } from "./config.ts";
+import { toJobFailure } from "./sync-errors.ts";
+import { JobTokenCache } from "./sync-instrumentation.ts";
+import { createShopeeRunnerFactory, hasDueSyncJobs, type ShopeeProviderSource } from "./sync-service.ts";
 import { ShopeeConnectionService } from "./token.ts";
 
-import { FixtureShopeeProductProvider, loadProductFixtures, RealShopeeProductProvider, type ShopeeProductProvider } from "./product-provider.ts";
-import { ShopeeProductSyncService } from "./product-sync.ts";
-import { FixtureShopeeOrderProvider, loadOrderFixtures, RealShopeeOrderProvider, type ShopeeOrderProvider } from "./order-provider.ts";
-import { ShopeeOrderSyncService } from "./order-sync.ts";
+import { FixtureShopeeProductProvider, loadProductFixtures, RealShopeeProductProvider } from "./product-provider.ts";
+import { FixtureShopeeOrderProvider, loadOrderFixtures, RealShopeeOrderProvider } from "./order-provider.ts";
 import { getShopeeProviderMode } from "./provider-mode.ts";
 
 let cached: { config: ShopeeConfig; client: ShopeeClient; service: ShopeeConnectionService } | null = null;
 
-/**
- * Product sync wired to the configured data source (SHOPEE_PROVIDER_MODE).
- * Live mode needs complete Shopee config (throws ShopeeConfigError
- * otherwise) — it NEVER falls back to fixtures.
- */
-export function getShopeeProductSync(): { mode: "live" | "fixture"; sync: ShopeeProductSyncService } {
-  const { mode, problem } = getShopeeProviderMode();
-  if (problem) throw new Error(problem);
-  let provider: ShopeeProductProvider;
-  if (mode === "fixture") {
-    provider = new FixtureShopeeProductProvider(loadProductFixtures());
-  } else {
-    const { client, service } = getShopee();
-    provider = new RealShopeeProductProvider({ client, connections: service });
-  }
-  return { mode, sync: new ShopeeProductSyncService({ db: createAdminClient(), provider }) };
+// ------------------------------------------------------------------
+// SHOPEE-PERF-1: background sync worker wiring. Product / order sync is
+// ONLY reachable through the job queue (UI enqueues → worker runs); there is
+// deliberately no "sync now inside this request" entry point any more.
+// Data-source rule unchanged: live mode never falls back to fixtures.
+// ------------------------------------------------------------------
+
+/** In-request retry sleeps are capped: a longer wait becomes the job's next_attempt_at instead. */
+const WORKER_MAX_RETRY_SLEEP_MS = 2_000;
+let workerClient: ShopeeClient | null = null;
+
+function getWorkerClient(config: ShopeeConfig): ShopeeClient {
+  workerClient ??= new ShopeeClient({
+    partnerId: config.partnerId,
+    partnerKey: config.partnerKey,
+    apiBaseUrl: config.apiBaseUrl,
+    maxRetries: 1,
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, Math.min(ms, WORKER_MAX_RETRY_SLEEP_MS))),
+  });
+  return workerClient;
 }
 
 /**
- * Order sync wired to the configured data source. Unknown listings referenced
- * by orders are fetched through the product sync of the SAME source
- * (ensureItems) — never a fixture fallback for a live shop.
+ * A worker for one invocation (route / after()). Providers are built per job
+ * slice: live → worker client + JobTokenCache over the shared connection
+ * service (concurrency-safe refresh of SHOPEE-1); fixture → fixture files.
  */
-export function getShopeeOrderSync(): { mode: "live" | "fixture"; sync: ShopeeOrderSyncService } {
-  const { mode, problem } = getShopeeProviderMode();
-  if (problem) throw new Error(problem);
-  const products = getShopeeProductSync().sync;
-  let provider: ShopeeOrderProvider;
-  if (mode === "fixture") {
-    provider = new FixtureShopeeOrderProvider(loadOrderFixtures());
-  } else {
-    const { client, service } = getShopee();
-    provider = new RealShopeeOrderProvider({ client, connections: service });
+export function getShopeeSyncWorker(): SyncWorker {
+  const config = getSyncConfig();
+  const db = createAdminClient();
+  const providers: ShopeeProviderSource = () => {
+    const { mode, problem } = getShopeeProviderMode();
+    if (problem) throw new ShopeeConfigError([problem]);
+    if (mode === "fixture") {
+      return { mode, order: new FixtureShopeeOrderProvider(loadOrderFixtures()), product: new FixtureShopeeProductProvider(loadProductFixtures()) };
+    }
+    const { config: shopeeConfig, service } = getShopee();
+    const client = getWorkerClient(shopeeConfig);
+    const tokens = new JobTokenCache(service);
+    return {
+      mode,
+      order: new RealShopeeOrderProvider({ client, connections: tokens }),
+      product: new RealShopeeProductProvider({ client, connections: tokens }),
+    };
+  };
+  return new SyncWorker({
+    db,
+    config,
+    workerId: `${process.env.VERCEL_REGION ?? "local"}-${randomUUID().slice(0, 8)}`,
+    createRunner: createShopeeRunnerFactory({ db, config, providers }),
+    classifyError: toJobFailure,
+  });
+}
+
+/**
+ * One kick of background work: a time-bounded burst in THIS invocation, then
+ * — if claimable jobs remain and chaining is enabled — one fire-and-forget
+ * call to the worker endpoint so the queue keeps draining on plans without
+ * a frequent cron. Never throws (callers run it inside after()).
+ */
+export async function kickShopeeSyncWorker(options: { origin: string | null; hop?: number } = { origin: null }): Promise<BurstReport | null> {
+  const config = getSyncConfig();
+  try {
+    const report = await getShopeeSyncWorker().runBurst({ timeBudgetMs: config.workerTimeBudgetMs });
+    const hop = options.hop ?? 0;
+    if (options.origin && report.stoppedBy === "time" && hop < config.maxChainHops && (await hasDueSyncJobs(createAdminClient()))) {
+      await chainShopeeSyncWorker(options.origin, hop + 1);
+    }
+    return report;
+  } catch (err) {
+    console.error(JSON.stringify({ source: "sync-worker", event: "SYNC_KICK_FAILED", message: err instanceof Error ? err.message.slice(0, 300) : String(err) }));
+    return null;
   }
-  return { mode, sync: new ShopeeOrderSyncService({ db: createAdminClient(), provider, products }) };
+}
+
+/**
+ * Starts the NEXT worker invocation (a new serverless function with its own
+ * time limit) — never more work inside the current one. Only the request has
+ * to reach the endpoint; we stop waiting after a few seconds.
+ */
+export async function chainShopeeSyncWorker(origin: string, hop: number): Promise<void> {
+  const secret = process.env.SYNC_WORKER_SECRET || process.env.CRON_SECRET;
+  if (!secret) return;
+  const url = new URL("/api/internal/shopee/sync-worker", origin);
+  url.searchParams.set("hop", String(hop));
+  await fetch(url, { method: "POST", headers: { authorization: `Bearer ${secret}` }, signal: AbortSignal.timeout(3_000) }).catch(() => undefined);
 }
 
 /**
