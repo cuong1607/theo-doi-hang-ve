@@ -33,6 +33,7 @@ export const SYNC_MODE_LABELS: Record<string, string> = {
 export const SYNC_TYPE_LABELS: Record<string, string> = {
   order: "Đơn hàng",
   product: "Sản phẩm",
+  escrow: "Tài chính",
 };
 
 export function JobStatusBadge({ job }: { job: Pick<SyncJobView, "status" | "cancelRequested"> }) {

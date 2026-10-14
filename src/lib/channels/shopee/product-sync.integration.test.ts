@@ -243,7 +243,8 @@ test("13 + 14 + 15. auto-map: exact (trim + case) match, no match → unmapped, 
       { id: 850006, sku: `${sku("exact")}-X` },
     ]),
   ).service.sync(shopId);
-  assert.deepEqual(result.autoMap, { scanned: 6, mapped: 2, unmapped: 3, conflicts: 1 });
+  const { scanned, mapped, unmapped, conflicts } = result.autoMap!;
+  assert.deepEqual({ scanned, mapped, unmapped, conflicts }, { scanned: 6, mapped: 2, unmapped: 3, conflicts: 1 });
   const byItem = Object.fromEntries((await listing(shopId)).map((r) => [r.external_item_id, r]));
   assert.deepEqual([byItem["850001"].mapping_status, byItem["850001"].internal_product_id], ["auto_mapped", exact]);
   assert.deepEqual([byItem["850002"].mapping_status, byItem["850002"].internal_product_id], ["auto_mapped", cased]);

@@ -45,6 +45,13 @@ export interface ChannelOrderListRow {
   /** Sum of the lines that ARE costed — diagnostics only, never a total. */
   partialCogsSum: string | null;
   reversedLines: number;
+  /** SHOPEE-5 (NULL = not known yet, never 0). */
+  shopeeNetIncome: string | null;
+  internalCogs: string | null;
+  profitAfterCogs: string | null;
+  reconciliationStatus: "matched" | "warning" | "mismatch" | null;
+  settlementState: "missing" | "available";
+  profitState: "profit" | "loss" | "break_even" | null;
 }
 
 export interface ChannelOrderFilters {
@@ -57,6 +64,24 @@ export interface ChannelOrderFilters {
   orderSn?: string;
   /** Matches Shopee item/model SKU, item name, or the internal SKU of a line. */
   sku?: string;
+  /** SHOPEE-5 financial filters (all view-derived). */
+  profitState?: "profit" | "loss" | "break_even";
+  reconciliation?: "matched" | "warning" | "mismatch";
+  settlementState?: "missing" | "available";
+  cogsReadiness?: CogsReadiness;
+}
+
+export interface OrderFinancialSummary {
+  orderCount: number;
+  withIncome: number;
+  incomeSum: string;
+  withCogs: number;
+  cogsSum: string;
+  withProfit: number;
+  profitSum: string;
+  missingSettlement: number;
+  missingCogs: number;
+  mismatchCount: number;
 }
 
 type SummaryRow = {
@@ -84,12 +109,19 @@ type SummaryRow = {
   total_cogs: string | null;
   partial_cogs_sum: string | null;
   reversed_lines: number | string;
+  shopee_net_income: string | null;
+  internal_cogs: string | null;
+  profit_after_cogs: string | null;
+  reconciliation_status: "matched" | "warning" | "mismatch" | null;
+  settlement_state: "missing" | "available";
+  profit_state: "profit" | "loss" | "break_even" | null;
 };
 
 const COLUMNS =
   "order_id, shop_id, shop_name, data_source, external_order_sn, order_status, financial_status, currency, channel_total_amount, " +
   "created_at_channel, updated_at_channel, last_synced_at, line_count, mapped_lines, total_item_quantity, item_gross_value, " +
-  "original_item_value, mapping_readiness, cogs_readiness, financial_sync_eligible, costed_lines, total_cogs, partial_cogs_sum, reversed_lines";
+  "original_item_value, mapping_readiness, cogs_readiness, financial_sync_eligible, costed_lines, total_cogs, partial_cogs_sum, reversed_lines, " +
+  "shopee_net_income, internal_cogs, profit_after_cogs, reconciliation_status, settlement_state, profit_state";
 
 function toRow(r: SummaryRow): ChannelOrderListRow {
   return {
@@ -117,6 +149,12 @@ function toRow(r: SummaryRow): ChannelOrderListRow {
     totalCogs: r.total_cogs,
     partialCogsSum: r.partial_cogs_sum,
     reversedLines: Number(r.reversed_lines),
+    shopeeNetIncome: r.shopee_net_income,
+    internalCogs: r.internal_cogs,
+    profitAfterCogs: r.profit_after_cogs,
+    reconciliationStatus: r.reconciliation_status,
+    settlementState: r.settlement_state,
+    profitState: r.profit_state,
   };
 }
 
@@ -147,7 +185,7 @@ export async function getChannelOrders(filters: ChannelOrderFilters, page: numbe
   // Line-derived filter (mapping readiness) → count through the view. Otherwise
   // count channel_orders directly: same rows (every order has its shop), but
   // without aggregating lines for the whole filtered set just to count it.
-  const countOnBase = !filters.mappingReadiness;
+  const countOnBase = !filters.mappingReadiness && !filters.profitState && !filters.reconciliation && !filters.settlementState && !filters.cogsReadiness;
   const db = createAdminClient();
   let query = db
     .from("v_channel_order_summary")
@@ -187,10 +225,67 @@ export async function getChannelOrders(filters: ChannelOrderFilters, page: numbe
     countQuery = countQuery.in("id", restrictIds);
   }
   if (filters.mappingReadiness) query = query.eq("mapping_readiness", filters.mappingReadiness);
+  if (filters.profitState) query = query.eq("profit_state", filters.profitState);
+  if (filters.reconciliation) query = query.eq("reconciliation_status", filters.reconciliation);
+  if (filters.settlementState) query = query.eq("settlement_state", filters.settlementState);
+  if (filters.cogsReadiness) query = query.eq("cogs_readiness", filters.cogsReadiness);
   const [list, counted] = await Promise.all([query.returns<SummaryRow[]>(), countOnBase ? countQuery : null]);
   if (list.error) throw new Error(list.error.message);
   if (counted?.error) throw new Error(counted.error.message);
   return { rows: (list.data ?? []).map(toRow), total: (countOnBase ? counted?.count : list.count) ?? 0 };
+}
+
+/**
+ * DB-side totals for the filtered list (SHOPEE-5). Only authoritative values
+ * are summed (income / COGS / profit present); the counts of what is missing
+ * are returned instead of treating it as 0.
+ */
+export async function getOrderFinancialSummary(filters: ChannelOrderFilters): Promise<OrderFinancialSummary> {
+  let orderIds: string[] | null = null;
+  if (filters.sku) {
+    orderIds = await orderIdsMatchingSku(filters.sku);
+    if (orderIds.length === 0) return { orderCount: 0, withIncome: 0, incomeSum: "0", withCogs: 0, cogsSum: "0", withProfit: 0, profitSum: "0", missingSettlement: 0, missingCogs: 0, mismatchCount: 0 };
+  }
+  const { data, error } = await createAdminClient()
+    .rpc("get_channel_order_financial_summary", {
+      p_shop_id: filters.shopId ?? null,
+      p_date_from: filters.dateFrom ? vnDayStart(filters.dateFrom) : null,
+      p_date_to: filters.dateTo ? new Date(new Date(vnDayStart(filters.dateTo)).getTime() + 86_400_000).toISOString() : null,
+      p_order_status: filters.orderStatus ?? null,
+      p_financial_status: filters.financialStatus ?? null,
+      p_mapping: filters.mappingReadiness ?? null,
+      p_order_sn: filters.orderSn ? escapeIlikeTerm(filters.orderSn) : null,
+      p_profit_state: filters.profitState ?? null,
+      p_reconciliation: filters.reconciliation ?? null,
+      p_settlement_state: filters.settlementState ?? null,
+      p_cogs_readiness: filters.cogsReadiness ?? null,
+      p_order_ids: orderIds,
+    })
+    .single<{
+      order_count: number | string;
+      with_income: number | string;
+      income_sum: string;
+      with_cogs: number | string;
+      cogs_sum: string;
+      with_profit: number | string;
+      profit_sum: string;
+      missing_settlement: number | string;
+      missing_cogs: number | string;
+      mismatch_count: number | string;
+    }>();
+  if (error || !data) throw new Error(error?.message ?? "Không đọc được tổng hợp tài chính.");
+  return {
+    orderCount: Number(data.order_count),
+    withIncome: Number(data.with_income),
+    incomeSum: data.income_sum,
+    withCogs: Number(data.with_cogs),
+    cogsSum: data.cogs_sum,
+    withProfit: Number(data.with_profit),
+    profitSum: data.profit_sum,
+    missingSettlement: Number(data.missing_settlement),
+    missingCogs: Number(data.missing_cogs),
+    mismatchCount: Number(data.mismatch_count),
+  };
 }
 
 export async function getOrderMappingReadiness(orderId: string): Promise<ChannelOrderListRow | null> {

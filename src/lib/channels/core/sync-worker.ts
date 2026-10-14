@@ -93,8 +93,10 @@ export class SyncWorker {
     const slices: SliceReport[] = [];
     for (;;) {
       const left = budgetMs - (this.clock() - started);
-      // Too little time for a meaningful slice — leave it to the next invocation.
-      if (left < Math.min(5_000, this.config.sliceTimeBudgetMs)) return { recovered, slices, stoppedBy: "time" };
+      // Start a slice only when a FULL slice budget still fits: a slice's last
+      // step may run past its own deadline, and the platform kills the whole
+      // invocation at maxDuration (60 s) — leave the rest to the next one.
+      if (left < this.config.sliceTimeBudgetMs) return { recovered, slices, stoppedBy: "time" };
       const report = await this.runOne(left);
       if (!report) return { recovered, slices, stoppedBy: "empty" };
       slices.push(report);

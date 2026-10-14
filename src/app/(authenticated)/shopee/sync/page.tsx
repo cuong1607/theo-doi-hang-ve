@@ -94,6 +94,7 @@ export default async function ShopeeSyncPage() {
                   <TableHead>Shop</TableHead>
                   <TableHead>Đơn hàng</TableHead>
                   <TableHead>Sản phẩm</TableHead>
+                  <TableHead>Tài chính (escrow)</TableHead>
                   {(canSync || canManage) && <TableHead className="text-right">Thao tác</TableHead>}
                 </TableRow>
               </TableHeader>
@@ -115,11 +116,15 @@ export default async function ShopeeSyncPage() {
                       <TableCell>
                         <SyncFreshness status={statuses.get(`${shop.id}|product`)} canSeeErrors={canManage} />
                       </TableCell>
+                      <TableCell>
+                        <SyncFreshness status={statuses.get(`${shop.id}|escrow`)} canSeeErrors={canManage} />
+                      </TableCell>
                       {(canSync || canManage) && (
                         <TableCell>
                           <div className="flex flex-col items-end gap-2">
                             {canSync && <SyncNowButton shopId={shop.id} syncType="order" label="Đồng bộ đơn ngay" disabled={!usable} />}
                             {canSync && <SyncNowButton shopId={shop.id} syncType="product" label="Đồng bộ sản phẩm ngay" disabled={!usable} />}
+                            {canSync && <SyncNowButton shopId={shop.id} syncType="escrow" label="Đồng bộ tài chính" disabled={!usable} />}
                             {canManage && <BackfillButton shopId={shop.id} syncType="order" days={30} label="Backfill đơn 30 ngày" disabled={!usable} />}
                             {canManage && <BackfillButton shopId={shop.id} syncType="product" label="Quét toàn bộ sản phẩm" disabled={!usable} />}
                           </div>

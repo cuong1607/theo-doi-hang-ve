@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, FlaskConical, Info } from "lucide-react";
+import { AlertTriangle, ArrowLeft, FlaskConical } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
+import { getOrderFinancialDetail } from "@/lib/channels/core/financial-queries";
 import { getChannelOrderDetail } from "@/lib/channels/core/order-queries";
 import { isMappingStatus } from "@/lib/channels/core/types";
 import { ORDER_STATUS_LABELS } from "@/lib/channels/shopee/order-status";
@@ -13,7 +14,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 import { ModelRowActions } from "../../products/model-row-actions";
 import { fmtDate, formatDecimal, MAPPING_LABELS, MAPPING_VARIANT, toModelView } from "../../shared";
-import { COGS_LABELS, COGS_VARIANT, COST_METHOD_LABELS, FINANCIAL_STATUS_LABELS, READINESS_LABELS, READINESS_VARIANT } from "../labels";
+import { COGS_LABELS, COGS_VARIANT, COST_METHOD_LABELS, READINESS_LABELS, READINESS_VARIANT } from "../labels";
+import { OrderFinancialSection } from "./financial-section";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +37,7 @@ export default async function ShopeeOrderDetailPage({ params }: { params: Promis
   const canManage = hasPermission(role, "channel:manage");
   const { id } = await params;
   if (!UUID.test(id)) notFound();
-  const detail = await getChannelOrderDetail(id);
+  const [detail, financial] = await Promise.all([getChannelOrderDetail(id), getOrderFinancialDetail(id)]);
   if (!detail) notFound();
   const o = detail.summary;
 
@@ -162,7 +164,7 @@ export default async function ShopeeOrderDetailPage({ params }: { params: Promis
 
       <Card>
         <CardHeader>
-          <CardTitle>Tài chính</CardTitle>
+          <CardTitle>Giá trị đơn & giá vốn</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <dl className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -175,11 +177,6 @@ export default async function ShopeeOrderDetailPage({ params }: { params: Promis
                 {o.cogsReadiness === "partial" ? ` ${o.costedLines}/${o.lineCount}` : ""}
               </Badge>
             </Field>
-            <Field label="Tổng COGS">
-              {o.totalCogs !== null ? formatDecimal(o.totalCogs, " ₫") : <span className="text-muted-foreground">Chưa tính (thiếu dữ liệu giá vốn)</span>}
-            </Field>
-            <Field label="Trạng thái tài chính">{FINANCIAL_STATUS_LABELS[o.financialStatus] ?? o.financialStatus}</Field>
-            <Field label="Lợi nhuận">Chưa có</Field>
           </dl>
           {detail.lines.some((l) => l.negativeInventory) && (
             <p className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
@@ -187,13 +184,10 @@ export default async function ShopeeOrderDetailPage({ params }: { params: Promis
               Tồn kho giá vốn đang âm. Có thể dữ liệu nhập hàng lịch sử chưa đầy đủ hoặc đơn bán đã được ghi nhận trước hàng nhập.
             </p>
           )}
-          <p className="flex items-start gap-2 text-sm text-muted-foreground">
-            <Info className="mt-0.5 size-4 shrink-0" />
-            Phí Shopee / settlement sẽ được đồng bộ ở SHOPEE-5.
-            {o.financialSyncEligible ? " Đơn đã hoàn thành — đủ điều kiện đồng bộ tài chính khi tính năng sẵn sàng." : ""}
-          </p>
         </CardContent>
       </Card>
+
+      <OrderFinancialSection detail={financial} orderTotal={o.channelTotalAmount} financialStatus={o.financialStatus} cogsReady={o.cogsReadiness === "complete"} />
     </div>
   );
 }

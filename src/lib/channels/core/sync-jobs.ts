@@ -19,7 +19,7 @@ import { decideFailure, type JobFailure } from "./retry-policy.ts";
 export const SYNC_TYPES = ["product", "order", "escrow", "income", "return", "payout"] as const;
 export type SyncType = (typeof SYNC_TYPES)[number];
 /** Sync types the worker can run today (the others are reserved for SHOPEE-5+). */
-export const RUNNABLE_SYNC_TYPES = ["product", "order"] as const satisfies readonly SyncType[];
+export const RUNNABLE_SYNC_TYPES = ["product", "order", "escrow"] as const satisfies readonly SyncType[];
 export type RunnableSyncType = (typeof RUNNABLE_SYNC_TYPES)[number];
 
 export const SYNC_MODES = ["incremental", "backfill", "repair", "manual"] as const;

@@ -29,7 +29,7 @@ function useAction() {
   return { pending, result, run };
 }
 
-export function SyncNowButton({ shopId, syncType, label = "Đồng bộ ngay", disabled }: { shopId: string; syncType: "order" | "product"; label?: string; disabled?: boolean }) {
+export function SyncNowButton({ shopId, syncType, label = "Đồng bộ ngay", disabled }: { shopId: string; syncType: "order" | "product" | "escrow"; label?: string; disabled?: boolean }) {
   const { pending, result, run } = useAction();
   return (
     <div className="space-y-1.5">

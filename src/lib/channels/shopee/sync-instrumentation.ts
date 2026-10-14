@@ -17,6 +17,7 @@
 import type { ExecutionBudget } from "../core/retry-policy.ts";
 import { ShopeeApiError } from "./errors.ts";
 import type { ListOrdersInput, OrderProviderContext, ShopeeOrderProvider } from "./order-provider.ts";
+import type { PaymentProviderContext, ShopeePaymentProvider } from "./payment-provider.ts";
 import type { ListItemsInput, ProductProviderContext, ProviderPayload, ShopeeProductProvider } from "./product-provider.ts";
 import type { ShopeeTokenSource } from "./token.ts";
 
@@ -59,6 +60,13 @@ export function meterProductProvider(provider: ShopeeProductProvider, meter: Api
     listItems: (ctx: ProductProviderContext, input: ListItemsInput): Promise<ProviderPayload> => meter.track("get_item_list", () => provider.listItems(ctx, input)),
     getItemBaseInfo: (ctx: ProductProviderContext, input: { itemIds: readonly string[] }) => meter.track("get_item_base_info", () => provider.getItemBaseInfo(ctx, input)),
     getModelList: (ctx: ProductProviderContext, input: { itemId: string }) => meter.track("get_model_list", () => provider.getModelList(ctx, input)),
+  };
+}
+
+export function meterPaymentProvider(provider: ShopeePaymentProvider, meter: ApiCallMeter): ShopeePaymentProvider {
+  return {
+    mode: provider.mode,
+    getEscrowDetail: (ctx: PaymentProviderContext, input: { orderSn: string }) => meter.track("get_escrow_detail", () => provider.getEscrowDetail(ctx, input)),
   };
 }
 

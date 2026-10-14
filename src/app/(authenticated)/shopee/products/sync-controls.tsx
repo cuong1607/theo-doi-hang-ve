@@ -17,7 +17,7 @@ function ResultLine({ result }: { result: ActionResult<unknown> | null }) {
   );
 }
 
-/** Database-only: re-runs exact-SKU auto-mapping on what is already synced (no Shopee call). */
+/** Database-only: exact-SKU auto-mapping of what product sync already stored (no Shopee call). */
 export function AutoMapButton({ shopId }: { shopId: string }) {
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<ActionResult<unknown> | null>(null);
@@ -27,12 +27,20 @@ export function AutoMapButton({ shopId }: { shopId: string }) {
         size="sm"
         variant="outline"
         disabled={pending}
+        title="Ghép SKU từ dữ liệu đã đồng bộ trong hệ thống — không gọi Shopee"
         onClick={() => {
           setResult(null);
-          startTransition(async () => setResult(await autoMapShopeeProductsAction(shopId)));
+          startTransition(async () => {
+            try {
+              setResult(await autoMapShopeeProductsAction(shopId));
+            } catch {
+              // Never let a failed request take the page down.
+              setResult({ ok: false, message: "Không gửi được yêu cầu ghép SKU. Vui lòng thử lại." });
+            }
+          });
         }}
       >
-        <Wand2 /> Tự động ghép SKU
+        <Wand2 /> {pending ? "Đang ghép..." : "Tự động ghép SKU"}
       </Button>
       <ResultLine result={result} />
     </div>

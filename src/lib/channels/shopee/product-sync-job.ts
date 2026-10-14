@@ -27,6 +27,8 @@ import { shouldRefreshProductDetail, type LocalProductState } from "./sync-decis
 import { errorInfo, JobRefusedError } from "./sync-errors.ts";
 
 const MAX_DISCOVERY_PAGES = 1000;
+/** get_model_list rounds per detail chunk (chunk ≤ productDetailConcurrency × this). */
+const MODEL_ROUNDS_PER_CHUNK = 4;
 export const MAX_REPAIR_ITEM_IDS = 200;
 
 export interface ProductJobCheckpoint {
@@ -87,9 +89,12 @@ export class ProductSyncJobRunner implements SyncJobRunner {
       // ---- details for queued listings
       if (cp.pendingItemIds.length > 0) {
         // base_info costs 1 call per chunk, get_model_list ≤ 1 per listing.
+        // Chunk size is bounded by calls left AND by a few rounds of model calls,
+        // so one chunk (which cannot be split mid-way without losing models)
+        // stays short even when Shopee answers slowly.
         const left = budget.apiCallsLeft;
         if (left < 2 || !budget.canSpend(2)) return { kind: "more" };
-        const chunk = cp.pendingItemIds.slice(0, Math.min(BASE_INFO_BATCH_SIZE, left - 1));
+        const chunk = cp.pendingItemIds.slice(0, Math.min(BASE_INFO_BATCH_SIZE, left - 1, config.productDetailConcurrency * MODEL_ROUNDS_PER_CHUNK));
         const acc = {
           counts: { fetched: chunk.length, created: 0, updated: 0, failed: 0 },
           failures: [] as Array<{ externalId: string | null; reason: string }>,
@@ -163,7 +168,7 @@ export class ProductSyncJobRunner implements SyncJobRunner {
 
     // ---- finalize: mapping (DB only, also when partial — what synced is mappable)
     try {
-      const mapped = await autoMapChannelModels(this.db, shop.id, now());
+      const mapped = await autoMapChannelModels(this.db, shop.id, now(), { cogsBudgetMs: 3_000 });
       await refreshMappingReviewFlags(this.db, shop.id);
       progress.incr("autoMapped", mapped.mapped);
       progress.meta.autoMap = { mapped: mapped.mapped, unmapped: mapped.unmapped, conflicts: mapped.conflicts };

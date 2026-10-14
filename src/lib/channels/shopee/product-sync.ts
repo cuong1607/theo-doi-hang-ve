@@ -290,7 +290,7 @@ export class ShopeeProductSyncService {
       setModels() {},
     };
     await this.storeItems(shopId, { shopId, externalShopId: shop.external_shop_id }, shop.currency, ids, new Map(), acc);
-    await autoMapChannelModels(this.db, shopId, this.now());
+    await autoMapChannelModels(this.db, shopId, this.now(), { cogsBudgetMs: 3_000 });
     return { failures: acc.failures };
   }
 

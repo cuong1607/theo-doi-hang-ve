@@ -130,10 +130,16 @@ export default async function ShopeeProductsPage({
                       </p>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-start gap-2">
-                    {canSync && <SyncNowButton shopId={shop.id} syncType="product" disabled={!sourceMatches} />}
-                    {canManage && <BackfillButton shopId={shop.id} syncType="product" label="Quét toàn bộ" disabled={!sourceMatches} />}
-                    {canManage && <AutoMapButton shopId={shop.id} />}
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-start gap-2">
+                      {canSync && <SyncNowButton shopId={shop.id} syncType="product" label="Đồng bộ sản phẩm" disabled={!sourceMatches} />}
+                      {canManage && <BackfillButton shopId={shop.id} syncType="product" label="Quét toàn bộ" disabled={!sourceMatches} />}
+                      {canManage && <AutoMapButton shopId={shop.id} />}
+                    </div>
+                    <p className="max-w-md text-xs text-muted-foreground">
+                      <b>Đồng bộ sản phẩm</b>: Shopee → dữ liệu trong hệ thống (chạy nền theo hàng đợi). <b>Tự động ghép SKU</b>: ghép biến thể đã đồng bộ với SKU
+                      nội bộ, chỉ dùng dữ liệu trong hệ thống — không gọi Shopee. Có biến thể mới trên Shopee thì đồng bộ sản phẩm trước, rồi mới ghép.
+                    </p>
                   </div>
                 </div>
               );

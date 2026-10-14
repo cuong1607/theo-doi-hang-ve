@@ -22,7 +22,17 @@ const FINANCIAL_OPTIONS = [
   ...["pending", "estimated", "settlement_available", "released", "mismatch", "return_adjusted"].map((s) => ({ label: s, value: s })),
 ];
 
-type Values = { shop: string; status: string; mapping: string; financial: string; sn: string; sku: string; from: string; to: string };
+// SHOPEE-5: one "Tài chính" filter covering the useful financial slices.
+const FIN_VIEW_OPTIONS = [
+  { label: "Mọi tình trạng lợi nhuận", value: "all" },
+  { label: "Có lãi", value: "profit" },
+  { label: "Lỗ", value: "loss" },
+  { label: "Lệch đối soát", value: "mismatch" },
+  { label: "Thiếu giá vốn", value: "cogs_missing" },
+  { label: "Chưa có settlement", value: "settlement_missing" },
+];
+
+type Values = { shop: string; status: string; mapping: string; financial: string; fin: string; sn: string; sku: string; from: string; to: string };
 
 export function OrderFilters({ shops, values }: { shops: { id: string; name: string }[]; values: Values }) {
   const router = useRouter();
@@ -75,6 +85,7 @@ export function OrderFilters({ shops, values }: { shops: { id: string; name: str
       {select("status", STATUS_OPTIONS, "Lọc theo trạng thái đơn")}
       {select("mapping", MAPPING_OPTIONS, "Lọc theo mapping", "max-w-[160px]")}
       {select("financial", FINANCIAL_OPTIONS, "Lọc theo trạng thái tài chính")}
+      {select("fin", FIN_VIEW_OPTIONS, "Lọc theo lợi nhuận / đối soát")}
     </div>
   );
 }

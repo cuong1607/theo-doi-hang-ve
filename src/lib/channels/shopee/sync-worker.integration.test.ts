@@ -18,6 +18,7 @@ import { SyncWorker } from "../core/sync-worker.ts";
 import { ShopeeApiError } from "./errors.ts";
 import { FixtureShopeeOrderProvider, type OrderFixtureSet } from "./order-provider.ts";
 import { FixtureShopeeProductProvider, type ProductFixtureSet } from "./product-provider.ts";
+import { FixtureShopeePaymentProvider } from "./payment-provider.ts";
 import { toJobFailure } from "./sync-errors.ts";
 import { createShopeeRunnerFactory, requestShopeeSync, runShopeeSyncScheduler } from "./sync-service.ts";
 
@@ -155,7 +156,7 @@ type Call = { apiName: string; input: unknown };
 
 /** A worker scoped to `shops`, over mutable fixture sources. */
 function harness(shops: string[], opts: { config?: Partial<SyncConfig>; onCall?: (c: Call) => void | Promise<void> } = {}) {
-  const state = { orders: orderFixtures([]), products: productFixtures([]) };
+  const state = { orders: orderFixtures([]), products: productFixtures([]), escrow: new Map<string, unknown>() };
   const calls: Call[] = [];
   const hook = async (c: Call) => {
     calls.push(c);
@@ -169,7 +170,12 @@ function harness(shops: string[], opts: { config?: Partial<SyncConfig>; onCall?:
     createRunner: createShopeeRunnerFactory({
       db,
       config,
-      providers: () => ({ mode: "fixture", order: new FixtureShopeeOrderProvider(state.orders, { onCall: hook }), product: new FixtureShopeeProductProvider(state.products, { onCall: hook }) }),
+      providers: () => ({
+        mode: "fixture",
+        order: new FixtureShopeeOrderProvider(state.orders, { onCall: hook }),
+        product: new FixtureShopeeProductProvider(state.products, { onCall: hook }),
+        payment: new FixtureShopeePaymentProvider(state.escrow, { onCall: hook }),
+      }),
     }),
     classifyError: toJobFailure,
     logger: () => {},
@@ -577,21 +583,22 @@ test("31. scheduler: due shops get one incremental job per type; a second run cr
   const [a, b] = [await shop(), await shop()];
   const config: SyncConfig = { ...getSyncConfig({}), shopAllowlist: [a, b] };
   const r1 = await runShopeeSyncScheduler(db, { config, providerMode: "fixture" });
-  assert.equal(r1.enqueued.length, 4, "2 shops × (order, product)");
+  assert.equal(r1.enqueued.length, 6, "2 shops x (order, product, escrow)");
   const r2 = await runShopeeSyncScheduler(db, { config, providerMode: "fixture" });
   assert.equal(r2.enqueued.length, 0);
-  assert.equal(r2.alreadyQueued.length, 4);
+  assert.equal(r2.alreadyQueued.length, 6);
   await settle([a, b]);
   await db.from("channel_sync_states").upsert(
     [
       { shop_id: a, sync_type: "order", last_success_at: new Date().toISOString() },
       { shop_id: a, sync_type: "product", last_success_at: new Date().toISOString() },
+      { shop_id: a, sync_type: "escrow", last_success_at: new Date().toISOString() },
     ],
     { onConflict: "shop_id,sync_type" },
   );
   const r3 = await runShopeeSyncScheduler(db, { config, providerMode: "fixture" });
-  assert.deepEqual(r3.enqueued.map((e) => e.shopId).sort(), [b, b]);
-  assert.equal(r3.notDue, 2);
+  assert.deepEqual(r3.enqueued.map((e) => e.shopId).sort(), [b, b, b]);
+  assert.equal(r3.notDue, 3);
   // a live-mode scheduler never queues fixture shops
   const r4 = await runShopeeSyncScheduler(db, { config, providerMode: "live" });
   assert.equal(r4.enqueued.length, 0);

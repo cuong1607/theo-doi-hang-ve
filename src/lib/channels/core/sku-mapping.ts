@@ -20,9 +20,12 @@
 // ============================================================
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+/** Outer whitespace trimmed by normalizeSku — the SAME set as SQL normalize_channel_sku() (migration 00046). */
+const SKU_TRIM = /^[ \t\n\r\v\f ﻿]+|[ \t\n\r\v\f ﻿]+$/g;
+
 export function normalizeSku(value: string | null | undefined): string | null {
   if (typeof value !== "string") return null;
-  const trimmed = value.trim();
+  const trimmed = value.replace(SKU_TRIM, "");
   return trimmed === "" ? null : trimmed.toLowerCase();
 }
 
@@ -31,125 +34,84 @@ export interface AutoMapResult {
   mapped: number;
   unmapped: number;
   conflicts: number;
+  /** Units of the shop not considered (already mapped, manual, removed). */
+  skipped: number;
+  /** Order lines whose NULL product snapshot was filled by the new mappings. */
+  orderLinesBackfilled: number;
+  /** Orders whose COGS could not be (re)computed within the time budget — "Tính COGS còn thiếu" catches up. */
+  cogsPendingOrders: number;
 }
 
-type CandidateRow = { channel_model_id: string; channel_sku: string | null; mapping_status: string };
+/** A database call of the mapping flow failed — carries the safe Postgres details for server logs. */
+export class MappingDbError extends Error {
+  readonly operation: string;
+  readonly postgresCode: string | null;
+  readonly details: string | null;
+  readonly hint: string | null;
 
-const PAGE = 1000;
-
-async function loadActiveProductsBySku(db: SupabaseClient): Promise<Map<string, string[]>> {
-  const bySku = new Map<string, string[]>();
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await db
-      .from("products")
-      .select("id, sku")
-      .eq("is_active", true)
-      .order("id")
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`Không đọc được products: ${error.message}`);
-    for (const row of (data ?? []) as Array<{ id: string; sku: string }>) {
-      const key = normalizeSku(row.sku);
-      if (!key) continue;
-      bySku.set(key, [...(bySku.get(key) ?? []), row.id]);
-    }
-    if (!data || data.length < PAGE) break;
+  constructor(operation: string, error: { code?: string; message?: string; details?: string | null; hint?: string | null }) {
+    super(`${operation}: ${error.message ?? "lỗi cơ sở dữ liệu"}`);
+    this.name = "MappingDbError";
+    this.operation = operation;
+    this.postgresCode = error.code ?? null;
+    this.details = error.details ?? null;
+    this.hint = error.hint ?? null;
   }
-  return bySku;
 }
 
-async function loadCandidates(db: SupabaseClient, shopId: string): Promise<CandidateRow[]> {
-  const rows: CandidateRow[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await db
-      .from("v_channel_model_listing")
-      .select("channel_model_id, channel_sku, mapping_status")
-      .eq("shop_id", shopId)
-      .in("mapping_status", ["unmapped", "mapping_conflict"])
-      .is("removed_at", null)
-      .order("channel_model_id")
-      .range(from, from + PAGE - 1);
-    if (error) throw new Error(`Không đọc được danh sách model: ${error.message}`);
-    rows.push(...((data ?? []) as CandidateRow[]));
-    if (!data || data.length < PAGE) break;
-  }
-  return rows;
-}
+/** COGS recomputation after mapping stops starting new orders after this long (the rest stays "chưa tính"). */
+const COGS_AFTER_MAPPING_BUDGET_MS = 15_000;
 
-/** Bulk exact-SKU auto-mapping for one shop ("Tự động ghép SKU"). */
-export async function autoMapChannelModels(db: SupabaseClient, shopId: string, now: Date = new Date()): Promise<AutoMapResult> {
-  const [candidates, productsBySku] = await Promise.all([loadCandidates(db, shopId), loadActiveProductsBySku(db)]);
-  const result: AutoMapResult = { scanned: candidates.length, mapped: 0, unmapped: 0, conflicts: 0 };
-  const toUnmapped: string[] = [];
-  const toConflict: string[] = [];
-  const toMap: Array<{ id: string; productId: string }> = [];
+/**
+ * Bulk exact-SKU auto-mapping for one shop ("Tự động ghép SKU").
+ * DATABASE ONLY: reads the catalog product sync already stored and maps it
+ * in one set-based RPC (auto_map_channel_models, migration 00046) — never
+ * calls the Shopee API, so it works with Shopee offline and in seconds for
+ * thousands of units. Newly mapped order lines are then costed (bounded).
+ */
+export async function autoMapChannelModels(
+  db: SupabaseClient,
+  shopId: string,
+  now: Date = new Date(),
+  options: { cogsBudgetMs?: number } = {},
+): Promise<AutoMapResult> {
+  const { data, error } = await db
+    .rpc("auto_map_channel_models", { p_shop_id: shopId, p_now: now.toISOString() })
+    .single<{ scanned: number; mapped: number; unmapped: number; conflicts: number; skipped: number; order_lines_backfilled: number; affected_order_ids: string[] | null }>();
+  if (error || !data) throw new MappingDbError("auto_map_channel_models", error ?? { message: "không có kết quả" });
 
-  for (const row of candidates) {
-    const key = normalizeSku(row.channel_sku);
-    const matches = key ? productsBySku.get(key) ?? [] : [];
-    if (matches.length === 1) toMap.push({ id: row.channel_model_id, productId: matches[0] });
-    else if (matches.length > 1) toConflict.push(row.channel_model_id);
-    else toUnmapped.push(row.channel_model_id);
+  // SHOPEE-4: the newly mapped lines can now be costed. A cost problem never
+  // fails the mapping; what does not fit the budget stays "chưa tính".
+  const orders = data.affected_order_ids ?? [];
+  const deadline = Date.now() + (options.cogsBudgetMs ?? COGS_AFTER_MAPPING_BUDGET_MS);
+  let processed = 0;
+  for (const orderId of orders) {
+    if (Date.now() > deadline) break;
+    const { error: costError } = await db.rpc("cost_process_order", { p_order_id: orderId });
+    if (costError) console.warn(JSON.stringify({ source: "cost", event: "COGS_AFTER_MAPPING_FAILED", orderId, postgresCode: costError.code, message: costError.message }));
+    processed++;
   }
-
-  // Guard every write with the expected current status so a concurrent manual mapping always wins.
-  const guard = ["unmapped", "mapping_conflict"];
-  if (toConflict.length) {
-    const { error } = await db.from("channel_product_models").update({ mapping_status: "mapping_conflict" }).in("id", toConflict).in("mapping_status", guard);
-    if (error) throw new Error(`Không cập nhật được trạng thái conflict: ${error.message}`);
-  }
-  if (toUnmapped.length) {
-    const { error } = await db.from("channel_product_models").update({ mapping_status: "unmapped" }).in("id", toUnmapped).in("mapping_status", guard);
-    if (error) throw new Error(`Không cập nhật được trạng thái unmapped: ${error.message}`);
-  }
-  const mappedAt = now.toISOString();
-  for (let i = 0; i < toMap.length; i += 20) {
-    const chunk = toMap.slice(i, i + 20);
-    const results = await Promise.all(
-      chunk.map(({ id, productId }) =>
-        db
-          .from("channel_product_models")
-          .update({ internal_product_id: productId, mapping_status: "auto_mapped", mapped_at: mappedAt, mapped_by: null, mapping_review_required: false })
-          .eq("id", id)
-          .in("mapping_status", guard)
-          .select("id"),
-      ),
-    );
-    for (const r of results) {
-      if (r.error) throw new Error(`Không ghép được SKU: ${r.error.message}`);
-      result.mapped += r.data?.length ?? 0;
-    }
-    for (const r of results) {
-      for (const row of (r.data ?? []) as Array<{ id: string }>) await backfillUnmappedOrderItemsForModel(db, row.id);
-    }
-  }
-  result.unmapped = toUnmapped.length;
-  result.conflicts = toConflict.length;
-  return result;
+  return {
+    scanned: data.scanned,
+    mapped: data.mapped,
+    unmapped: data.unmapped,
+    conflicts: data.conflicts,
+    skipped: data.skipped,
+    orderLinesBackfilled: data.order_lines_backfilled,
+    cogsPendingOrders: orders.length - processed,
+  };
 }
 
 /**
  * Re-checks auto mappings of a shop: channel SKU ≠ mapped product SKU (after
  * normalization) → mapping_review_required = true (mapping untouched);
  * matching again → flag cleared. Manual mappings are never flagged.
+ * Set-based in SQL (refresh_channel_mapping_review_flags) — no id lists over HTTP.
  */
 export async function refreshMappingReviewFlags(db: SupabaseClient, shopId: string): Promise<number> {
-  const { data, error } = await db
-    .from("v_channel_model_listing")
-    .select("channel_model_id, channel_sku, internal_sku, mapping_review_required")
-    .eq("shop_id", shopId)
-    .eq("mapping_status", "auto_mapped");
-  if (error) throw new Error(`Không đọc được mapping: ${error.message}`);
-  const rows = (data ?? []) as Array<{ channel_model_id: string; channel_sku: string | null; internal_sku: string | null; mapping_review_required: boolean }>;
-  const flag: string[] = [];
-  const clear: string[] = [];
-  for (const row of rows) {
-    const mismatch = normalizeSku(row.channel_sku) !== normalizeSku(row.internal_sku);
-    if (mismatch && !row.mapping_review_required) flag.push(row.channel_model_id);
-    if (!mismatch && row.mapping_review_required) clear.push(row.channel_model_id);
-  }
-  if (flag.length) await db.from("channel_product_models").update({ mapping_review_required: true }).in("id", flag).eq("mapping_status", "auto_mapped");
-  if (clear.length) await db.from("channel_product_models").update({ mapping_review_required: false }).in("id", clear);
-  return rows.filter((r) => normalizeSku(r.channel_sku) !== normalizeSku(r.internal_sku)).length;
+  const { data, error } = await db.rpc("refresh_channel_mapping_review_flags", { p_shop_id: shopId });
+  if (error) throw new MappingDbError("refresh_channel_mapping_review_flags", error);
+  return Number(data ?? 0);
 }
 
 /**

@@ -44,6 +44,8 @@ export async function saveMeaningfulOrderSnapshot(
   input: {
     shopId: string;
     orderSn: string;
+    /** "escrow" (SHOPEE-5): every financially different payload is kept as history. */
+    entityType?: "order" | "escrow";
     apiName: string;
     payload: unknown;
     fingerprint: string;
@@ -52,7 +54,7 @@ export async function saveMeaningfulOrderSnapshot(
     syncedAt: string;
   },
 ): Promise<"inserted" | "refreshed"> {
-  const key = { shop_id: input.shopId, entity_type: "order", entity_external_id: input.orderSn, api_name: input.apiName };
+  const key = { shop_id: input.shopId, entity_type: input.entityType ?? "order", entity_external_id: input.orderSn, api_name: input.apiName };
   const hash = payloadHash(input.payload);
   const { data: latest, error } = await db
     .from("channel_api_snapshots")

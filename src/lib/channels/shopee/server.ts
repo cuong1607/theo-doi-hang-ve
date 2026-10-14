@@ -22,6 +22,7 @@ import { ShopeeConnectionService } from "./token.ts";
 
 import { FixtureShopeeProductProvider, loadProductFixtures, RealShopeeProductProvider } from "./product-provider.ts";
 import { FixtureShopeeOrderProvider, loadOrderFixtures, RealShopeeOrderProvider } from "./order-provider.ts";
+import { FixtureShopeePaymentProvider, loadEscrowFixtures, RealShopeePaymentProvider } from "./payment-provider.ts";
 import { getShopeeProviderMode } from "./provider-mode.ts";
 
 let cached: { config: ShopeeConfig; client: ShopeeClient; service: ShopeeConnectionService } | null = null;
@@ -35,6 +36,10 @@ let cached: { config: ShopeeConfig; client: ShopeeClient; service: ShopeeConnect
 
 /** In-request retry sleeps are capped: a longer wait becomes the job's next_attempt_at instead. */
 const WORKER_MAX_RETRY_SLEEP_MS = 2_000;
+/** Per-call timeout for the worker client (default client: 10 s). */
+const WORKER_REQUEST_TIMEOUT_MS = 8_000;
+/** A kick runs inside a user-facing invocation (server action / scheduler) that already spent time: one slice, then chain. */
+const KICK_TIME_BUDGET_MS = 30_000;
 let workerClient: ShopeeClient | null = null;
 
 function getWorkerClient(config: ShopeeConfig): ShopeeClient {
@@ -43,6 +48,7 @@ function getWorkerClient(config: ShopeeConfig): ShopeeClient {
     partnerKey: config.partnerKey,
     apiBaseUrl: config.apiBaseUrl,
     maxRetries: 1,
+    timeoutMs: WORKER_REQUEST_TIMEOUT_MS,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, Math.min(ms, WORKER_MAX_RETRY_SLEEP_MS))),
   });
   return workerClient;
@@ -60,7 +66,12 @@ export function getShopeeSyncWorker(): SyncWorker {
     const { mode, problem } = getShopeeProviderMode();
     if (problem) throw new ShopeeConfigError([problem]);
     if (mode === "fixture") {
-      return { mode, order: new FixtureShopeeOrderProvider(loadOrderFixtures()), product: new FixtureShopeeProductProvider(loadProductFixtures()) };
+      return {
+        mode,
+        order: new FixtureShopeeOrderProvider(loadOrderFixtures()),
+        product: new FixtureShopeeProductProvider(loadProductFixtures()),
+        payment: new FixtureShopeePaymentProvider(loadEscrowFixtures()),
+      };
     }
     const { config: shopeeConfig, service } = getShopee();
     const client = getWorkerClient(shopeeConfig);
@@ -69,6 +80,7 @@ export function getShopeeSyncWorker(): SyncWorker {
       mode,
       order: new RealShopeeOrderProvider({ client, connections: tokens }),
       product: new RealShopeeProductProvider({ client, connections: tokens }),
+      payment: new RealShopeePaymentProvider({ client, connections: tokens }),
     };
   };
   return new SyncWorker({
@@ -89,7 +101,7 @@ export function getShopeeSyncWorker(): SyncWorker {
 export async function kickShopeeSyncWorker(options: { origin: string | null; hop?: number } = { origin: null }): Promise<BurstReport | null> {
   const config = getSyncConfig();
   try {
-    const report = await getShopeeSyncWorker().runBurst({ timeBudgetMs: config.workerTimeBudgetMs });
+    const report = await getShopeeSyncWorker().runBurst({ timeBudgetMs: Math.min(config.workerTimeBudgetMs, KICK_TIME_BUDGET_MS) });
     const hop = options.hop ?? 0;
     if (options.origin && report.stoppedBy === "time" && hop < config.maxChainHops && (await hasDueSyncJobs(createAdminClient()))) {
       await chainShopeeSyncWorker(options.origin, hop + 1);

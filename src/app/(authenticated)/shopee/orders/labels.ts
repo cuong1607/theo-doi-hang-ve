@@ -42,3 +42,15 @@ export const FINANCIAL_STATUS_LABELS: Record<string, string> = {
   mismatch: "Lệch đối soát",
   return_adjusted: "Điều chỉnh hoàn trả",
 };
+
+export const RECONCILIATION_LABELS: Record<"matched" | "warning" | "mismatch", string> = {
+  matched: "Khớp đối soát",
+  warning: "Lệch nhỏ",
+  mismatch: "Lệch đối soát",
+};
+
+export const RECONCILIATION_VARIANT: Record<"matched" | "warning" | "mismatch", "default" | "secondary" | "destructive" | "outline"> = {
+  matched: "outline",
+  warning: "secondary",
+  mismatch: "destructive",
+};

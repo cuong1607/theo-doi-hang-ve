@@ -100,7 +100,7 @@ export function toJobView(r: Pick<SyncJobRow, "id" | "shop_id" | "sync_type" | "
   };
 }
 
-export async function getSyncStatuses(shopIds: string[], syncTypes: readonly string[] = ["order", "product"]): Promise<Map<string, SyncStatusView>> {
+export async function getSyncStatuses(shopIds: string[], syncTypes: readonly string[] = ["order", "product", "escrow"]): Promise<Map<string, SyncStatusView>> {
   const result = new Map<string, SyncStatusView>();
   if (shopIds.length === 0) return result;
   const db = createAdminClient();

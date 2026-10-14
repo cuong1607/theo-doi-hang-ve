@@ -3,7 +3,7 @@ import { AlertTriangle, FlaskConical, ReceiptText } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
-import { getChannelOrders, type ChannelOrderFilters, type MappingReadiness } from "@/lib/channels/core/order-queries";
+import { getChannelOrders, getOrderFinancialSummary, type ChannelOrderFilters, type MappingReadiness } from "@/lib/channels/core/order-queries";
 import { listShops } from "@/lib/channels/core/queries";
 import { getSyncStatuses } from "@/lib/channels/core/sync-status-queries";
 import { getShopeeConfig } from "@/lib/channels/shopee/config";
@@ -15,7 +15,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ListPagination } from "@/components/list-pagination";
 
 import { fmtDate, formatDecimal } from "../shared";
-import { COGS_LABELS, COGS_VARIANT, FINANCIAL_STATUS_LABELS, READINESS_LABELS, READINESS_VARIANT } from "./labels";
+import { FINANCIAL_STATUS_LABELS, READINESS_LABELS, READINESS_VARIANT, RECONCILIATION_LABELS, RECONCILIATION_VARIANT } from "./labels";
 import { BackfillButton, SyncNowButton } from "../sync/sync-buttons";
 import { FreshnessSummary, SyncFreshness } from "../sync/sync-status";
 import { OrderFilters } from "./order-filters";
@@ -29,7 +29,39 @@ const PAGE_SIZE = 25;
 const READINESS = new Set(["complete", "partial", "unmapped"]);
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-type Params = { shop?: string; status?: string; mapping?: string; financial?: string; sn?: string; sku?: string; from?: string; to?: string; page?: string };
+type Params = { shop?: string; status?: string; mapping?: string; financial?: string; fin?: string; sn?: string; sku?: string; from?: string; to?: string; page?: string };
+
+/** "Tài chính" filter → view-derived financial filters. */
+function finFilter(fin: string | undefined): Partial<ChannelOrderFilters> {
+  switch (fin) {
+    case "profit":
+      return { profitState: "profit" };
+    case "loss":
+      return { profitState: "loss" };
+    case "mismatch":
+      return { reconciliation: "mismatch" };
+    case "cogs_missing":
+      return { settlementState: "available", cogsReadiness: "incomplete" };
+    case "settlement_missing":
+      return { settlementState: "missing" };
+    default:
+      return {};
+  }
+}
+
+function SummaryTile({ label, value, sub, tone }: { label: string; value: React.ReactNode; sub?: string; tone?: "warn" | "danger" }) {
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <p className="text-sm text-muted-foreground">{label}</p>
+        <p className={`text-xl font-bold ${tone === "danger" ? "text-destructive" : tone === "warn" ? "text-amber-600" : ""}`}>{value}</p>
+        {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+const money = (v: string | null, missing: string) => (v === null ? <span className="text-muted-foreground">{missing}</span> : formatDecimal(v, " ₫"));
 
 export default async function ShopeeOrdersPage({ searchParams }: { searchParams: Promise<Params> }) {
   const auth = await requirePermission("channel:view");
@@ -59,13 +91,15 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
     sku: params.sku?.trim() || undefined,
     dateFrom: DAY.test(params.from ?? "") ? params.from : undefined,
     dateTo: DAY.test(params.to ?? "") ? params.to : undefined,
+    ...finFilter(params.fin),
   };
-  const [{ rows, total }, syncStatuses] = await Promise.all([
+  const [{ rows, total }, syncStatuses, summary] = await Promise.all([
     getChannelOrders(filters, page, PAGE_SIZE),
     getSyncStatuses(
       shops.map((s) => s.id),
-      ["order"],
+      ["order", "escrow"],
     ),
+    getOrderFinancialSummary(filters),
   ]);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const hasFilter = Object.values(filters).some(Boolean);
@@ -108,6 +142,8 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                       <Badge variant={shop.dataSource === "fixture" ? "secondary" : "outline"}>{shop.dataSource === "fixture" ? "FIXTURE" : "LIVE"}</Badge>
                     </p>
                     <SyncFreshness status={syncStatuses.get(`${shop.id}|order`)} canSeeErrors={canManage} />
+                    <p className="pt-1 text-xs font-medium text-muted-foreground">Tài chính (escrow):</p>
+                    <SyncFreshness status={syncStatuses.get(`${shop.id}|escrow`)} canSeeErrors={canManage} />
                     {!usable && (
                       <p className="text-xs text-muted-foreground">
                         {shop.dataSource === "fixture" ? "Shop fixture chỉ đồng bộ được ở fixture mode." : "Shop thật chỉ đồng bộ được khi API Shopee (live) đã được cấu hình."}
@@ -116,6 +152,7 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                   </div>
                   <div className="flex flex-wrap items-start gap-2">
                     {canSync && <SyncNowButton shopId={shop.id} syncType="order" disabled={!usable} />}
+                    {canSync && <SyncNowButton shopId={shop.id} syncType="escrow" label="Đồng bộ tài chính" disabled={!usable} />}
                     {canManage && <BackfillButton shopId={shop.id} syncType="order" days={30} label="Backfill 30 ngày" disabled={!usable} />}
                   </div>
                 </div>
@@ -125,6 +162,15 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
           </CardContent>
         </Card>
       )}
+
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+        <SummaryTile label="Số đơn (theo bộ lọc)" value={summary.orderCount} />
+        <SummaryTile label="Thu nhập Shopee" value={formatDecimal(summary.incomeSum, " ₫")} sub={`${summary.withIncome} đơn có settlement`} />
+        <SummaryTile label="Giá vốn (COGS)" value={formatDecimal(summary.cogsSum, " ₫")} sub={`${summary.withCogs} đơn đã tính`} />
+        <SummaryTile label="Lợi nhuận sau giá vốn" value={formatDecimal(summary.profitSum, " ₫")} sub={`chỉ ${summary.withProfit} đơn có đủ thu nhập + giá vốn`} tone={summary.profitSum.startsWith("-") ? "danger" : undefined} />
+        <SummaryTile label="Thiếu settlement / giá vốn" value={`${summary.missingSettlement} / ${summary.missingCogs}`} tone={summary.missingSettlement + summary.missingCogs > 0 ? "warn" : undefined} />
+        <SummaryTile label="Lệch đối soát" value={summary.mismatchCount} tone={summary.mismatchCount > 0 ? "danger" : undefined} />
+      </div>
 
       <Card>
         <CardHeader className="flex-row flex-wrap items-center justify-between gap-4 space-y-0">
@@ -136,6 +182,7 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
               status: filters.orderStatus ?? "",
               mapping: filters.mappingReadiness ?? "",
               financial: filters.financialStatus ?? "",
+              fin: params.fin ?? "",
               sn: filters.orderSn ?? "",
               sku: filters.sku ?? "",
               from: filters.dateFrom ?? "",
@@ -161,7 +208,9 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                     <TableHead className="text-right">Số lượng</TableHead>
                     <TableHead className="text-right">Giá trị SP</TableHead>
                     <TableHead>Mapping SKU</TableHead>
-                    <TableHead>COGS</TableHead>
+                    <TableHead className="text-right">Thu nhập Shopee</TableHead>
+                    <TableHead className="text-right">COGS</TableHead>
+                    <TableHead className="text-right">Lợi nhuận sau GV</TableHead>
                     <TableHead>Tài chính</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -191,13 +240,19 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                           {o.mappingReadiness === "partial" ? ` ${o.mappedLines}/${o.lineCount}` : ""}
                         </Badge>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant={COGS_VARIANT[o.cogsReadiness]}>
-                          {COGS_LABELS[o.cogsReadiness]}
-                          {o.cogsReadiness === "partial" ? ` ${o.costedLines}/${o.lineCount}` : ""}
-                        </Badge>
+                      <TableCell className="text-right whitespace-nowrap">{money(o.shopeeNetIncome, "Chưa có")}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        {money(o.internalCogs, o.cogsReadiness === "partial" ? `Một phần ${o.costedLines}/${o.lineCount}` : "Chưa tính")}
                       </TableCell>
-                      <TableCell className="text-xs">{FINANCIAL_STATUS_LABELS[o.financialStatus] ?? o.financialStatus}</TableCell>
+                      <TableCell className={`text-right whitespace-nowrap ${o.profitState === "loss" ? "text-destructive" : ""}`}>{money(o.profitAfterCogs, "Chưa tính")}</TableCell>
+                      <TableCell className="text-xs">
+                        <div className="flex flex-col items-start gap-1">
+                          <span>{FINANCIAL_STATUS_LABELS[o.financialStatus] ?? o.financialStatus}</span>
+                          {o.reconciliationStatus && o.reconciliationStatus !== "matched" && (
+                            <Badge variant={RECONCILIATION_VARIANT[o.reconciliationStatus]}>{RECONCILIATION_LABELS[o.reconciliationStatus]}</Badge>
+                          )}
+                        </div>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -207,7 +262,7 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                 totalPages={totalPages}
                 buildHref={(p) => {
                   const sp = new URLSearchParams();
-                  for (const [k, v] of Object.entries({ shop: filters.shopId, status: filters.orderStatus, mapping: filters.mappingReadiness, financial: filters.financialStatus, sn: filters.orderSn, sku: filters.sku, from: filters.dateFrom, to: filters.dateTo })) {
+                  for (const [k, v] of Object.entries({ shop: filters.shopId, status: filters.orderStatus, mapping: filters.mappingReadiness, financial: filters.financialStatus, fin: params.fin, sn: filters.orderSn, sku: filters.sku, from: filters.dateFrom, to: filters.dateTo })) {
                     if (v) sp.set(k, v);
                   }
                   if (p > 1) sp.set("page", String(p));

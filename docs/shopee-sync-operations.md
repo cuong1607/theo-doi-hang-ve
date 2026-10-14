@@ -282,6 +282,24 @@ Log Vercel (JSON, không có token/payload): `SYNC_JOB_SLICE` (mỗi lượt: jo
 shop, trạng thái, số lệnh API, thời gian), `SYNC_SCHEDULER_RUN`,
 `SYNC_KICK_FAILED`, `SYNC_WORKER_FAILED`.
 
+## 14b. "Đồng bộ sản phẩm" ≠ "Tự động ghép SKU"
+
+| Nút | Luồng | Gọi Shopee? |
+|---|---|---|
+| Đồng bộ sản phẩm | Shopee API → `channel_products` / `channel_product_models` (job nền) | có |
+| Tự động ghép SKU | biến thể đã lưu → SKU nội bộ (RPC `auto_map_channel_models`, migration 00046) | **không** |
+
+Ghép SKU chạy hoàn toàn trong Postgres (một câu lệnh theo tập, ~0,4 s cho
+5.937 biến thể), chạy được cả khi Shopee lỗi. Có biến thể mới trên Shopee →
+đồng bộ sản phẩm trước, xong mới ghép. Lỗi ghép được log `AUTO_MAP_FAILED`
+kèm `operation`, `shopId`, `postgresCode`, `details`, `hint`.
+
+Lưu ý hiệu năng gọi Shopee: function Vercel mặc định chạy ở `iad1`
+(Washington) trong khi Shopee (và nhiều khả năng Supabase) ở Singapore —
+mỗi lệnh gọi API/DB tốn thêm một vòng xuyên Thái Bình Dương. Nên kiểm tra
+region của project Supabase và cân nhắc đặt `"regions": ["sin1"]` trong
+`vercel.json` cho trùng.
+
 ## 15. Giới hạn đã biết
 
 - Danh sách đơn của Shopee không có `update_time` → đơn đã tải trong vùng

@@ -35,6 +35,16 @@ export interface SyncConfig {
   productIntervalMinutes: number;
   /** Self-chaining worker hops after a burst when work remains (0 = off). */
   maxChainHops: number;
+  /** SHOPEE-5 escrow: orders fetched per slice (each = 1 get_escrow_detail call). */
+  escrowBatchSize: number;
+  /** Scheduler cadence for escrow jobs. */
+  escrowIntervalMinutes: number;
+  /** After completion, escrow is re-fetched this many days (it can still change). */
+  escrowRefreshWindowDays: number;
+  /** …at most once per this many hours. */
+  escrowRefreshIntervalHours: number;
+  /** A not-ready / failed escrow fetch is retried after this many hours. */
+  escrowErrorBackoffHours: number;
   /**
    * Staged rollout (pilot shop first): when set, the scheduler and worker
    * only touch these shop ids (SHOPEE_SYNC_SHOP_IDS, comma-separated).
@@ -56,10 +66,15 @@ export const SYNC_CONFIG_DEFAULTS: SyncConfig = {
   maxSliceApiCalls: 30,
   sliceTimeBudgetMs: 20_000,
   workerTimeBudgetMs: 45_000,
-  staleJobMinutes: 10,
+  staleJobMinutes: 3,
   orderIntervalMinutes: 10,
   productIntervalMinutes: 60,
   maxChainHops: 10,
+  escrowBatchSize: 20,
+  escrowIntervalMinutes: 60,
+  escrowRefreshWindowDays: 14,
+  escrowRefreshIntervalHours: 24,
+  escrowErrorBackoffHours: 6,
   shopAllowlist: null,
 };
 
@@ -77,6 +92,11 @@ const ENV_KEYS: Record<NumericKey, { key: string; min: number; max: number }> = 
   orderIntervalMinutes: { key: "SHOPEE_SYNC_ORDER_INTERVAL_MINUTES", min: 1, max: 24 * 60 },
   productIntervalMinutes: { key: "SHOPEE_SYNC_PRODUCT_INTERVAL_MINUTES", min: 5, max: 7 * 24 * 60 },
   maxChainHops: { key: "SHOPEE_SYNC_MAX_CHAIN_HOPS", min: 0, max: 50 },
+  escrowBatchSize: { key: "SHOPEE_SYNC_ESCROW_BATCH_SIZE", min: 1, max: 100 },
+  escrowIntervalMinutes: { key: "SHOPEE_SYNC_ESCROW_INTERVAL_MINUTES", min: 5, max: 7 * 24 * 60 },
+  escrowRefreshWindowDays: { key: "SHOPEE_SYNC_ESCROW_REFRESH_WINDOW_DAYS", min: 0, max: 90 },
+  escrowRefreshIntervalHours: { key: "SHOPEE_SYNC_ESCROW_REFRESH_INTERVAL_HOURS", min: 1, max: 24 * 30 },
+  escrowErrorBackoffHours: { key: "SHOPEE_SYNC_ESCROW_ERROR_BACKOFF_HOURS", min: 1, max: 24 * 7 },
 };
 
 export function getSyncConfig(env: Env = process.env): SyncConfig & { warnings: string[] } {

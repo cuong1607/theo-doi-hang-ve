@@ -254,6 +254,18 @@ test("27. UI sync actions only enqueue (no sync service / provider call in any S
   }
 });
 
+test("auto-map is database-only: the action and the mapping module never import a Shopee provider / client / token / sync service", () => {
+  const forbidden = /channels\/shopee\/(server|client|token|order-provider|product-provider|order-sync|product-sync|sync-service|signing)(\.ts)?["']|ShopeeClient|getModelList|getItemBaseInfo|listItems\(/;
+  for (const rel of ["src/app/(authenticated)/shopee/products/actions.ts", "src/lib/channels/core/sku-mapping.ts"]) {
+    const src = readFileSync(new URL(rel, ROOT), "utf8");
+    assert.doesNotMatch(src, forbidden, rel);
+  }
+  // …and the mapping itself is one set-based RPC, not per-row id lists over HTTP (the "URI too long" bug).
+  const mapping = readFileSync(new URL("src/lib/channels/core/sku-mapping.ts", ROOT), "utf8");
+  assert.match(mapping, /rpc\("auto_map_channel_models"/);
+  assert.match(mapping, /rpc\("refresh_channel_mapping_review_flags"/);
+});
+
 test("32 (static). no Promise.all in the Shopee sync / provider code — fan-out goes through mapWithConcurrency", () => {
   const files = filesUnder(new URL("src/lib/channels/shopee/", ROOT), (p) => p.endsWith(".ts") && !p.endsWith(".test.ts") && !p.includes("test-util"));
   for (const file of files) assert.doesNotMatch(readFileSync(file, "utf8"), /Promise\.all\(/, file);
