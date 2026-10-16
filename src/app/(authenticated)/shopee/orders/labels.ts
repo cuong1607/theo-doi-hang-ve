@@ -3,7 +3,7 @@
 import type { CogsReadiness, MappingReadiness } from "@/lib/channels/core/order-queries";
 
 /** URL query keys of the order list filters (shared by the page and <OrderFilters>). */
-export const ORDER_FILTER_KEYS = ["shop", "status", "mapping", "financial", "fin", "sn", "sku", "from", "to"] as const;
+export const ORDER_FILTER_KEYS = ["shop", "status", "mapping", "financial", "fin", "est", "sn", "sku", "from", "to"] as const;
 
 export const READINESS_LABELS: Record<MappingReadiness, string> = {
   complete: "Đầy đủ",

@@ -13,7 +13,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { createActionRunner, DEFAULT_ACTION_ERROR, phaseOf, type ActionOutcome } from "./action-runner.ts";
-import { formatAge, formatCurrency, formatDate, formatDateTime, formatDecimalString, formatDuration, formatPercent, formatQuantity, formatTime, numericSign } from "./format.ts";
+import { formatAge, formatCurrency, formatDate, formatDateTime, formatDecimalString, formatDuration, formatPercent, formatPercentString, formatQuantity, formatSignedCurrency, formatTime, numericSign } from "./format.ts";
 import { activeFilterCount, buildListHref, pageRange, parsePage, parsePageSize } from "./list-query.ts";
 import { activeNavHref, pageTitleFor } from "./navigation.ts";
 import { progressPercent } from "./progress.ts";
@@ -48,6 +48,16 @@ test("formatCurrency: NUMERIC strings exact (no float), numbers rounded to the �
   assert.equal(formatCurrency(null), "—");
   assert.equal(formatCurrency(undefined), "—");
   assert.equal(formatCurrency(Number.NaN), "—");
+});
+
+test("PATCH estimated profit display: signed amount + SQL-computed percent", () => {
+  assert.equal(formatSignedCurrency("30000.0000"), "+30.000 ₫");
+  assert.equal(formatSignedCurrency("-10000.0000"), "-10.000 ₫");
+  assert.equal(formatSignedCurrency("0.0000"), "0 ₫");
+  assert.equal(formatSignedCurrency(null), "—");
+  assert.equal(formatPercentString("30.0"), "30%");
+  assert.equal(formatPercentString("-12.5"), "-12,5%");
+  assert.equal(formatPercentString(null), "—", "total 0 / unknown → —");
 });
 
 test("formatQuantity / formatPercent / numericSign", () => {

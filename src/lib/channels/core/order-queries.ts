@@ -52,7 +52,17 @@ export interface ChannelOrderListRow {
   reconciliationStatus: "matched" | "warning" | "mismatch" | null;
   settlementState: "missing" | "available";
   profitState: "profit" | "loss" | "break_even" | null;
+  /**
+   * PATCH estimated profit = channel_total_amount - internal_cogs (NUMERIC, in the view).
+   * Pre-settlement: no Shopee fees / taxes. NULL when either side is unknown.
+   */
+  estimatedProfit: string | null;
+  /** estimatedProfit / channel_total_amount x 100, 1 decimal; NULL when the total is 0 / unknown. */
+  estimatedMarginPct: string | null;
+  estimatedProfitState: EstimatedProfitState;
 }
+
+export type EstimatedProfitState = "profit" | "loss" | "insufficient";
 
 export interface ChannelOrderFilters {
   shopId?: string;
@@ -71,6 +81,8 @@ export interface ChannelOrderFilters {
   cogsReadiness?: CogsReadiness;
   /** internal_cogs unknown (incomplete OR partial lines), same rule as the summary count. */
   cogsMissing?: boolean;
+  /** PATCH: estimated profit state (view-derived). */
+  estimatedState?: EstimatedProfitState;
 }
 
 export interface OrderFinancialSummary {
@@ -117,13 +129,17 @@ type SummaryRow = {
   reconciliation_status: "matched" | "warning" | "mismatch" | null;
   settlement_state: "missing" | "available";
   profit_state: "profit" | "loss" | "break_even" | null;
+  estimated_profit: string | null;
+  estimated_margin_pct: string | null;
+  estimated_profit_state: EstimatedProfitState;
 };
 
 const COLUMNS =
   "order_id, shop_id, shop_name, data_source, external_order_sn, order_status, financial_status, currency, channel_total_amount, " +
   "created_at_channel, updated_at_channel, last_synced_at, line_count, mapped_lines, total_item_quantity, item_gross_value, " +
   "original_item_value, mapping_readiness, cogs_readiness, financial_sync_eligible, costed_lines, total_cogs, partial_cogs_sum, reversed_lines, " +
-  "shopee_net_income, internal_cogs, profit_after_cogs, reconciliation_status, settlement_state, profit_state";
+  "shopee_net_income, internal_cogs, profit_after_cogs, reconciliation_status, settlement_state, profit_state, " +
+  "estimated_profit, estimated_margin_pct, estimated_profit_state";
 
 function toRow(r: SummaryRow): ChannelOrderListRow {
   return {
@@ -157,6 +173,9 @@ function toRow(r: SummaryRow): ChannelOrderListRow {
     reconciliationStatus: r.reconciliation_status,
     settlementState: r.settlement_state,
     profitState: r.profit_state,
+    estimatedProfit: r.estimated_profit,
+    estimatedMarginPct: r.estimated_margin_pct,
+    estimatedProfitState: r.estimated_profit_state,
   };
 }
 
@@ -187,7 +206,7 @@ export async function getChannelOrders(filters: ChannelOrderFilters, page: numbe
   // Line-derived filter (mapping readiness) → count through the view. Otherwise
   // count channel_orders directly: same rows (every order has its shop), but
   // without aggregating lines for the whole filtered set just to count it.
-  const countOnBase = !filters.mappingReadiness && !filters.profitState && !filters.reconciliation && !filters.settlementState && !filters.cogsReadiness && !filters.cogsMissing;
+  const countOnBase = !filters.mappingReadiness && !filters.profitState && !filters.reconciliation && !filters.settlementState && !filters.cogsReadiness && !filters.cogsMissing && !filters.estimatedState;
   const db = createAdminClient();
   let query = db
     .from("v_channel_order_summary")
@@ -232,6 +251,7 @@ export async function getChannelOrders(filters: ChannelOrderFilters, page: numbe
   if (filters.settlementState) query = query.eq("settlement_state", filters.settlementState);
   if (filters.cogsReadiness) query = query.eq("cogs_readiness", filters.cogsReadiness);
   if (filters.cogsMissing) query = query.is("internal_cogs", null);
+  if (filters.estimatedState) query = query.eq("estimated_profit_state", filters.estimatedState);
   const [list, counted] = await Promise.all([query.returns<SummaryRow[]>(), countOnBase ? countQuery : null]);
   if (list.error) throw new Error(list.error.message);
   if (counted?.error) throw new Error(counted.error.message);
@@ -263,6 +283,7 @@ export async function getOrderFinancialSummary(filters: ChannelOrderFilters): Pr
       p_settlement_state: filters.settlementState ?? null,
       p_cogs_readiness: filters.cogsReadiness ?? null,
       p_cogs_missing: filters.cogsMissing ?? null,
+      p_estimated_state: filters.estimatedState ?? null,
       p_order_ids: orderIds,
     })
     .single<{

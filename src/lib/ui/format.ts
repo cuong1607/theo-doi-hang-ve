@@ -47,6 +47,19 @@ export function formatQuantity(value: Numeric): string {
   return formatNumeric(value, "", quantityFormat);
 }
 
+/** Profit-style amount: "+30.000 ₫" / "-10.000 ₫" / "0 ₫" (NUMERIC string, exact). */
+export function formatSignedCurrency(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === "") return EMPTY_VALUE;
+  const text = formatDecimalString(value, " ₫");
+  return numericSign(value) === 1 ? `+${text}` : text;
+}
+
+/** A percent already computed in SQL ("30.0", "-12.5") → "30%", "-12,5%"; null → "—". */
+export function formatPercentString(value: string | null | undefined): string {
+  if (value === null || value === undefined || value === "") return EMPTY_VALUE;
+  return `${formatDecimalString(value)}%`;
+}
+
 /** ratio (0.125) → "12,5%". */
 export function formatPercent(ratio: number | null | undefined, fractionDigits = 1): string {
   if (ratio === null || ratio === undefined || !Number.isFinite(ratio)) return EMPTY_VALUE;

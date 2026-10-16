@@ -32,7 +32,15 @@ const FIN_VIEW_OPTIONS: FilterOption[] = [
   { label: "Chưa có settlement", value: "settlement_missing" },
 ];
 
-type Values = Record<(typeof ORDER_FILTER_KEYS)[number], string>;
+// PATCH: estimated profit (order value − COGS) state.
+const ESTIMATED_OPTIONS: FilterOption[] = [
+  { label: "Mọi tình trạng LN dự kiến", value: "all" },
+  { label: "LN dự kiến: có lãi", value: "profit" },
+  { label: "LN dự kiến: bán lỗ", value: "loss" },
+  { label: "LN dự kiến: chưa đủ dữ liệu", value: "insufficient" },
+];
+
+type Values =Record<(typeof ORDER_FILTER_KEYS)[number], string>;
 
 export function OrderFilters({ shops, values }: { shops: { id: string; name: string }[]; values: Values }) {
   const shopOptions: FilterOption[] = [{ label: "Tất cả shop", value: "all" }, ...shops.map((s) => ({ label: s.name, value: s.id }))];
@@ -46,6 +54,7 @@ export function OrderFilters({ shops, values }: { shops: { id: string; name: str
       <FilterSelect paramKey="status" value={values.status} options={STATUS_OPTIONS} label="Lọc theo trạng thái đơn" />
       <FilterSelect paramKey="mapping" value={values.mapping} options={MAPPING_OPTIONS} label="Lọc theo mapping" />
       <FilterSelect paramKey="financial" value={values.financial} options={FINANCIAL_OPTIONS} label="Lọc theo trạng thái tài chính" />
+      <FilterSelect paramKey="est" value={values.est} options={ESTIMATED_OPTIONS} label="Lọc theo tình trạng lợi nhuận dự kiến" />
       <FilterSelect paramKey="fin" value={values.fin} options={FIN_VIEW_OPTIONS} label="Lọc theo lợi nhuận / đối soát" />
     </FilterBar>
   );

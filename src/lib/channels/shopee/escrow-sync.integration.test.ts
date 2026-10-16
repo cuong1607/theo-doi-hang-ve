@@ -465,6 +465,50 @@ test("PERF-2 23 + 24 + 25. 98-order escrow backlog drains over several bounded w
   assert.ok(st!.last_success_at, "clean escrow job advances the escrow sync state");
 });
 
+test("PATCH estimated profit: order value − COGS in NUMERIC; null / zero handling; state filter; actual profit untouched", async () => {
+  const s = await shop();
+  const profit = await order(s, { total: "100000" }); // COGS 70000 → +30000, 30.0 %
+  const loss = await order(s, { total: "80000" }); // COGS 90000 → -10000, -12.5 %
+  const noCogs = await order(s, { total: "50000" }); // COGS unknown
+  const zero = await order(s, { total: "0" }); // COGS 0 → 0, no margin
+  const exact = await order(s, { total: "12345678901234.33" }); // beyond float precision
+  await db.from("order_financials").insert([
+    { order_id: profit.id, internal_cogs: "70000" },
+    { order_id: loss.id, internal_cogs: "90000" },
+    { order_id: zero.id, internal_cogs: "0" },
+    { order_id: exact.id, internal_cogs: "0.11" },
+  ]);
+  const { data } = await db
+    .from("v_channel_order_summary")
+    .select("order_id, estimated_profit, estimated_margin_pct, estimated_profit_state, profit_after_cogs, internal_cogs")
+    .eq("shop_id", s);
+  const by = new Map((data ?? []).map((r) => [r.order_id as string, r]));
+  assert.deepEqual(
+    { p: by.get(profit.id)!.estimated_profit, m: by.get(profit.id)!.estimated_margin_pct, st: by.get(profit.id)!.estimated_profit_state },
+    { p: "30000.00", m: "30.0", st: "profit" },
+  );
+  assert.deepEqual(
+    { p: by.get(loss.id)!.estimated_profit, m: by.get(loss.id)!.estimated_margin_pct, st: by.get(loss.id)!.estimated_profit_state },
+    { p: "-10000.00", m: "-12.5", st: "loss" },
+  );
+  assert.equal(by.get(noCogs.id)!.estimated_profit, null, "COGS unknown → not calculated (never 0)");
+  assert.equal(by.get(noCogs.id)!.estimated_margin_pct, null);
+  assert.equal(by.get(noCogs.id)!.estimated_profit_state, "insufficient");
+  assert.equal(Number(by.get(zero.id)!.estimated_profit), 0);
+  assert.equal(by.get(zero.id)!.estimated_margin_pct, null, "total 0 → no division, margin —");
+  assert.equal(by.get(zero.id)!.estimated_profit_state, "profit", "0 counts as ≥ 0");
+  assert.equal(by.get(exact.id)!.estimated_profit, "12345678901234.22", "NUMERIC exact, no float drift");
+  // actual profit still needs Shopee income
+  for (const o of [profit, loss, zero]) assert.equal(by.get(o.id)!.profit_after_cogs, null);
+
+  // the summary RPC follows the new filter
+  const count = async (state: string) =>
+    Number(((await db.rpc("get_channel_order_financial_summary", { p_shop_id: s, p_estimated_state: state }).single()).data as { order_count: number }).order_count);
+  assert.equal(await count("profit"), 3);
+  assert.equal(await count("loss"), 1);
+  assert.equal(await count("insufficient"), 1);
+});
+
 // ================================================================ VIEW / SUMMARY / SECURITY
 
 test("15. list view + DB summary: null vs zero, totals only add known values, profit state", async () => {

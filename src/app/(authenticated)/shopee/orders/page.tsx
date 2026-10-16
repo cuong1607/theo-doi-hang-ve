@@ -1,15 +1,15 @@
 import Link from "next/link";
-import { AlertTriangle, Coins, FlaskConical, PackageCheck, ReceiptText, Scale, TrendingUp, Wallet } from "lucide-react";
+import { AlertTriangle, CircleHelp, Coins, FlaskConical, PackageCheck, ReceiptText, Scale, TrendingUp, Wallet } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
-import { getChannelOrders, getOrderFinancialSummary, type ChannelOrderFilters, type MappingReadiness } from "@/lib/channels/core/order-queries";
+import { getChannelOrders, getOrderFinancialSummary, type ChannelOrderFilters, type EstimatedProfitState, type MappingReadiness } from "@/lib/channels/core/order-queries";
 import { listShops } from "@/lib/channels/core/queries";
 import { getSyncHealth, getSyncStatuses } from "@/lib/channels/core/sync-status-queries";
 import { getShopeeConfig } from "@/lib/channels/shopee/config";
 import { ORDER_STATUS_LABELS } from "@/lib/channels/shopee/order-status";
 import { getShopeeProviderMode } from "@/lib/channels/shopee/provider-mode";
-import { formatCurrency, formatDateTime, formatQuantity, numericSign } from "@/lib/ui/format";
+import { formatCurrency, formatDateTime, formatPercentString, formatQuantity, formatSignedCurrency, numericSign } from "@/lib/ui/format";
 import { activeFilterCount, parsePage, parsePageSize } from "@/lib/ui/list-query";
 import { FINANCIAL_STATUS_TONE, ORDER_STATUS_TONE, profitTone, READINESS_TONE, RECONCILIATION_TONE, TONE_TEXT_CLASS, toneOf } from "@/lib/ui/status";
 import { AutoRefresh } from "@/components/patterns/auto-refresh";
@@ -22,6 +22,7 @@ import { StatusBadge } from "@/components/patterns/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { BackfillButton, SyncNowButton } from "../sync/sync-buttons";
 import { FreshnessSummary, hasActiveSync, SchedulerWarning, SyncStatusCell } from "../sync/sync-status";
@@ -34,9 +35,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const READINESS = new Set(["complete", "partial", "unmapped"]);
+const ESTIMATED_STATES = new Set(["profit", "loss", "insufficient"]);
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-type Params = { shop?: string; status?: string; mapping?: string; financial?: string; fin?: string; sn?: string; sku?: string; from?: string; to?: string; page?: string; size?: string };
+type Params = { shop?: string; status?: string; mapping?: string; financial?: string; fin?: string; sn?: string; sku?: string; from?: string; to?: string; est?: string; page?: string; size?: string };
 
 /** "Tài chính" filter → view-derived financial filters. */
 function finFilter(fin: string | undefined): Partial<ChannelOrderFilters> {
@@ -55,6 +57,8 @@ function finFilter(fin: string | undefined): Partial<ChannelOrderFilters> {
       return {};
   }
 }
+
+const ESTIMATED_PROFIT_HELP = "Lợi nhuận dự kiến = Giá trị đơn hàng - Giá vốn. Chưa bao gồm phí, thuế và các khoản khấu trừ từ Shopee.";
 
 /** NULL money is "not known yet" — said in words, never shown as 0. */
 const money = (v: string | null, missing: string) => (v === null ? <span className="text-muted-foreground">{missing}</span> : formatCurrency(v));
@@ -89,6 +93,7 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
     dateFrom: DAY.test(params.from ?? "") ? params.from : undefined,
     dateTo: DAY.test(params.to ?? "") ? params.to : undefined,
     ...finFilter(params.fin),
+    estimatedState: ESTIMATED_STATES.has(params.est ?? "") ? (params.est as EstimatedProfitState) : undefined,
   };
   const [{ rows, total }, syncStatuses, summary, health] = await Promise.all([
     getChannelOrders(filters, page, pageSize),
@@ -224,6 +229,7 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
               sku: filters.sku ?? "",
               from: filters.dateFrom ?? "",
               to: filters.dateTo ?? "",
+              est: filters.estimatedState ?? "",
             }}
           />
         </CardHeader>
@@ -259,13 +265,26 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                     <TableHead>Ghép SKU</TableHead>
                     <TableHead className="text-right">Thu nhập Shopee</TableHead>
                     <TableHead className="text-right">COGS</TableHead>
-                    <TableHead className="text-right">Lợi nhuận sau GV</TableHead>
+                    <TableHead className="text-right">
+                      <span className="inline-flex items-center gap-1">
+                        LN dự kiến
+                        <Tooltip>
+                          <TooltipTrigger
+                            render={<button type="button" aria-label="Giải thích lợi nhuận dự kiến" className="rounded text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none" />}
+                          >
+                            <CircleHelp className="size-3.5" />
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-64 text-left font-normal">{ESTIMATED_PROFIT_HELP}</TooltipContent>
+                        </Tooltip>
+                      </span>
+                    </TableHead>
                     <TableHead>Tài chính</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.map((o) => {
-                    const pTone = profitTone(numericSign(o.profitAfterCogs));
+                    // PATCH: ≥ 0 → success, < 0 → danger (estimate only — actual profit stays in the detail / KPI).
+                    const eTone = o.estimatedProfitState === "loss" ? "danger" : "success";
                     return (
                       <TableRow key={o.orderId}>
                         <TableCell className="text-muted-foreground">{formatDateTime(o.createdAtChannel)}</TableCell>
@@ -299,9 +318,18 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                         </TableCell>
                         <TableCell className="text-right">{money(o.shopeeNetIncome, "Chưa có")}</TableCell>
                         <TableCell className="text-right">{money(o.internalCogs, o.cogsReadiness === "partial" ? `Một phần ${o.costedLines}/${o.lineCount}` : "Chưa tính")}</TableCell>
-                        <TableCell className={`text-right font-medium ${o.profitAfterCogs === null ? "" : TONE_TEXT_CLASS[pTone]}`}>
-                          {pTone === "danger" && <AlertTriangle aria-hidden="true" className="mr-1 inline size-3.5" />}
-                          {money(o.profitAfterCogs, "Chưa tính")}
+                        <TableCell className="text-right" title={ESTIMATED_PROFIT_HELP}>
+                          {o.estimatedProfit === null ? (
+                            <span className="text-muted-foreground">Chưa tính</span>
+                          ) : (
+                            <span className={`inline-flex flex-col items-end font-medium ${TONE_TEXT_CLASS[eTone]}`}>
+                              <span className="inline-flex items-center gap-1">
+                                {eTone === "danger" && <AlertTriangle aria-hidden="true" className="size-3.5" />}
+                                {formatSignedCurrency(o.estimatedProfit)}
+                              </span>
+                              <span className="text-xs font-normal">{formatPercentString(o.estimatedMarginPct)}</span>
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col items-start gap-1">
