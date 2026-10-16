@@ -10,6 +10,10 @@
 //      version kept, identical polls refresh in place)
 //   5. apply_order_escrow() — components + order_financials + derived P&L /
 //      reconciliation + financial_status, in ONE database transaction
+// syncEstimate(orderId) (PATCH estimated revenue): the same call for an OPEN
+// order, but only Shopee's estimated order revenue is stored
+// (apply_order_estimated_revenue) — never the actual settlement.
+// The job runs settlement candidates first, then estimate candidates.
 // "Not ready" answers are recorded on the order (back-off), never retried in
 // a loop. Job-level provider errors (rate limit / 5xx / auth) propagate so
 // the job retries / stops with its checkpoint intact.
@@ -23,7 +27,7 @@ import { saveMeaningfulOrderSnapshot } from "../core/snapshots.ts";
 import { continuation, firstFailureSummary, type SliceInput, type SliceOutcome, type SyncJobRunner } from "../core/sync-runner.ts";
 import { mapWithConcurrency } from "../core/time-windows.ts";
 import { ShopeeApiError } from "./errors.ts";
-import { parseEscrowDetail } from "./escrow-adapter.ts";
+import { estimatedOrderRevenue, parseEscrowDetail } from "./escrow-adapter.ts";
 import { FINANCIAL_CALCULATION_VERSION } from "./financial-dictionary.ts";
 import type { ShopeePaymentProvider } from "./payment-provider.ts";
 import { errorInfo, isJobLevelProviderError, JobRefusedError } from "./sync-errors.ts";
@@ -33,6 +37,17 @@ export const ESCROW_ELIGIBLE_STATUSES: readonly string[] = ["COMPLETED"];
 
 export function isOrderEligibleForEscrowSync(order: { orderStatus: string }): boolean {
   return ESCROW_ELIGIBLE_STATUSES.includes(order.orderStatus);
+}
+
+/**
+ * Open orders whose Shopee estimated revenue is fetched (estimate-only:
+ * order_financials.estimated_order_revenue, never the actual settlement).
+ * UNPAID has no escrow yet; cancelled / return flows are out of scope.
+ */
+export const ESCROW_ESTIMATE_STATUSES: readonly string[] = ["READY_TO_SHIP", "PROCESSED", "RETRY_SHIP", "SHIPPED", "TO_CONFIRM_RECEIVE"];
+
+export function isOrderEligibleForEscrowEstimate(order: { orderStatus: string }): boolean {
+  return ESCROW_ESTIMATE_STATUSES.includes(order.orderStatus);
 }
 
 /**
@@ -150,10 +165,77 @@ export class ShopeeEscrowSyncService {
     };
   }
 
+  /**
+   * Estimate-only fetch for an OPEN order: get_escrow_detail → snapshot →
+   * apply_order_estimated_revenue (estimated_order_revenue only). The actual
+   * settlement columns, components and financial_status are never written
+   * here — that stays syncOrder's job once the order is COMPLETED.
+   */
+  async syncEstimate(orderId: string): Promise<EscrowEstimateOutcome> {
+    const { data: order, error } = await this.db
+      .from("channel_orders")
+      .select("id, shop_id, external_order_sn, order_status, currency, updated_at_channel, shops!inner(external_shop_id, data_source, channel)")
+      .eq("id", orderId)
+      .maybeSingle<OrderRow>();
+    if (error) throw new Error(`Không đọc được đơn: ${error.message}`);
+    if (!order || !order.shops) throw new JobRefusedError("order_not_found", "Không tìm thấy đơn.");
+    if (order.shops.channel !== "shopee") throw new JobRefusedError("not_shopee", "Đơn không thuộc kênh Shopee.");
+    if (order.shops.data_source !== this.provider.mode) {
+      throw new JobRefusedError("source_mismatch", order.shops.data_source === "fixture" ? "Shop fixture chỉ được đồng bộ bằng fixture provider." : "Không được đồng bộ dữ liệu fixture vào shop thật.");
+    }
+    const base = { orderSn: order.external_order_sn, estimatedRevenue: null as string | null };
+    if (!isOrderEligibleForEscrowEstimate({ orderStatus: order.order_status })) return { ...base, status: "ineligible" };
+
+    const syncedAt = this.now().toISOString();
+    let parsed;
+    try {
+      const payload = await this.provider.getEscrowDetail({ shopId: order.shop_id, externalShopId: order.shops.external_shop_id }, { orderSn: order.external_order_sn });
+      parsed = parseEscrowDetail(payload.raw, { currency: order.currency, expectedOrderSn: order.external_order_sn });
+    } catch (err) {
+      if (isJobLevelProviderError(err)) throw err;
+      const info = errorInfo(err);
+      await this.recordEstimateAttempt(order.id, info.code, info.message, syncedAt);
+      return { ...base, status: isEscrowNotReady(err) ? "not_ready" : "failed", errorCode: info.code, errorMessage: info.message };
+    }
+    const amount = estimatedOrderRevenue(parsed);
+    if (amount === null) {
+      await this.recordEstimateAttempt(order.id, "no_estimated_revenue", "Shopee chưa trả escrow_amount cho đơn này.", syncedAt);
+      return { ...base, status: "not_ready", errorCode: "no_estimated_revenue" };
+    }
+
+    await saveMeaningfulOrderSnapshot(this.db, {
+      shopId: order.shop_id,
+      orderSn: order.external_order_sn,
+      entityType: "escrow",
+      apiName: "v2.payment.get_escrow_detail",
+      payload: parsed.sanitized,
+      fingerprint: parsed.fingerprint,
+      sourceMode: this.provider.mode,
+      sourceUpdatedAt: order.updated_at_channel,
+      syncedAt,
+    });
+    const { data: result, error: applyError } = await this.db.rpc("apply_order_estimated_revenue", { p_order_id: order.id, p_amount: amount, p_synced_at: syncedAt });
+    if (applyError) throw new Error(`Không lưu được doanh thu ước tính đơn ${order.external_order_sn}: ${applyError.message} [${applyError.code ?? ""}]`);
+    return { ...base, status: result as EscrowEstimateOutcome["status"], estimatedRevenue: amount };
+  }
+
   private async recordAttempt(orderId: string, code: string, message: string, at: string) {
     const { error } = await this.db.rpc("record_order_escrow_attempt", { p_order_id: orderId, p_error_code: code, p_error_message: message, p_at: at });
     if (error) throw new Error(`Không ghi được lần thử escrow: ${error.message}`);
   }
+
+  private async recordEstimateAttempt(orderId: string, code: string, message: string, at: string) {
+    const { error } = await this.db.rpc("record_order_estimate_attempt", { p_order_id: orderId, p_error_code: code, p_error_message: message, p_at: at });
+    if (error) throw new Error(`Không ghi được lần thử doanh thu ước tính: ${error.message}`);
+  }
+}
+
+export interface EscrowEstimateOutcome {
+  status: "applied" | "unchanged" | "settled" | "not_ready" | "ineligible" | "failed";
+  orderSn: string;
+  estimatedRevenue: string | null;
+  errorCode?: string;
+  errorMessage?: string;
 }
 
 /** Repair scope cap (metadata must stay small). */
@@ -210,15 +292,21 @@ export class EscrowSyncJobRunner implements SyncJobRunner {
     };
 
     for (;;) {
-      let batch: Array<{ id: string; force: boolean }>;
+      let batch: EscrowWorkItem[];
       if (cp.pendingOrderIds) {
-        batch = cp.pendingOrderIds.slice(0, config.escrowBatchSize).map((id) => ({ id, force: true }));
+        batch = cp.pendingOrderIds.slice(0, config.escrowBatchSize).map((id) => ({ id, force: true, kind: "settlement" as const }));
       } else {
         const limit = Math.min(config.escrowBatchSize, budget.apiCallsLeft);
         if (limit < 1 || !budget.canSpend(1)) return stop(continuation(budget, "more_records"));
+        // Settlements first (actual income), then estimates of open orders.
         const { data, error } = await this.db.rpc("get_orders_needing_escrow_sync", this.candidateArgs(job.shop_id, config, now(), limit));
         if (error) throw new Error(`Không đọc được đơn cần đồng bộ tài chính: ${error.message}`);
-        batch = ((data ?? []) as Array<{ order_id: string }>).filter((r) => !seenThisSlice.has(r.order_id)).map((r) => ({ id: r.order_id, force: false }));
+        batch = ((data ?? []) as Array<{ order_id: string }>).filter((r) => !seenThisSlice.has(r.order_id)).map((r) => ({ id: r.order_id, force: false, kind: "settlement" as const }));
+        if (batch.length === 0) {
+          const est = await this.db.rpc("get_orders_needing_escrow_estimate", this.estimateArgs(job.shop_id, config, now(), limit));
+          if (est.error) throw new Error(`Không đọc được đơn cần doanh thu ước tính: ${est.error.message}`);
+          batch = ((est.data ?? []) as Array<{ order_id: string }>).filter((r) => !seenThisSlice.has(r.order_id)).map((r) => ({ id: r.order_id, force: false, kind: "estimate" as const }));
+        }
       }
       if (batch.length === 0) break;
 
@@ -244,7 +332,7 @@ export class EscrowSyncJobRunner implements SyncJobRunner {
     const summary = firstFailureSummary(progress.failures, failureCount);
     return {
       kind: "done",
-      logStatus: failureCount === 0 ? "success" : progress.stat("escrowFetched") > 0 ? "partial" : "failed",
+      logStatus: failureCount === 0 ? "success" : progress.stat("escrowFetched") + progress.stat("estimatesFetched") > 0 ? "partial" : "failed",
       advanceCheckpoint: failureCount === 0 && !cp.pendingOrderIds,
       windowFrom: null,
       windowTo: job.window_to ?? now().toISOString(),
@@ -254,8 +342,9 @@ export class EscrowSyncJobRunner implements SyncJobRunner {
   }
 
   /** One order of the batch. Only job-level errors (rate limit, auth, refused) escape. */
-  private async processOne(item: { id: string; force: boolean }, progress: SliceInput["progress"]) {
+  private async processOne(item: EscrowWorkItem, progress: SliceInput["progress"]) {
     progress.incr("ordersChecked");
+    if (item.kind === "estimate") return this.processEstimate(item, progress);
     try {
       const r = await this.sync.syncOrder(item.id, { force: item.force });
       progress.incrIn("outcomes", r.status);
@@ -280,6 +369,39 @@ export class EscrowSyncJobRunner implements SyncJobRunner {
     progress.counters.fetched++;
   }
 
+  /** Estimate-only fetch of an open order (never a job-level failure for a single "not ready"). */
+  private async processEstimate(item: EscrowWorkItem, progress: SliceInput["progress"]) {
+    try {
+      const r = await this.sync.syncEstimate(item.id);
+      progress.incrIn("estimateOutcomes", r.status);
+      if (r.status === "applied" || r.status === "unchanged") {
+        progress.incr("estimatesFetched");
+        if (r.status === "applied") progress.counters.updated++;
+      } else if (r.status === "not_ready") {
+        progress.incr("notReady");
+      } else if (r.status === "failed") {
+        progress.incr("errors");
+        progress.addFailure({ externalId: r.orderSn, reason: `escrow estimate [${r.errorCode}] ${r.errorMessage ?? ""}` });
+      }
+    } catch (err) {
+      if (isJobLevelProviderError(err) || err instanceof JobRefusedError) throw err;
+      progress.incr("errors");
+      progress.addFailure({ externalId: item.id, reason: `escrow estimate: ${errorInfo(err).message}` });
+    }
+    progress.counters.fetched++;
+  }
+
+  private estimateArgs(shopId: string, config: SliceInput["config"], at: Date, limit?: number) {
+    return {
+      p_shop_id: shopId,
+      ...(limit !== undefined ? { p_limit: limit } : {}),
+      p_now: at.toISOString(),
+      p_statuses: [...ESCROW_ESTIMATE_STATUSES],
+      p_refresh_interval_hours: config.escrowEstimateRefreshHours,
+      p_error_backoff_hours: config.escrowErrorBackoffHours,
+    };
+  }
+
   /** The candidate rule's parameters — one policy (sync-config) for the list and the count. */
   private candidateArgs(shopId: string, config: SliceInput["config"], at: Date, limit?: number) {
     return {
@@ -295,8 +417,12 @@ export class EscrowSyncJobRunner implements SyncJobRunner {
   }
 
   private async countCandidates(shopId: string, config: SliceInput["config"], at: Date): Promise<number> {
-    const { data, error } = await this.db.rpc("count_orders_needing_escrow_sync", this.candidateArgs(shopId, config, at));
-    if (error) throw new Error(`Không đếm được đơn cần đồng bộ tài chính: ${error.message}`);
-    return Number(data ?? 0);
+    const settle = await this.db.rpc("count_orders_needing_escrow_sync", this.candidateArgs(shopId, config, at));
+    const estimate = await this.db.rpc("count_orders_needing_escrow_estimate", this.estimateArgs(shopId, config, at));
+    if (settle.error) throw new Error(`Không đếm được đơn cần đồng bộ tài chính: ${settle.error.message}`);
+    if (estimate.error) throw new Error(`Không đếm được đơn cần doanh thu ước tính: ${estimate.error.message}`);
+    return Number(settle.data ?? 0) + Number(estimate.data ?? 0);
   }
 }
+
+type EscrowWorkItem = { id: string; force: boolean; kind: "settlement" | "estimate" };

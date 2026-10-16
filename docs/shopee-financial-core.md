@@ -177,8 +177,11 @@ pending ──► estimated ──► settlement_available ──► released
 
 `order_financials` (1 dòng/order) chứa cả hai:
 
-- **Estimated**: tính khi order mới có (giá bán, voucher, phí ước tính, COGS) →
-  `estimated_profit`, `estimated_margin`.
+- **Estimated** (từ PATCH FINANCIAL CORE, migration 00052): `estimated_order_revenue`
+  = "Doanh thu đơn hàng ước tính" Shopee trả về (không tự ước tính phí) →
+  `estimated_profit = estimated_order_revenue − internal_cogs`; biên lợi nhuận
+  tính trong `v_channel_order_summary.estimated_margin_pct` (cần tổng đơn).
+  Chi tiết: mục "Estimated Order Revenue …" bên dưới.
 - **Actual**: tính lại khi có escrow/income thật → `actual_profit`,
   `actual_margin`; `profit_variance = actual − estimated`.
 - `calculation_version` + `calculated_at`: biết số liệu được tính bằng phiên
@@ -908,6 +911,9 @@ tồn đầu kỳ / điều chỉnh (thủ công) ────┘
   `giá trị tồn = round(SL × avg, 2)`.
 - Ví dụ: 100 @ 100.000 + 50 @ 130.000 → 150 @ 110.000 (16.500.000); bán 3 → COGS 330.000,
   còn 147 @ 110.000 (16.170.000); nhập 10 @ 140.000 → 157 @ 111.910,8280.
+- Đơn giá `c` của hàng nhập = **đơn giá vốn hiệu lực** (gồm VAT đầu vào của NCC công ty
+  khi có hóa đơn) — xem "VAT-adjusted Internal COGS" (00052). Hàng nhập chưa biết
+  VAT làm avg = "chưa xác định" cho tới khi bán hết phần đó hoặc có hóa đơn.
 
 ### Loại sự kiện
 
@@ -1162,6 +1168,118 @@ get_escrow_detail ─► ShopeePaymentProvider ─► escrow-adapter (+ financia
   chính" chỉ thêm job vào hàng đợi.
 - **Ngoài phạm vi**: `released` / payout (`get_income_*`, `get_payout_detail`),
   returns (SHOPEE-6).
+
+## Estimated Order Revenue, VAT-adjusted COGS & Historical Restatement (PATCH FINANCIAL CORE)
+
+Migration `00052_estimated_revenue_vat_costing.sql` (chỉ schema + hàm, **không** sửa
+dữ liệu khi deploy). Phiên bản: tài chính `shopee-fin-v3`, giá vốn
+`moving-average-v2-vat`.
+
+### Estimated Order Revenue
+
+- **Nguồn**: "Doanh thu đơn hàng ước tính" trên Seller Center =
+  `get_escrow_detail` → `order_income.escrow_amount` (tài liệu Shopee: số người bán
+  dự kiến nhận, thay đổi tới khi đơn hoàn thành). Lấy **nguyên** số Shopee, không
+  tái tạo từ phí; không dùng `buyer_total_amount`, không dùng `channel_total_amount`.
+  Hằng số `ESTIMATED_ORDER_REVENUE_FIELD` (financial-dictionary.ts).
+  **Trạng thái mapping: ứng viên — chờ so với Seller Center**
+  (`docs/shopee-financial-validation.md` §10).
+- **Cột** `order_financials.estimated_order_revenue numeric(18,2)` +
+  `estimated_revenue_source` (`escrow_estimate` | `escrow_settlement`),
+  `estimated_revenue_synced_at`, `estimate_last_attempt_at/_error_code/_error_message`.
+- **Đơn đang mở** (`READY_TO_SHIP, PROCESSED, RETRY_SHIP, SHIPPED, TO_CONFIRM_RECEIVE`):
+  job escrow (sau khi xử lý hết đơn cần quyết toán) gọi `get_escrow_detail` ở chế độ
+  **chỉ ước tính** — `apply_order_estimated_revenue()` chỉ ghi cột ước tính; **không**
+  ghi component, cột settlement, `actual_shopee_income` hay `financial_status`.
+  Ứng viên: `get_orders_needing_escrow_estimate` (chưa có / đơn đổi sau lần lấy / cũ
+  hơn `SHOPEE_SYNC_ESCROW_ESTIMATE_REFRESH_HOURS`, mặc định 12 giờ; lỗi → back-off
+  như escrow). Thiếu `escrow_amount` → `no_estimated_revenue`, giữ NULL.
+- **Đơn hoàn thành**: thu nhập thực tế vẫn theo SHOPEE-5. Số ước tính đã có **không
+  bao giờ** bị số thực tế ghi đè. Đơn chưa từng có ước tính → trigger lấy
+  `escrow_amount` lúc quyết toán làm ước tính (`source = escrow_settlement`).
+  Sau khi có settlement, ước tính đến muộn bị bỏ qua (`settled`).
+
+### Estimated Profit
+
+```
+estimated_profit        = estimated_order_revenue − internal_cogs          (NUMERIC)
+estimated_margin_pct    = round(estimated_profit / channel_total_amount × 100, 1)
+estimated_profit_state  = profit (≥ 0) | loss (< 0) | insufficient
+```
+
+- Lưu ở `order_financials.estimated_profit` (trigger `derive_order_financials`, nên
+  luôn khớp với COGS hiện tại) và tính lại trong `v_channel_order_summary` (kèm
+  margin vì cần tổng đơn). `profit_variance = actual_profit − estimated_profit`.
+- NULL / 0: thiếu DT ước tính → "Chưa có" + LN "Chưa tính"; thiếu COGS → "Chưa
+  tính"; `channel_total_amount ≤ 0` → margin NULL ("—"). Không bao giờ thay NULL
+  bằng 0.
+- Ví dụ (Seller Center): DT ước tính 74.694, COGS 32.000 → LN 42.694; tổng đơn
+  118.400 → 36,1 %.
+- **UI** `/shopee/orders`: cột Giá trị SP · COGS · DT ước tính · LN dự kiến
+  (`+42.694 ₫` / `36,1%`, xanh ≥ 0, đỏ < 0) · LN thực tế · Tài chính; bộ lọc
+  `est=profit|loss|insufficient`. `/shopee/orders/[id]`: khối "Dự kiến (trước quyết
+  toán)" + thẻ DT ước tính / LN dự kiến / LN thực tế.
+
+### VAT-adjusted Internal COGS
+
+- **Ý nghĩa giá phiếu nhập** (đã kiểm trên dữ liệu thật 2026-10-16):
+  `receipt_items.unit_price` là **giá chưa VAT**. Hóa đơn "từ hàng đã nhận" dùng đúng
+  giá đó làm đơn giá dòng rồi cộng VAT lên trên; với hóa đơn thủ công của NCC công ty,
+  178/190 dòng có đơn giá trùng giá phiếu nhập, 0 dòng bằng giá × 1,08.
+  `unit_price` không bao giờ bị sửa.
+- **Phiếu nhập → hóa đơn**: chỉ qua liên kết tường minh `invoice_receipt_days`
+  (NCC + ngày hàng về). Không suy đoán theo ngày / giá.
+- **Đơn giá vốn hiệu lực** (`cost_sync_purchases`, cột ledger `base_unit_cost`,
+  `vat_rate`, `cost_basis`, `invoice_id`):
+
+  | NCC | Ngày đã có hóa đơn? | `unit_cost` | `cost_basis` |
+  |---|---|---|---|
+  | Hộ kinh doanh | — | `unit_price` | `raw` |
+  | Công ty | có | `round(unit_price × (1 + invoice.vat_rate/100), 4)` | `invoice_vat` |
+  | Công ty | **chưa** | NULL (không đoán 8 %) | `vat_pending` |
+
+  VAT lấy từ snapshot `vat_rate` của **chính hóa đơn đó**. Luôn tính lại từ giá phiếu
+  gốc nên VAT không thể cộng hai lần.
+- **Chờ VAT**: khi có hàng `vat_pending` trong tồn, giá vốn bình quân = chưa xác định
+  (`product_cost_state.vat_pending`). Đơn bán trong khoảng đó vẫn trừ số lượng nhưng
+  không có COGS (`cost_pending`, "Chưa tính"). Khi tồn về ≤ 0, lần nhập kế tiếp bắt đầu
+  bình quân mới. Đơn chờ VAT bị huỷ → rút sự kiện bán (`withdrawn_pending`).
+- **Tự tính lại** (trigger, SECURITY DEFINER): thêm / xoá `invoice_receipt_days`,
+  đổi `invoices.vat_rate`, đổi `suppliers.supplier_type`. Sau rebuild, đơn chờ VAT nay
+  đã biết giá được điền COGS **lần đầu** (`cost_fill_pending_sales`, không phải điều
+  chỉnh lịch sử).
+- Ví dụ: 100 @ 100.000 + 50 @ 120.000, VAT 8 % → 108.000 / 129.600 → bình quân
+  115.200; bán 2 → COGS 230.400. DT ước tính 300.000, COGS 216.000 (200.000 trước
+  VAT) → LN dự kiến 84.000.
+- **UI** `/inventory/costs/[productId]`: Giá nhập (chưa VAT) · VAT · Đơn giá vốn ·
+  BQ trước/sau. Danh sách: badge + bộ lọc "Chờ hóa đơn VAT".
+
+### Historical COGS Restatement
+
+- **Dựng lại sổ giá vốn** (`cost_rebuild_product` / `_all`) chỉ tính lại ledger +
+  giá vốn hiện tại. **Không** đổi `cost_per_unit_snapshot` / `total_cogs` của đơn
+  cũ (trigger `guard_order_item_cogs`, CG001).
+- **Điều chỉnh** (`/inventory/costs/restatement`, quyền `cost:manage`):
+  1. dựng lại sổ;
+  2. dry-run `cost_restatement_candidates` / `cost_restatement_summary`: các dòng đã
+     chốt (chưa hoàn kho) có snapshot khác giá trị dựng lại tại cùng thời điểm bán.
+     Hiện COGS cũ, mới, chênh lệch. Dòng có giá mới chưa xác định (chờ VAT) → không
+     điều chỉnh được;
+  3. admin nhập lý do và xác nhận → `cost_restate_order_cogs`. Hàm kiểm lại từng dòng,
+     ghi snapshot mới + `cost_version`, lưu 1 dòng `cogs_restatements` (cũ / mới /
+     version / lý do / người / thời điểm / batch), rồi tính lại `internal_cogs`. Trigger
+     sau đó tự tính lại lợi nhuận dự kiến và lợi nhuận thực tế. Doanh thu Shopee
+     không đổi.
+- Chỉ trong hàm này snapshot mới được phép đổi (cờ transaction-local
+  `app.cogs_restatement`).
+
+### Giới hạn đã biết
+
+- Phiếu nhập NCC công ty thuộc hóa đơn **thủ công** chưa có liên kết ngày → "chờ
+  VAT" cho tới khi được lập hóa đơn "từ hàng đã nhận" (hoặc một phase sau thêm cách
+  liên kết hóa đơn thủ công).
+- `supplier_type` đọc theo giá trị hiện tại của NCC (phiếu nhập không snapshot loại NCC).
+- Chiết khấu hộ kinh doanh, phí vận chuyển / landed cost, FIFO: chưa áp dụng.
 
 ## Snapshot retention (thiết kế — chưa triển khai)
 

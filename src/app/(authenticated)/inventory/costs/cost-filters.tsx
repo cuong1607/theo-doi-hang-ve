@@ -8,6 +8,7 @@ const WARNING_OPTIONS: FilterOption[] = [
   { label: "Thiếu dữ liệu giá vốn", value: "missing_cost" },
   { label: "Chưa có lịch sử", value: "no_history" },
   { label: "Cần tính lại", value: "needs_rebuild" },
+  { label: "Chờ hóa đơn VAT", value: "vat_pending" },
 ];
 
 const COST_FILTER_KEYS = ["q", "warning"] as const;

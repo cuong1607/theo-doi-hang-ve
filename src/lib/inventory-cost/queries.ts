@@ -8,7 +8,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { escapeIlikeTerm } from "@/lib/supabase/search";
 
-import type { CostEventType, CostLedgerEntry } from "./types.ts";
+import type { CostEventType, CostLedgerEntry, PurchaseCostBasis } from "./types.ts";
 import type { ProductCostState } from "./engine.ts";
 
 export interface ProductCostOverviewRow {
@@ -26,9 +26,11 @@ export interface ProductCostOverviewRow {
   hasHistory: boolean;
   negativeQuantity: boolean;
   missingCost: boolean;
+  /** The current position holds purchases waiting for their VAT invoice (average unknown). */
+  vatPending: boolean;
 }
 
-export type CostWarningFilter = "negative" | "missing_cost" | "no_history" | "needs_rebuild";
+export type CostWarningFilter = "negative" | "missing_cost" | "no_history" | "needs_rebuild" | "vat_pending";
 
 type OverviewRow = {
   product_id: string;
@@ -45,6 +47,7 @@ type OverviewRow = {
   has_history: boolean;
   negative_quantity: boolean;
   missing_cost: boolean;
+  vat_pending: boolean;
 };
 
 const toOverview = (r: OverviewRow): ProductCostOverviewRow => ({
@@ -62,6 +65,7 @@ const toOverview = (r: OverviewRow): ProductCostOverviewRow => ({
   hasHistory: r.has_history,
   negativeQuantity: r.negative_quantity,
   missingCost: r.missing_cost,
+  vatPending: r.vat_pending,
 });
 
 export async function getProductCostOverview(filters: { search?: string; warning?: CostWarningFilter }, page: number, pageSize: number) {
@@ -75,6 +79,7 @@ export async function getProductCostOverview(filters: { search?: string; warning
   if (filters.warning === "missing_cost") query = query.eq("missing_cost", true);
   if (filters.warning === "no_history") query = query.eq("has_history", false);
   if (filters.warning === "needs_rebuild") query = query.eq("needs_rebuild", true);
+  if (filters.warning === "vat_pending") query = query.eq("vat_pending", true);
   const { data, error, count } = await query.returns<OverviewRow[]>();
   if (error) throw new Error(error.message);
   return { rows: (data ?? []).map(toOverview), total: count ?? 0 };
@@ -101,7 +106,8 @@ export async function getProductCostLedger(productId: string, filters: { eventTy
     .from("inventory_cost_ledger")
     .select(
       "id, product_id, event_type, source_type, source_id, source_external_id, event_time, quantity_change::text, unit_cost::text, " +
-        "movement_cost::text, qty_before::text, qty_after::text, avg_cost_before::text, avg_cost_after::text, note, metadata",
+        "movement_cost::text, qty_before::text, qty_after::text, avg_cost_before::text, avg_cost_after::text, note, metadata, " +
+        "base_unit_cost::text, vat_rate::text, cost_basis, invoice_id",
       { count: "exact" },
     )
     .eq("product_id", productId)
@@ -127,7 +133,11 @@ export async function getProductCostLedger(productId: string, filters: { eventTy
     avg_cost_before: string | null;
     avg_cost_after: string | null;
     note: string | null;
-    metadata: { negative_inventory?: boolean } | null;
+    metadata: { negative_inventory?: boolean; cost_pending?: boolean } | null;
+    base_unit_cost: string | null;
+    vat_rate: string | null;
+    cost_basis: PurchaseCostBasis | null;
+    invoice_id: string | null;
   };
   const rows: CostLedgerEntry[] = ((data ?? []) as unknown as Row[]).map((r) => ({
     id: r.id,
@@ -146,6 +156,11 @@ export async function getProductCostLedger(productId: string, filters: { eventTy
     avgCostAfter: r.avg_cost_after,
     note: r.note,
     negativeInventory: r.metadata?.negative_inventory === true,
+    baseUnitCost: r.base_unit_cost,
+    vatRate: r.vat_rate,
+    costBasis: r.cost_basis,
+    invoiceId: r.invoice_id,
+    costPending: r.metadata?.cost_pending === true,
   }));
   return { rows, total: count ?? 0 };
 }

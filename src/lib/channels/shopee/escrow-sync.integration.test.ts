@@ -465,48 +465,162 @@ test("PERF-2 23 + 24 + 25. 98-order escrow backlog drains over several bounded w
   assert.ok(st!.last_success_at, "clean escrow job advances the escrow sync state");
 });
 
-test("PATCH estimated profit: order value − COGS in NUMERIC; null / zero handling; state filter; actual profit untouched", async () => {
+// ================================================================ PATCH: ESTIMATED REVENUE / PROFIT
+
+const estimate = (orderId: string, amount: string) => db.rpc("apply_order_estimated_revenue", { p_order_id: orderId, p_amount: amount, p_synced_at: new Date().toISOString() });
+
+test("PATCH 1 + 8: open order → Shopee escrow_amount stored as estimated revenue ONLY (no components, no actual income, status unchanged); buyer payment ignored", async () => {
   const s = await shop();
-  const profit = await order(s, { total: "100000" }); // COGS 70000 → +30000, 30.0 %
-  const loss = await order(s, { total: "80000" }); // COGS 90000 → -10000, -12.5 %
-  const noCogs = await order(s, { total: "50000" }); // COGS unknown
-  const zero = await order(s, { total: "0" }); // COGS 0 → 0, no margin
-  const exact = await order(s, { total: "12345678901234.33" }); // beyond float precision
+  const o = await order(s, { status: "SHIPPED", total: "118400" });
+  const bySn = new Map<string, unknown>([[o.sn, escrow(o.sn, { escrow_amount: 74694, escrow_amount_after_adjustment: 74694, buyer_total_amount: 118400 })]]);
+  const r = await service(bySn).syncEstimate(o.id);
+  assert.equal(r.status, "applied");
+  assert.equal(r.estimatedRevenue, "74694");
+  const f = (await fin(o.id))!;
+  assert.equal(num(f.estimated_order_revenue), 74694);
+  assert.equal(f.estimated_revenue_source, "escrow_estimate");
+  assert.ok(f.estimated_revenue_synced_at);
+  for (const col of ["escrow_amount", "escrow_amount_after_adjustment", "actual_shopee_income", "escrow_synced_at", "calculated_settlement", "commission_fee"]) assert.equal(f[col], null, `${col} stays unknown`);
+  assert.equal((await components(o.id)).length, 0, "no settlement components from an estimate");
+  assert.equal((await orderRow(o.id)).financial_status, "pending", "financial status untouched");
+  const { count } = await db.from("channel_api_snapshots").select("id", { count: "exact", head: true }).eq("entity_external_id", o.sn).eq("entity_type", "escrow");
+  assert.equal(count, 1, "raw payload kept for audit");
+  // same payload again → unchanged
+  assert.equal((await service(bySn).syncEstimate(o.id)).status, "unchanged");
+  // a completed order is not estimated through this path
+  const done = await order(s, { status: "COMPLETED" });
+  assert.equal((await service(new Map([[done.sn, escrow(done.sn)]])).syncEstimate(done.id)).status, "ineligible");
+});
+
+test("PATCH 2–6 + 9: estimated profit = estimated revenue − COGS; margin over channel_total_amount; null / zero / exact NUMERIC; filter", async () => {
+  const s = await shop();
+  const seller = await order(s, { status: "SHIPPED", total: "118400" }); // Seller Center example: 74.694 − 32.000 = 42.694 / 118.400 = 36,06 %
+  const loss = await order(s, { status: "SHIPPED", total: "100000" }); // 60.000 − 65.000 = −5.000, −5,0 %
+  const noCogs = await order(s, { status: "SHIPPED", total: "50000" });
+  const noRevenue = await order(s, { status: "SHIPPED", total: "40000" });
+  const zero = await order(s, { status: "SHIPPED", total: "0" });
+  const exact = await order(s, { status: "SHIPPED", total: "20000000000000" });
   await db.from("order_financials").insert([
-    { order_id: profit.id, internal_cogs: "70000" },
-    { order_id: loss.id, internal_cogs: "90000" },
+    { order_id: seller.id, internal_cogs: "32000" },
+    { order_id: loss.id, internal_cogs: "65000" },
+    { order_id: noRevenue.id, internal_cogs: "10000" },
     { order_id: zero.id, internal_cogs: "0" },
     { order_id: exact.id, internal_cogs: "0.11" },
   ]);
+  for (const [o, amount] of [[seller, "74694"], [loss, "60000"], [noCogs, "50000"], [zero, "0"], [exact, "12345678901234.33"]] as const) assert.equal((await estimate(o.id, amount)).error, null);
+
   const { data } = await db
     .from("v_channel_order_summary")
-    .select("order_id, estimated_profit, estimated_margin_pct, estimated_profit_state, profit_after_cogs, internal_cogs")
+    .select("order_id, estimated_order_revenue, estimated_profit, estimated_margin_pct, estimated_profit_state, profit_after_cogs")
     .eq("shop_id", s);
   const by = new Map((data ?? []).map((r) => [r.order_id as string, r]));
-  assert.deepEqual(
-    { p: by.get(profit.id)!.estimated_profit, m: by.get(profit.id)!.estimated_margin_pct, st: by.get(profit.id)!.estimated_profit_state },
-    { p: "30000.00", m: "30.0", st: "profit" },
-  );
-  assert.deepEqual(
-    { p: by.get(loss.id)!.estimated_profit, m: by.get(loss.id)!.estimated_margin_pct, st: by.get(loss.id)!.estimated_profit_state },
-    { p: "-10000.00", m: "-12.5", st: "loss" },
-  );
-  assert.equal(by.get(noCogs.id)!.estimated_profit, null, "COGS unknown → not calculated (never 0)");
-  assert.equal(by.get(noCogs.id)!.estimated_margin_pct, null);
-  assert.equal(by.get(noCogs.id)!.estimated_profit_state, "insufficient");
-  assert.equal(Number(by.get(zero.id)!.estimated_profit), 0);
-  assert.equal(by.get(zero.id)!.estimated_margin_pct, null, "total 0 → no division, margin —");
-  assert.equal(by.get(zero.id)!.estimated_profit_state, "profit", "0 counts as ≥ 0");
-  assert.equal(by.get(exact.id)!.estimated_profit, "12345678901234.22", "NUMERIC exact, no float drift");
-  // actual profit still needs Shopee income
-  for (const o of [profit, loss, zero]) assert.equal(by.get(o.id)!.profit_after_cogs, null);
+  const view = (id: string) => ({ rev: by.get(id)!.estimated_order_revenue, p: by.get(id)!.estimated_profit, m: by.get(id)!.estimated_margin_pct, st: by.get(id)!.estimated_profit_state });
+  assert.deepEqual(view(seller.id), { rev: "74694.00", p: "42694.00", m: "36.1", st: "profit" }, "uses Shopee's estimated revenue, NOT the order total (118.400)");
+  assert.deepEqual(view(loss.id), { rev: "60000.00", p: "-5000.00", m: "-5.0", st: "loss" });
+  assert.deepEqual(view(noCogs.id), { rev: "50000.00", p: null, m: null, st: "insufficient" }, "COGS unknown → Chưa tính (never 0)");
+  assert.deepEqual(view(noRevenue.id), { rev: null, p: null, m: null, st: "insufficient" }, "estimated revenue unknown → Chưa có / Chưa tính");
+  assert.deepEqual(view(zero.id), { rev: "0.00", p: "0.00", m: null, st: "profit" }, "total 0 → no division");
+  assert.equal(view(exact.id).p, "12345678901234.22", "NUMERIC exact, no float drift");
+  // stored copy of the estimated profit follows the same rule (trigger)
+  assert.equal(num((await fin(seller.id))!.estimated_profit), 42694);
+  assert.equal((await fin(noCogs.id))!.estimated_profit, null);
+  // actual profit still needs Shopee's settlement
+  for (const o of [seller, loss, zero]) assert.equal(by.get(o.id)!.profit_after_cogs, null);
 
-  // the summary RPC follows the new filter
   const count = async (state: string) =>
     Number(((await db.rpc("get_channel_order_financial_summary", { p_shop_id: s, p_estimated_state: state }).single()).data as { order_count: number }).order_count);
   assert.equal(await count("profit"), 3);
   assert.equal(await count("loss"), 1);
-  assert.equal(await count("insufficient"), 1);
+  assert.equal(await count("insufficient"), 2);
+});
+
+test("PATCH 7: estimate and actual stay separate — settlement never overwrites an estimate; no estimate → settlement escrow_amount fills it; late estimate ignored", async () => {
+  const s = await shop();
+  const o = await order(s, { status: "SHIPPED", total: "185000" });
+  await db.from("order_financials").insert({ order_id: o.id, internal_cogs: "100000" });
+  assert.equal((await estimate(o.id, "152000")).data, "applied");
+  await db.from("channel_orders").update({ order_status: "COMPLETED" }).eq("id", o.id);
+  await service(new Map([[o.sn, escrow(o.sn)]])).syncOrder(o.id); // settlement escrow_amount 151000
+  let f = (await fin(o.id))!;
+  assert.deepEqual([num(f.estimated_order_revenue), f.estimated_revenue_source, num(f.actual_shopee_income)], [152000, "escrow_estimate", 151000]);
+  assert.deepEqual([num(f.estimated_profit), num(f.actual_profit), num(f.profit_variance)], [52000, 51000, -1000], "actual − estimated");
+  assert.equal((await estimate(o.id, "999999")).data, "settled", "a late estimate after settlement is ignored");
+  assert.equal(num((await fin(o.id))!.estimated_order_revenue), 152000);
+
+  const direct = await order(s, { status: "COMPLETED" });
+  await service(new Map([[direct.sn, escrow(direct.sn)]])).syncOrder(direct.id);
+  f = (await fin(direct.id))!;
+  assert.deepEqual([num(f.estimated_order_revenue), f.estimated_revenue_source], [151000, "escrow_settlement"], "first known at settlement");
+});
+
+test("PATCH estimate candidates + missing escrow_amount: open orders without settlement only; refresh / order change / back-off", async () => {
+  const s = await shop();
+  const now = new Date();
+  const open = await order(s, { status: "TO_CONFIRM_RECEIVE" });
+  const unpaid = await order(s, { status: "UNPAID" });
+  const completed = await order(s, { status: "COMPLETED" });
+  const noAmount = await order(s, { status: "SHIPPED" });
+  const ids = async () =>
+    (((await db.rpc("get_orders_needing_escrow_estimate", { p_shop_id: s, p_limit: 50, p_now: now.toISOString(), p_refresh_interval_hours: 12, p_error_backoff_hours: 6 })).data ?? []) as Array<{ order_id: string; reason: string }>).map((r) => `${r.order_id}:${r.reason}`);
+  assert.deepEqual((await ids()).sort(), [`${open.id}:never_estimated`, `${noAmount.id}:never_estimated`].sort(), "UNPAID / COMPLETED are not estimate candidates");
+  assert.ok(!(await ids()).some((x) => x.startsWith(unpaid.id) || x.startsWith(completed.id)));
+
+  const payload = escrow(noAmount.sn) as { response: { order_income: Record<string, unknown> } };
+  delete payload.response.order_income.escrow_amount;
+  const r = await service(new Map([[noAmount.sn, payload]])).syncEstimate(noAmount.id);
+  assert.equal(r.status, "not_ready");
+  assert.equal((await fin(noAmount.id))!.estimated_order_revenue, null, "unknown stays NULL, never 0");
+  assert.equal((await fin(noAmount.id))!.estimate_last_error_code, "no_estimated_revenue");
+
+  await estimate(open.id, "1000");
+  assert.deepEqual(await ids(), [], "fresh estimate + back-off → nothing to do");
+  const later = new Date(now.getTime() + 13 * 3600_000).toISOString();
+  const after13h = (((await db.rpc("get_orders_needing_escrow_estimate", { p_shop_id: s, p_limit: 50, p_now: later, p_refresh_interval_hours: 12, p_error_backoff_hours: 6 })).data ?? []) as Array<{ order_id: string; reason: string }>).map((x) => `${x.order_id}:${x.reason}`);
+  assert.deepEqual(after13h.sort(), [`${open.id}:refresh_interval`, `${noAmount.id}:never_estimated`].sort(), "stale estimate refreshed; failed one retried after back-off");
+  await db.from("channel_orders").update({ updated_at_channel: new Date(now.getTime() + 60_000).toISOString() }).eq("id", open.id);
+  assert.deepEqual(await ids(), [`${open.id}:order_changed`]);
+  assert.equal(Number((await db.rpc("count_orders_needing_escrow_estimate", { p_shop_id: s, p_now: now.toISOString() })).data), 1);
+});
+
+test("PATCH escrow job: settlements first, then estimates of open orders — one job, bounded, counted", async () => {
+  const s = await shop();
+  const completed = [await order(s), await order(s)];
+  const open = [await order(s, { status: "SHIPPED" }), await order(s, { status: "READY_TO_SHIP" }), await order(s, { status: "TO_CONFIRM_RECEIVE" })];
+  const bySn = new Map<string, unknown>([...completed, ...open].map((o) => [o.sn, escrow(o.sn)]));
+  const calls: string[] = [];
+  const config: SyncConfig = { ...getSyncConfig({}), shopAllowlist: [s], escrowBatchSize: 2 };
+  const worker = new SyncWorker({
+    db,
+    config,
+    workerId: `t5e-${Math.random().toString(16).slice(2, 8)}`,
+    createRunner: createShopeeRunnerFactory({
+      db,
+      config,
+      providers: () => ({
+        mode: "fixture",
+        order: new FixtureShopeeOrderProvider({ listPages: [], ordersBySn: new Map() }),
+        product: new FixtureShopeeProductProvider({ listPages: [], itemBaseInfo: {}, modelLists: new Map() } as never),
+        payment: new FixtureShopeePaymentProvider(bySn, { onCall: (c) => void calls.push((c.input as { orderSn: string }).orderSn) }),
+      }),
+    }),
+    classifyError: toJobFailure,
+    logger: () => {},
+  });
+  const job = await requestShopeeSync(db, { shopId: s, syncType: "escrow", mode: "manual" });
+  for (let i = 0; i < 10; i++) if (!(await worker.runOne(30_000))) break;
+  const { data: j } = await db.from("channel_sync_jobs").select("status, metadata").eq("id", job.jobId).single();
+  assert.equal(j!.status, "success", JSON.stringify(j));
+  const stats = (j!.metadata as { stats: Record<string, number> }).stats;
+  assert.equal(stats.eligible, 5, "settlement + estimate candidates");
+  assert.equal(stats.escrowFetched, 2);
+  assert.equal(stats.estimatesFetched, 3);
+  assert.equal(stats.remaining, 0);
+  assert.deepEqual(calls.slice(0, 2).sort(), completed.map((o) => o.sn).sort(), "settlements first");
+  for (const o of open) {
+    const f = (await fin(o.id))!;
+    assert.deepEqual([num(f.estimated_order_revenue), f.actual_shopee_income], [151000, null]);
+  }
+  for (const o of completed) assert.equal(num((await fin(o.id))!.actual_shopee_income), 151000);
 });
 
 // ================================================================ VIEW / SUMMARY / SECURITY

@@ -27,9 +27,14 @@ export function RebuildCostButton({ productId }: { productId?: string }) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{label}?</DialogTitle>
-            <DialogDescription>
-              Dựng lại sổ giá vốn bình quân {productId ? "của sản phẩm này" : "của toàn bộ sản phẩm"} từ phiếu nhập và đơn đã ghi. Chỉ dùng khi sửa lỗi dữ liệu. COGS đã chốt
-              của đơn cũ giữ nguyên.
+            <DialogDescription className="space-y-2">
+              <span className="block">
+                Dựng lại sổ giá vốn sẽ tính lại giá vốn hiện tại từ lịch sử nhập hàng. Không tự động thay đổi COGS của đơn hàng lịch sử.
+              </span>
+              <span className="block text-xs">
+                Áp dụng {productId ? "cho sản phẩm này" : "cho toàn bộ sản phẩm"}; hàng từ NCC công ty được cộng VAT theo hóa đơn đã lập. Đơn đang &quot;chờ VAT&quot; sẽ được điền
+                COGS nếu nay đã đủ dữ liệu. Muốn điều chỉnh COGS đơn cũ theo sổ mới, dùng &quot;Điều chỉnh COGS đơn lịch sử&quot; (thao tác riêng, có xem trước).
+              </span>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

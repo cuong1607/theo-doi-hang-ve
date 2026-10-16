@@ -12,9 +12,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 
 import { ShopeeApiError } from "./errors.ts";
-import { abs, negate, parseEscrowDetail } from "./escrow-adapter.ts";
-import { isEscrowNotReady, isOrderEligibleForEscrowSync } from "./escrow-sync.ts";
-import { ESCROW_COLUMNS, ESCROW_FIELDS, FINANCIAL_CALCULATION_VERSION } from "./financial-dictionary.ts";
+import { abs, estimatedOrderRevenue, negate, parseEscrowDetail } from "./escrow-adapter.ts";
+import { isEscrowNotReady, isOrderEligibleForEscrowEstimate, isOrderEligibleForEscrowSync } from "./escrow-sync.ts";
+import { ESCROW_COLUMNS, ESCROW_FIELDS, ESTIMATED_ORDER_REVENUE_FIELD, FINANCIAL_CALCULATION_VERSION } from "./financial-dictionary.ts";
 import { loadEscrowFixtures } from "./payment-provider.ts";
 import { ShopeePayloadError } from "./product-adapter.ts";
 
@@ -167,7 +167,7 @@ test("14. only formula members verified on real payloads are included; an unveri
   }
   // dictionary sanity: every column belongs to ESCROW_COLUMNS
   for (const [key, def] of Object.entries(ESCROW_FIELDS)) if (def.column) assert.ok((ESCROW_COLUMNS as readonly string[]).includes(def.column), key);
-  assert.equal(FINANCIAL_CALCULATION_VERSION, "shopee-fin-v2");
+  assert.equal(FINANCIAL_CALCULATION_VERSION, "shopee-fin-v3");
 });
 
 // ================================================================ REAL VN payloads (sanitized)
@@ -238,7 +238,28 @@ test("decimal string helpers (no float arithmetic)", () => {
   assert.equal(abs("-12.30"), "12.30");
 });
 
+test("PATCH 1 + 8 + 9: estimated order revenue = Shopee escrow_amount — never buyer payment, never the order total, never rebuilt from fees", () => {
+  assert.equal(ESTIMATED_ORDER_REVENUE_FIELD, "escrow_amount");
+  // real VN payloads: buyer paid 149.837, product value 192.099 → Shopee estimate 119.073
+  const real = load("realvn_standard.json");
+  const p = parseEscrowDetail(real);
+  assert.equal(estimatedOrderRevenue(p), String(real.response.order_income.escrow_amount));
+  assert.notEqual(estimatedOrderRevenue(p), String(real.response.order_income.buyer_total_amount));
+  // returned order: Shopee's estimate is negative (−2.700) and kept signed
+  assert.equal(estimatedOrderRevenue(parseEscrowDetail(load("realvn_returned.json"))), "-2700");
+  // fees changing without escrow_amount changing → estimate unchanged (no re-estimation)
+  const tweaked = load("synthetic_basic.json");
+  tweaked.response.order_income.commission_fee = 999999;
+  assert.equal(estimatedOrderRevenue(parseEscrowDetail(tweaked)), "151000");
+  // Shopee did not report it → unknown (null), never 0
+  const missing = load("synthetic_basic.json");
+  delete missing.response.order_income.escrow_amount;
+  assert.equal(estimatedOrderRevenue(parseEscrowDetail(missing)), null);
+});
+
 test("eligibility + not-ready classification", () => {
+  for (const s of ["READY_TO_SHIP", "PROCESSED", "RETRY_SHIP", "SHIPPED", "TO_CONFIRM_RECEIVE"]) assert.equal(isOrderEligibleForEscrowEstimate({ orderStatus: s }), true, s);
+  for (const s of ["UNPAID", "COMPLETED", "CANCELLED", "IN_CANCEL", "TO_RETURN"]) assert.equal(isOrderEligibleForEscrowEstimate({ orderStatus: s }), false, s);
   assert.equal(isOrderEligibleForEscrowSync({ orderStatus: "COMPLETED" }), true);
   assert.equal(isOrderEligibleForEscrowSync({ orderStatus: "SHIPPED" }), false);
   assert.equal(isOrderEligibleForEscrowSync({ orderStatus: "CANCELLED" }), false);

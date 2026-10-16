@@ -190,7 +190,18 @@ export const IGNORED_FIELD_PATTERNS: readonly RegExp[] = [/_pri$/, /^order_charg
 /**
  * v1  first release, nothing verified (calculated_settlement always NULL)
  * v2  formula verified on real VN payloads (docs/shopee-financial-validation.md).
+ * v3  estimated order revenue (escrow_amount → order_financials.estimated_order_revenue)
+ *     + estimated profit against VAT-adjusted COGS (migration 00052).
  * Bumping the version makes every synced order a candidate for re-fetch +
  * recalculation (get_orders_needing_escrow_sync p_calculation_version).
  */
-export const FINANCIAL_CALCULATION_VERSION = "shopee-fin-v2";
+export const FINANCIAL_CALCULATION_VERSION = "shopee-fin-v3";
+
+/**
+ * Seller Center "Doanh thu đơn hàng ước tính" = order_income.escrow_amount
+ * (Shopee: the amount the seller is expected to receive; it can change until
+ * the order completes). Taken as-is — never rebuilt from fees. Mapping
+ * status: candidate, pending the Seller Center comparison in
+ * docs/shopee-financial-validation.md §10.
+ */
+export const ESTIMATED_ORDER_REVENUE_FIELD = "escrow_amount" as const;

@@ -62,6 +62,8 @@ export interface SyncConfig {
   escrowRefreshIntervalHours: number;
   /** A not-ready / failed escrow fetch is retried after this many hours. */
   escrowErrorBackoffHours: number;
+  /** Open orders: Shopee estimated revenue (escrow, estimate-only) is re-fetched at most this often. */
+  escrowEstimateRefreshHours: number;
   /**
    * Staged rollout (pilot shop first): when set, the scheduler and worker
    * only touch these shop ids (SHOPEE_SYNC_SHOP_IDS, comma-separated).
@@ -97,6 +99,7 @@ export const SYNC_CONFIG_DEFAULTS: SyncConfig = {
   escrowRefreshWindowDays: 14,
   escrowRefreshIntervalHours: 24,
   escrowErrorBackoffHours: 6,
+  escrowEstimateRefreshHours: 12,
   shopAllowlist: null,
 };
 
@@ -124,6 +127,7 @@ const ENV_KEYS: Record<NumericKey, { key: string; min: number; max: number }> = 
   escrowRefreshWindowDays: { key: "SHOPEE_SYNC_ESCROW_REFRESH_WINDOW_DAYS", min: 0, max: 90 },
   escrowRefreshIntervalHours: { key: "SHOPEE_SYNC_ESCROW_REFRESH_INTERVAL_HOURS", min: 1, max: 24 * 30 },
   escrowErrorBackoffHours: { key: "SHOPEE_SYNC_ESCROW_ERROR_BACKOFF_HOURS", min: 1, max: 24 * 7 },
+  escrowEstimateRefreshHours: { key: "SHOPEE_SYNC_ESCROW_ESTIMATE_REFRESH_HOURS", min: 1, max: 24 * 7 },
 };
 
 export function getSyncConfig(env: Env = process.env): SyncConfig & { warnings: string[] } {

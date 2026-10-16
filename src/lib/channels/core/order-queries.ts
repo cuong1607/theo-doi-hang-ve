@@ -53,16 +53,21 @@ export interface ChannelOrderListRow {
   settlementState: "missing" | "available";
   profitState: "profit" | "loss" | "break_even" | null;
   /**
-   * PATCH estimated profit = channel_total_amount - internal_cogs (NUMERIC, in the view).
-   * Pre-settlement: no Shopee fees / taxes. NULL when either side is unknown.
+   * Estimated profit = Shopee estimated order revenue − internal COGS
+   * (NUMERIC, in the view — 00052). NULL when either side is unknown.
    */
   estimatedProfit: string | null;
-  /** estimatedProfit / channel_total_amount x 100, 1 decimal; NULL when the total is 0 / unknown. */
+  /** estimatedProfit / channel_total_amount × 100, 1 decimal; NULL when the total is ≤ 0 / unknown. */
   estimatedMarginPct: string | null;
   estimatedProfitState: EstimatedProfitState;
+  /** Shopee "Doanh thu đơn hàng ước tính" (escrow_amount), NULL = not fetched yet. */
+  estimatedOrderRevenue: string | null;
+  estimatedRevenueSource: EstimatedRevenueSource | null;
 }
 
 export type EstimatedProfitState = "profit" | "loss" | "insufficient";
+/** escrow_estimate = fetched while the order was open · escrow_settlement = first known at settlement. */
+export type EstimatedRevenueSource = "escrow_estimate" | "escrow_settlement";
 
 export interface ChannelOrderFilters {
   shopId?: string;
@@ -132,6 +137,8 @@ type SummaryRow = {
   estimated_profit: string | null;
   estimated_margin_pct: string | null;
   estimated_profit_state: EstimatedProfitState;
+  estimated_order_revenue: string | null;
+  estimated_revenue_source: EstimatedRevenueSource | null;
 };
 
 const COLUMNS =
@@ -139,7 +146,7 @@ const COLUMNS =
   "created_at_channel, updated_at_channel, last_synced_at, line_count, mapped_lines, total_item_quantity, item_gross_value, " +
   "original_item_value, mapping_readiness, cogs_readiness, financial_sync_eligible, costed_lines, total_cogs, partial_cogs_sum, reversed_lines, " +
   "shopee_net_income, internal_cogs, profit_after_cogs, reconciliation_status, settlement_state, profit_state, " +
-  "estimated_profit, estimated_margin_pct, estimated_profit_state";
+  "estimated_profit, estimated_margin_pct, estimated_profit_state, estimated_order_revenue, estimated_revenue_source";
 
 function toRow(r: SummaryRow): ChannelOrderListRow {
   return {
@@ -176,6 +183,8 @@ function toRow(r: SummaryRow): ChannelOrderListRow {
     estimatedProfit: r.estimated_profit,
     estimatedMarginPct: r.estimated_margin_pct,
     estimatedProfitState: r.estimated_profit_state,
+    estimatedOrderRevenue: r.estimated_order_revenue,
+    estimatedRevenueSource: r.estimated_revenue_source,
   };
 }
 
@@ -370,6 +379,10 @@ export interface ChannelOrderLine {
   cogsReversedAt: string | null;
   /** The sale_out posted for this line left the costing quantity below zero. */
   negativeInventory: boolean;
+  /** Sale posted while VAT-pending purchases were in stock: COGS waits for the supplier invoice. */
+  costPending: boolean;
+  /** Costing version of the snapshot (NULL = before moving-average-v2-vat). */
+  costVersion: string | null;
   /** Current state of the sellable unit (for the mapping CTA); null = listing not in catalog. */
   unit: ChannelModelListRow | null;
 }
@@ -401,7 +414,7 @@ export async function getChannelOrderDetail(orderId: string): Promise<ChannelOrd
       .select(
         "id, provider_line_key, external_order_item_id, external_item_id, external_model_id, item_name, model_name, item_sku, model_sku, " +
           "quantity::text, original_unit_price::text, discounted_unit_price::text, promotion_type, channel_model_id, internal_product_id, " +
-          "total_cogs::text, cost_method, cost_per_unit_snapshot::text, cogs_reversed_at, products(sku, name)",
+          "total_cogs::text, cost_method, cost_per_unit_snapshot::text, cogs_reversed_at, cost_version, products(sku, name)",
       )
       .eq("order_id", orderId)
       .order("provider_line_key"),
@@ -429,6 +442,7 @@ export async function getChannelOrderDetail(orderId: string): Promise<ChannelOrd
     cost_method: string | null;
     cost_per_unit_snapshot: string | null;
     cogs_reversed_at: string | null;
+    cost_version: string | null;
     products: { sku: string; name: string } | null;
   };
   const rows = (items ?? []) as unknown as ItemRow[];
@@ -436,12 +450,14 @@ export async function getChannelOrderDetail(orderId: string): Promise<ChannelOrd
     getChannelModelsByIds(rows.map((r) => r.channel_model_id).filter((id): id is string => !!id)),
     db
       .from("inventory_cost_ledger")
-      .select("source_id, qty_after::text")
+      .select("source_id, qty_after::text, metadata")
       .eq("source_type", "channel_order_item")
       .eq("event_type", "sale_out")
       .in("source_id", rows.length ? rows.map((r) => r.id) : ["00000000-0000-0000-0000-000000000000"]),
   ]);
-  const negative = new Set(((sales ?? []) as Array<{ source_id: string; qty_after: string }>).filter((s) => s.qty_after.startsWith("-")).map((s) => s.source_id));
+  const saleRows = (sales ?? []) as Array<{ source_id: string; qty_after: string; metadata: { cost_pending?: boolean } | null }>;
+  const negative = new Set(saleRows.filter((s) => s.qty_after.startsWith("-")).map((s) => s.source_id));
+  const pending = new Set(saleRows.filter((s) => s.metadata?.cost_pending === true).map((s) => s.source_id));
   const o = order as unknown as {
     paid_at_channel: string | null;
     pickup_done_at_channel: string | null;
@@ -483,6 +499,8 @@ export async function getChannelOrderDetail(orderId: string): Promise<ChannelOrd
       costPerUnitSnapshot: r.cost_per_unit_snapshot,
       cogsReversedAt: r.cogs_reversed_at,
       negativeInventory: negative.has(r.id),
+      costPending: r.total_cogs === null && pending.has(r.id),
+      costVersion: r.cost_version,
       unit: r.channel_model_id ? units.get(r.channel_model_id) ?? null : null,
     })),
   };

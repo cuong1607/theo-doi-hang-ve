@@ -19,6 +19,7 @@ import type { FinancialComponentCategory, FundedBy } from "../../financial/types
 import {
   ADJUSTMENT_ROW,
   ESCROW_FIELDS,
+  ESTIMATED_ORDER_REVENUE_FIELD,
   FINANCIAL_CALCULATION_VERSION,
   IGNORED_FIELD_PATTERNS,
   SIGNED_COLUMNS,
@@ -111,6 +112,15 @@ const UNKNOWN_FIELD: Omit<EscrowFieldDefinition, "type"> = {
   verified: false,
   notes: "Not in the dictionary yet — stored, never summed.",
 };
+
+/**
+ * Shopee's estimated order revenue of a parsed payload (signed decimal
+ * string), or null when Shopee did not report it. Never derived from fees,
+ * never the buyer payment.
+ */
+export function estimatedOrderRevenue(parsed: Pick<ParsedEscrow, "fields">): Decimal | null {
+  return parsed.fields[ESTIMATED_ORDER_REVENUE_FIELD] ?? null;
+}
 
 /** Parses one get_escrow_detail envelope. Throws ShopeePayloadError when the shape is unusable. */
 export function parseEscrowDetail(raw: unknown, options: { currency?: string | null; expectedOrderSn?: string } = {}): ParsedEscrow {

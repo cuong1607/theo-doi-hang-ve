@@ -12,7 +12,8 @@ import { StatusBadge } from "@/components/patterns/status-badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getOrderFinancialDetail, type FinancialMoneyColumn, type OrderFinancialDetail } from "@/lib/channels/core/financial-queries";
-import { formatCurrency, formatDateTime, formatDecimalString, numericSign } from "@/lib/ui/format";
+import type { ChannelOrderListRow } from "@/lib/channels/core/order-queries";
+import { formatCurrency, formatDateTime, formatDecimalString, formatPercentString, formatSignedCurrency, numericSign } from "@/lib/ui/format";
 import { FINANCIAL_STATUS_TONE, profitTone, RECONCILIATION_TONE, TONE_TEXT_CLASS, toneOf } from "@/lib/ui/status";
 
 import { FINANCIAL_STATUS_LABELS, RECONCILIATION_LABELS } from "../labels";
@@ -63,22 +64,51 @@ function StatementLine({ sign, label, children, total, className }: { sign?: "+"
 }
 
 /** Streams in after the order header (Suspense in the page). */
-export async function OrderFinancialSectionAsync(props: { orderId: string; orderTotal: string | null; financialStatus: string; cogsReady: boolean }) {
+export async function OrderFinancialSectionAsync(props: { orderId: string; summary: ChannelOrderListRow }) {
   const detail = await getOrderFinancialDetail(props.orderId);
-  return <OrderFinancialSection detail={detail} orderTotal={props.orderTotal} financialStatus={props.financialStatus} cogsReady={props.cogsReady} />;
+  return <OrderFinancialSection detail={detail} summary={props.summary} />;
 }
 
-export function OrderFinancialSection({
-  detail,
-  orderTotal,
-  financialStatus,
-  cogsReady,
-}: {
-  detail: OrderFinancialDetail | null;
-  orderTotal: string | null;
-  financialStatus: string;
-  cogsReady: boolean;
-}) {
+/**
+ * Estimate (before settlement): Shopee estimated order revenue − COGS. Values
+ * come from v_channel_order_summary (NUMERIC in SQL); NULL → said in words.
+ */
+function EstimatedStatement({ s }: { s: ChannelOrderListRow }) {
+  const loss = s.estimatedProfitState === "loss";
+  return (
+    <section aria-labelledby="fin-estimate" className="rounded-lg border p-4 text-sm">
+      <h4 id="fin-estimate" className="mb-2 font-semibold">
+        Dự kiến (trước quyết toán)
+      </h4>
+      <StatementLine sign="+" label="Doanh thu đơn hàng ước tính (Shopee)">
+        {s.estimatedOrderRevenue === null ? <span className="text-muted-foreground">chưa có</span> : formatCurrency(s.estimatedOrderRevenue)}
+      </StatementLine>
+      <StatementLine sign="−" label="Giá vốn nội bộ (COGS)">
+        {s.internalCogs === null ? <span className="text-muted-foreground">chưa tính</span> : `-${formatDecimalString(s.internalCogs, " ₫")}`}
+      </StatementLine>
+      <StatementLine sign="=" label="Lợi nhuận dự kiến" total>
+        {s.estimatedProfit === null ? (
+          <span className="text-muted-foreground">chưa tính</span>
+        ) : (
+          <span className={TONE_TEXT_CLASS[loss ? "danger" : "success"]}>
+            {formatSignedCurrency(s.estimatedProfit)} · {formatPercentString(s.estimatedMarginPct)}
+          </span>
+        )}
+      </StatementLine>
+      <ul className="mt-2 space-y-0.5 text-xs text-muted-foreground">
+        <li>Lợi nhuận dự kiến = Doanh thu đơn hàng ước tính do Shopee cung cấp - Giá vốn.</li>
+        <li>Biên lợi nhuận dự kiến = Lợi nhuận dự kiến / Tổng giá trị đơn hàng ({s.channelTotalAmount === null ? "chưa có" : formatCurrency(s.channelTotalAmount)}).</li>
+        <li>COGS có bao gồm VAT đầu vào theo hóa đơn NCC khi áp dụng.</li>
+        {s.estimatedRevenueSource === "escrow_settlement" && <li>Đơn chưa được lấy số ước tính trước khi hoàn thành — dùng số escrow của Shopee lúc quyết toán.</li>}
+      </ul>
+    </section>
+  );
+}
+
+export function OrderFinancialSection({ detail, summary }: { detail: OrderFinancialDetail | null; summary: ChannelOrderListRow }) {
+  const orderTotal = summary.channelTotalAmount;
+  const financialStatus = summary.financialStatus;
+  const cogsReady = summary.cogsReadiness === "complete";
   const m = detail?.money;
   const income = m?.actual_shopee_income ?? null;
   const cogs = m?.internal_cogs ?? null;
@@ -99,12 +129,22 @@ export function OrderFinancialSection({
         <CardDescription>Thu nhập lấy theo số escrow của Shopee; giá vốn là giá vốn nội bộ đã chốt khi bán.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
           <MetricCard label="Giá trị đơn (người mua trả)" icon={ReceiptText} value={<Money value={orderTotal} />} />
-          <MetricCard label="Thu nhập Shopee" icon={Wallet} value={<Money value={income} />} hint={usedAfterAdjustment ? "sau điều chỉnh" : "escrow"} />
-          <MetricCard label="Giá vốn nội bộ (COGS)" icon={Coins} value={<Money value={cogs} missing="Chưa tính" />} />
-          <MetricCard label="Lợi nhuận sau giá vốn" icon={TrendingUp} value={<Money value={profit} missing="Chưa tính" />} tone={profit === null ? "neutral" : pTone} />
+          <MetricCard label="DT ước tính (Shopee)" icon={Wallet} value={<Money value={summary.estimatedOrderRevenue} />} hint="doanh thu đơn hàng ước tính" />
+          <MetricCard label="Giá vốn nội bộ (COGS)" icon={Coins} value={<Money value={cogs} missing="Chưa tính" />} hint="gồm VAT đầu vào khi áp dụng" />
+          <MetricCard
+            label="LN dự kiến"
+            icon={TrendingUp}
+            value={<Money value={summary.estimatedProfit} missing="Chưa tính" />}
+            tone={summary.estimatedProfit === null ? "neutral" : summary.estimatedProfitState === "loss" ? "danger" : "success"}
+            hint={summary.estimatedMarginPct === null ? undefined : `biên ${formatPercentString(summary.estimatedMarginPct)}`}
+          />
+          <MetricCard label="Thu nhập Shopee (thực nhận)" icon={Wallet} value={<Money value={income} />} hint={usedAfterAdjustment ? "sau điều chỉnh" : "escrow"} />
+          <MetricCard label="LN thực tế" icon={TrendingUp} value={<Money value={profit} missing="Chưa tính" />} tone={profit === null ? "neutral" : pTone} />
         </div>
+
+        <EstimatedStatement s={summary} />
 
         {!detail || income === null ? (
           <Callout tone="info" title="Chưa có dữ liệu thanh toán (escrow) từ Shopee cho đơn này.">

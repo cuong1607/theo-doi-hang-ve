@@ -166,6 +166,7 @@ export default async function ShopeeOrderDetailPage({ params }: { params: Promis
                     <TableCell className="text-right">{line.costPerUnitSnapshot === null ? <span className="text-muted-foreground">Chưa tính</span> : formatCurrency(line.costPerUnitSnapshot)}</TableCell>
                     <TableCell className="text-right">
                       {line.totalCogs === null ? <span className="text-muted-foreground">Chưa tính</span> : formatCurrency(line.totalCogs)}
+                      {line.costPending && <p className="text-xs text-warning-text">chờ hóa đơn VAT của NCC</p>}
                       {line.negativeInventory && <p className="text-xs text-warning-text">tồn tính giá vốn âm</p>}
                     </TableCell>
                     <TableCell className="text-right">
@@ -176,6 +177,12 @@ export default async function ShopeeOrderDetailPage({ params }: { params: Promis
               })}
             </TableBody>
           </Table>
+          {detail.lines.some((l) => l.costPending) && (
+            <Callout tone="warning" className="mt-4">
+              Có dòng hàng nhập từ NCC công ty chưa được lập hóa đơn (chưa biết VAT đầu vào) — COGS để &quot;Chưa tính&quot; thay vì đoán VAT. COGS sẽ tự điền khi lập hóa đơn
+              &quot;từ hàng đã nhận&quot; cho ngày hàng về tương ứng.
+            </Callout>
+          )}
           {detail.lines.some((l) => l.negativeInventory) && (
             <Callout tone="warning" className="mt-4">
               Tồn kho giá vốn đang âm. Có thể dữ liệu nhập hàng lịch sử chưa đầy đủ hoặc đơn bán đã được ghi nhận trước hàng nhập.
@@ -185,7 +192,7 @@ export default async function ShopeeOrderDetailPage({ params }: { params: Promis
       </Card>
 
       <Suspense fallback={<CardSkeleton lines={6} />}>
-        <OrderFinancialSectionAsync orderId={id} orderTotal={o.channelTotalAmount} financialStatus={o.financialStatus} cogsReady={o.cogsReadiness === "complete"} />
+        <OrderFinancialSectionAsync orderId={id} summary={o} />
       </Suspense>
 
       <p className="text-xs text-muted-foreground">Đồng bộ lần cuối: {formatDateTime(o.lastSyncedAt)}</p>

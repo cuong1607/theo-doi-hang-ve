@@ -16,6 +16,7 @@ import { createClient } from "@supabase/supabase-js";
 import { hasPermission } from "../auth/permissions.ts";
 import { isOrderEligibleForInventoryOut } from "../channels/shopee/order-status.ts";
 import { CostEngine } from "./engine.ts";
+import { COSTING_VERSION } from "./types.ts";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -29,20 +30,35 @@ const engine = new CostEngine({ db, logger: () => {} });
 const TAG = `s4${Date.now()}`;
 const productIds: string[] = [];
 const shopIds: string[] = [];
+const supplierIds: string[] = [];
+/** Household supplier (no VAT): the moving-average tests below are about the average, not VAT. */
 let supplierId = "";
+/** Company supplier: purchase cost = receipt price × (1 + invoice VAT). */
+let companyId = "";
 let n = 0;
 
+async function supplier(type: "business_household" | "company"): Promise<string> {
+  const { data, error } = await db.from("suppliers").insert({ code: `${TAG}_${type}_${++n}`, name: `cost ${type}`, supplier_type: type }).select("id").single();
+  if (error) throw error;
+  supplierIds.push(data.id);
+  return data.id;
+}
+
 before(async () => {
-  supplierId = (await db.from("suppliers").select("id").eq("is_active", true).limit(1).single()).data!.id;
+  supplierId = await supplier("business_household");
+  companyId = await supplier("company");
 });
 
 after(async () => {
   if (shopIds.length) await db.from("shops").delete().in("id", shopIds);
+  // invoices first: their linked receipt days lock the receipts
+  if (supplierIds.length) await db.from("invoices").delete().in("supplier_id", supplierIds);
   await db.from("receipts").delete().eq("receiver_name", TAG);
   if (productIds.length) {
     await db.from("inventory_cost_ledger").delete().in("product_id", productIds);
     await db.from("products").delete().in("id", productIds);
   }
+  if (supplierIds.length) await db.from("suppliers").delete().in("id", supplierIds);
 });
 
 async function product(): Promise<string> {
@@ -53,11 +69,11 @@ async function product(): Promise<string> {
 }
 
 /** A real receipt through the app RPC (fires the cost triggers). */
-async function receipt(items: Array<{ productId: string; qty: number | string; price: number | string }>, date = "2031-01-10") {
+async function receipt(items: Array<{ productId: string; qty: number | string; price: number | string }>, date = "2031-01-10", supplier = supplierId) {
   const { data, error } = await db.rpc("create_receipt", {
     p_receipt_date: date,
     p_shift: "morning",
-    p_supplier_id: supplierId,
+    p_supplier_id: supplier,
     p_receiver_name: TAG,
     p_note: null,
     p_created_by: null,
@@ -70,12 +86,12 @@ async function receipt(items: Array<{ productId: string; qty: number | string; p
 }
 
 /** A fixture channel order with one line per entry. */
-async function order(lines: Array<{ productId: string | null; qty: number | string }>, opts2: { status?: string; paidAt?: string } = {}) {
+async function order(lines: Array<{ productId: string | null; qty: number | string }>, opts2: { status?: string; paidAt?: string; total?: string } = {}) {
   const { data: shop } = await db.from("shops").insert({ channel: "shopee", external_shop_id: `FIXTURE_SHOP_${TAG}_${++n}`, shop_name: "cost", data_source: "fixture" }).select("id").single();
   shopIds.push(shop!.id);
   const { data: o, error } = await db
     .from("channel_orders")
-    .insert({ shop_id: shop!.id, external_order_sn: `${TAG}SN${n}`, order_status: opts2.status ?? "READY_TO_SHIP", currency: "VND", paid_at_channel: opts2.paidAt ?? "2031-01-15T03:00:00Z" })
+    .insert({ shop_id: shop!.id, external_order_sn: `${TAG}SN${n}`, order_status: opts2.status ?? "READY_TO_SHIP", currency: "VND", paid_at_channel: opts2.paidAt ?? "2031-01-15T03:00:00Z", channel_total_amount: opts2.total ?? null })
     .select("id")
     .single();
   if (error) throw error;
@@ -96,7 +112,7 @@ const state = async (p: string) => (await engine.getCurrentCost(p))!;
 const item = async (id: string) =>
   (await db.from("channel_order_items").select("cost_method, cost_per_unit_snapshot::text, total_cogs::text, cogs_calculated_at, cogs_reversed_at").eq("id", id).single()).data!;
 const ledger = async (p: string) =>
-  (await db.from("inventory_cost_ledger").select("event_type, quantity_change::text, unit_cost::text, qty_after::text, avg_cost_after::text, movement_cost::text, metadata").eq("product_id", p).order("event_time").order("order_key")).data!;
+  (await db.from("inventory_cost_ledger").select("event_type, quantity_change::text, unit_cost::text, qty_after::text, avg_cost_after::text, movement_cost::text, metadata, base_unit_cost::text, vat_rate::text, cost_basis, invoice_id").eq("product_id", p).order("event_time").order("order_key")).data!;
 
 // ------------------------------------------------------------ moving average
 
@@ -378,5 +394,199 @@ test("inventory-out status rule: TS mirror == DB rule", async () => {
     const { data, error } = await db.rpc("cost_order_status_eligible", { p_status: status });
     assert.equal(error, null);
     assert.equal(isOrderEligibleForInventoryOut(status), data, status);
+  }
+});
+
+// ================================================================ PATCH: VAT-adjusted purchase cost
+// Company receipts are costed at receipt price × (1 + VAT of the invoice
+// linked to that receipt day — invoice_receipt_days); household receipts at
+// the receipt price. No linked invoice → cost unknown ("VAT pending").
+
+/** A company invoice linking whole receipt days (as "Tạo hóa đơn từ hàng đã nhận" does). */
+async function invoiceFor(dates: string[], vatRate: number, supplier = companyId): Promise<string> {
+  const { data, error } = await db
+    .from("invoices")
+    .insert({ invoice_no: `${TAG}-HD${++n}`, supplier_id: supplier, invoice_date: dates[0], vat_rate: vatRate, source_type: "from_receipts", receipt_start_date: [...dates].sort()[0] })
+    .select("id")
+    .single();
+  if (error) throw error;
+  const link = await db.from("invoice_receipt_days").insert(dates.map((d) => ({ invoice_id: data.id, supplier_id: supplier, receipt_date: d })));
+  if (link.error) throw link.error;
+  return data.id;
+}
+const purchases = async (p: string) => (await ledger(p)).filter((l) => l.event_type === "purchase_in");
+
+test("PATCH 10–12: company + invoice VAT 8 % → 108.000; other VAT rate from ITS invoice; household → receipt price, no VAT", async () => {
+  const p = await product();
+  await receipt([{ productId: p, qty: 10, price: 100000 }], "2032-01-01", companyId);
+  const inv = await invoiceFor(["2032-01-01"], 8);
+  let [row] = await purchases(p);
+  assert.deepEqual([row.base_unit_cost, row.vat_rate, row.cost_basis, row.unit_cost, row.invoice_id], ["100000.0000", "8.00", "invoice_vat", "108000.0000", inv]);
+  assert.equal((await state(p)).movingAverageCost, "108000.0000");
+
+  const p10 = await product();
+  await receipt([{ productId: p10, qty: 1, price: 100000 }], "2032-01-02", companyId);
+  await invoiceFor(["2032-01-02"], 10);
+  assert.equal((await purchases(p10))[0].unit_cost, "110000.0000", "VAT rate comes from the invoice snapshot, not a constant");
+
+  const ph = await product();
+  await receipt([{ productId: ph, qty: 1, price: 100000 }], "2032-01-03", supplierId);
+  [row] = await purchases(ph);
+  assert.deepEqual([row.base_unit_cost, row.vat_rate, row.cost_basis, row.unit_cost], ["100000.0000", null, "raw", "100000.0000"], "household: no VAT added");
+});
+
+test("PATCH 13 + 22: company receipt without an invoice → no fabricated cost (no silent 8 %); sale waits; linking the invoice fills COGS; cancelled pending sale is withdrawn", async () => {
+  const p = await product();
+  await receipt([{ productId: p, qty: 10, price: 100000 }], "2032-02-01", companyId);
+  const [row] = await purchases(p);
+  assert.deepEqual([row.unit_cost, row.cost_basis, row.vat_rate], [null, "vat_pending", null]);
+  let s = await state(p);
+  assert.deepEqual([s.quantityOnHand, s.movingAverageCost], ["10.0000", null]);
+  assert.equal((await db.from("v_product_cost_overview").select("vat_pending").eq("product_id", p).single()).data!.vat_pending, true);
+
+  const o = await order([{ productId: p, qty: 2 }], { paidAt: "2032-02-02T00:00:00Z" });
+  assert.deepEqual(await engine.processOrder(o.orderId), { cost_pending: 1 });
+  assert.deepEqual([(await item(o.itemIds[0])).total_cogs, (await item(o.itemIds[0])).cost_per_unit_snapshot], [null, null], "COGS Chưa tính — never a guessed cost");
+  assert.equal((await state(p)).quantityOnHand, "8.0000", "the sale still moves the costing quantity");
+  const sale = (await ledger(p)).find((l) => l.event_type === "sale_out")!;
+  assert.equal((sale.metadata as { cost_pending: boolean }).cost_pending, true);
+  assert.equal((await db.from("order_financials").select("internal_cogs").eq("order_id", o.orderId).maybeSingle()).data?.internal_cogs ?? null, null);
+  assert.deepEqual(await engine.processOrder(o.orderId), { cost_pending: 1 }, "idempotent while pending");
+
+  const cancelled = await order([{ productId: p, qty: 1 }], { paidAt: "2032-02-03T00:00:00Z" });
+  await engine.processOrder(cancelled.orderId);
+  await db.from("channel_orders").update({ order_status: "CANCELLED", updated_at_channel: "2032-02-04T00:00:00Z" }).eq("id", cancelled.orderId);
+  assert.deepEqual(await engine.processOrder(cancelled.orderId), { withdrawn_pending: 1 });
+  assert.equal((await state(p)).quantityOnHand, "8.0000", "withdrawn, not reversed at an unknown cost");
+
+  // The invoice for that day is created → rebuild (trigger) → first COGS fill
+  await invoiceFor(["2032-02-01"], 8);
+  s = await state(p);
+  assert.deepEqual([s.quantityOnHand, s.movingAverageCost], ["8.0000", "108000.0000"]);
+  const it = await item(o.itemIds[0]);
+  assert.deepEqual([it.cost_per_unit_snapshot, it.total_cogs], ["108000.0000", "216000.00"]);
+  assert.equal((await db.from("channel_order_items").select("cost_version").eq("id", o.itemIds[0]).single()).data!.cost_version, COSTING_VERSION);
+  assert.equal((await db.from("order_financials").select("internal_cogs::text").eq("order_id", o.orderId).single()).data!.internal_cogs, "216000.00");
+  assert.deepEqual(await engine.processOrder(o.orderId), { already: 1 });
+});
+
+test("PATCH §23 / 15–18: moving average over VAT-adjusted costs; sale of 2 → 230.400; a later purchase never changes the old snapshot", async () => {
+  const p = await product();
+  await receipt([{ productId: p, qty: 100, price: 100000 }], "2032-03-01", companyId);
+  await receipt([{ productId: p, qty: 50, price: 120000 }], "2032-03-02", companyId);
+  await invoiceFor(["2032-03-01", "2032-03-02"], 8);
+  // (100 × 108.000 + 50 × 129.600) / 150 = 115.200
+  const s = await state(p);
+  assert.deepEqual([s.quantityOnHand, s.movingAverageCost], ["150.0000", "115200.0000"]);
+  const first = (await purchases(p))[0];
+  assert.equal(first.avg_cost_after, "108000.0000", "first purchase: average = its effective cost");
+
+  const o = await order([{ productId: p, qty: 2 }], { paidAt: "2032-03-03T00:00:00Z" });
+  assert.equal(await engine.postSale(o.itemIds[0]), "calculated");
+  assert.deepEqual([(await item(o.itemIds[0])).cost_per_unit_snapshot, (await item(o.itemIds[0])).total_cogs], ["115200.0000", "230400.00"]);
+
+  await receipt([{ productId: p, qty: 10, price: 200000 }], "2032-03-04", supplierId);
+  assert.notEqual((await state(p)).movingAverageCost, "115200.0000");
+  assert.equal((await item(o.itemIds[0])).total_cogs, "230400.00", "future purchase does not touch the historical snapshot");
+});
+
+test("PATCH 14 + 19 + 26: VAT is never applied twice — rebuilds, VAT edits back and forth always start from the raw receipt price", async () => {
+  const p = await product();
+  await receipt([{ productId: p, qty: 5, price: 100000 }], "2032-04-01", companyId);
+  const inv = await invoiceFor(["2032-04-01"], 8);
+  for (let i = 0; i < 3; i++) await engine.rebuildProduct(p, { reason: "test" });
+  assert.equal((await purchases(p))[0].unit_cost, "108000.0000");
+  await db.from("invoices").update({ vat_rate: 10 }).eq("id", inv);
+  assert.equal((await purchases(p))[0].unit_cost, "110000.0000", "VAT edit on the invoice rebuilds (trigger)");
+  await db.from("invoices").update({ vat_rate: 8 }).eq("id", inv);
+  await engine.rebuildAll();
+  const [row] = await purchases(p);
+  assert.deepEqual([row.base_unit_cost, row.unit_cost], ["100000.0000", "108000.0000"]);
+  assert.equal((await state(p)).movingAverageCost, "108000.0000");
+  // supplier type change is a VAT input too
+  await db.from("suppliers").update({ supplier_type: "business_household" }).eq("id", companyId);
+  assert.deepEqual([(await purchases(p))[0].cost_basis, (await purchases(p))[0].unit_cost], ["raw", "100000.0000"]);
+  await db.from("suppliers").update({ supplier_type: "company" }).eq("id", companyId);
+  assert.equal((await purchases(p))[0].unit_cost, "108000.0000");
+});
+
+test("PATCH 20–25 + §24: rebuild never restates history; dry-run diff; explicit restatement updates the snapshot, audit row, internal COGS and estimated profit", async () => {
+  const p = await product();
+  await receipt([{ productId: p, qty: 10, price: 200000 }], "2032-05-01", companyId);
+  const inv = await invoiceFor(["2032-05-01"], 0); // invoice first entered without VAT
+  const o = await order([{ productId: p, qty: 1 }], { paidAt: "2032-05-02T00:00:00Z", total: "350000" });
+  await engine.processOrder(o.orderId);
+  assert.equal((await item(o.itemIds[0])).total_cogs, "200000.00");
+  assert.equal((await db.rpc("apply_order_estimated_revenue", { p_order_id: o.orderId, p_amount: "300000", p_synced_at: new Date().toISOString() })).error, null);
+  const view = async () =>
+    (await db.from("v_channel_order_summary").select("internal_cogs, estimated_profit, estimated_margin_pct").eq("order_id", o.orderId).single()).data!;
+  assert.deepEqual(await view(), { internal_cogs: "200000.00", estimated_profit: "100000.00", estimated_margin_pct: "28.6" });
+
+  // VAT corrected to 8 % → ledger rebuilt (trigger) … but the order's COGS stays (20)
+  await db.from("invoices").update({ vat_rate: 8 }).eq("id", inv);
+  assert.equal((await state(p)).movingAverageCost, "216000.0000");
+  assert.equal((await item(o.itemIds[0])).total_cogs, "200000.00", "historical COGS unchanged by default");
+  assert.equal((await view()).internal_cogs, "200000.00");
+
+  // dry-run (21, 22)
+  const mine = (await engine.restatementCandidates(5000)).filter((c) => c.productId === p);
+  assert.equal(mine.length, 1);
+  assert.deepEqual(
+    [mine[0].orderItemId, mine[0].oldCostPerUnit, mine[0].newCostPerUnit, mine[0].oldTotalCogs, mine[0].newTotalCogs, mine[0].difference, mine[0].restatable],
+    [o.itemIds[0], "200000.0000", "216000.0000", "200000.00", "216000.00", "16000.00", true],
+  );
+  const summary = await engine.restatementSummary();
+  assert.ok(summary.affectedLines >= 1 && summary.restatableLines >= 1);
+  assert.equal((await item(o.itemIds[0])).total_cogs, "200000.00", "dry-run changes nothing");
+
+  // explicit restatement (23–25); reason required
+  await assert.rejects(engine.restateOrderCogs([o.itemIds[0]], "  "), /lý do/);
+  const r = await engine.restateOrderCogs([o.itemIds[0]], "VAT đầu vào 8 %", null);
+  assert.deepEqual([r.restated, r.skipped, r.orders, r.oldTotal, r.newTotal], [1, 0, 1, "200000.00", "216000.00"]);
+  const it = await item(o.itemIds[0]);
+  assert.deepEqual([it.cost_per_unit_snapshot, it.total_cogs], ["216000.0000", "216000.00"]);
+  // §24: 300.000 − 216.000 = 84.000; margin over the order total 350.000 → 24,0 %
+  assert.deepEqual(await view(), { internal_cogs: "216000.00", estimated_profit: "84000.00", estimated_margin_pct: "24.0" });
+  const { data: audit } = await db
+    .from("cogs_restatements")
+    .select("batch_id, old_cost_per_unit::text, new_cost_per_unit::text, old_total_cogs::text, new_total_cogs::text, old_cost_version, new_cost_version, reason, adjusted_at")
+    .eq("order_item_id", o.itemIds[0]);
+  assert.equal(audit!.length, 1);
+  assert.deepEqual(
+    [audit![0].old_cost_per_unit, audit![0].new_cost_per_unit, audit![0].old_total_cogs, audit![0].new_total_cogs, audit![0].new_cost_version, audit![0].reason, audit![0].batch_id],
+    ["200000.0000", "216000.0000", "200000.00", "216000.00", COSTING_VERSION, "VAT đầu vào 8 %", r.batchId],
+  );
+  assert.ok(audit![0].adjusted_at);
+
+  // 26: nothing left to restate, a second run is a no-op (no double VAT)
+  assert.equal((await engine.restatementCandidates(5000)).filter((c) => c.productId === p).length, 0);
+  assert.equal((await engine.restateOrderCogs([o.itemIds[0]], "again")).restated, 0);
+  await engine.rebuildProduct(p);
+  assert.equal((await item(o.itemIds[0])).total_cogs, "216000.00");
+});
+
+test("PATCH restatement safety: pending (unknown) new cost is not restatable; direct snapshot edits still blocked; anon cannot restate", async () => {
+  const p = await product();
+  await receipt([{ productId: p, qty: 5, price: 1000 }], "2032-06-01", companyId);
+  const inv = await invoiceFor(["2032-06-01"], 8);
+  const o = await order([{ productId: p, qty: 1 }], { paidAt: "2032-06-02T00:00:00Z" });
+  await engine.processOrder(o.orderId);
+  assert.equal((await item(o.itemIds[0])).total_cogs, "1080.00");
+  // invoice deleted → the day is no longer linked → new cost unknown
+  await db.from("invoices").delete().eq("id", inv);
+  const [c] = (await engine.restatementCandidates(5000)).filter((x) => x.productId === p);
+  assert.deepEqual([c.newCostPerUnit, c.restatable], [null, false]);
+  assert.equal((await engine.restateOrderCogs([o.itemIds[0]], "thử")).restated, 0, "never restated to an unknown cost");
+  assert.equal((await item(o.itemIds[0])).total_cogs, "1080.00");
+
+  const upd = await db.from("channel_order_items").update({ total_cogs: 1 }).eq("id", o.itemIds[0]);
+  assert.equal(upd.error?.code, "CG001", "only the restatement function may change a locked snapshot");
+  for (const [fn, args] of [
+    ["cost_restate_order_cogs", { p_item_ids: [o.itemIds[0]], p_reason: "x", p_by: null }],
+    ["cost_restatement_candidates", { p_limit: 1 }],
+    ["apply_order_estimated_revenue", { p_order_id: o.orderId, p_amount: 1, p_synced_at: new Date().toISOString() }],
+  ] as const) {
+    const { error } = await anon.rpc(fn, args);
+    assert.ok(error, `${fn} denied to anon`);
   }
 });

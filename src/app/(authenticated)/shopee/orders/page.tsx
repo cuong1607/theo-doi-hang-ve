@@ -58,10 +58,52 @@ function finFilter(fin: string | undefined): Partial<ChannelOrderFilters> {
   }
 }
 
-const ESTIMATED_PROFIT_HELP = "Lợi nhuận dự kiến = Giá trị đơn hàng - Giá vốn. Chưa bao gồm phí, thuế và các khoản khấu trừ từ Shopee.";
+const ESTIMATED_PROFIT_HELP = [
+  "Lợi nhuận dự kiến = Doanh thu đơn hàng ước tính do Shopee cung cấp - Giá vốn.",
+  "Biên lợi nhuận dự kiến = Lợi nhuận dự kiến / Tổng giá trị đơn hàng.",
+];
+const ESTIMATED_REVENUE_HELP = ["Doanh thu đơn hàng ước tính do Shopee cung cấp (số người bán dự kiến nhận, đã trừ phí và thuế Shopee). Có thể thay đổi tới khi đơn hoàn thành."];
+const COGS_HELP = ["COGS có bao gồm VAT đầu vào theo hóa đơn NCC khi áp dụng."];
+const ACTUAL_PROFIT_HELP = ["Lợi nhuận thực tế = Thu nhập Shopee thực nhận (sau quyết toán) - Giá vốn."];
 
 /** NULL money is "not known yet" — said in words, never shown as 0. */
 const money = (v: string | null, missing: string) => (v === null ? <span className="text-muted-foreground">{missing}</span> : formatCurrency(v));
+
+/** Column header with an accessible (?) explanation. */
+function HelpHead({ label, help, aria }: { label: string; help: string[]; aria: string }) {
+  return (
+    <TableHead className="text-right">
+      <span className="inline-flex items-center gap-1">
+        {label}
+        <Tooltip>
+          <TooltipTrigger
+            render={<button type="button" aria-label={aria} className="rounded text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none" />}
+          >
+            <CircleHelp className="size-3.5" />
+          </TooltipTrigger>
+          <TooltipContent className="max-w-72 space-y-1 text-left font-normal">
+            {help.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </TooltipContent>
+        </Tooltip>
+      </span>
+    </TableHead>
+  );
+}
+
+/** Signed amount + optional margin line, success (≥ 0) / danger (< 0). Never called with NULL. */
+function ProfitValue({ value, margin, loss }: { value: string; margin?: string | null; loss: boolean }) {
+  return (
+    <span className={`inline-flex flex-col items-end font-medium ${TONE_TEXT_CLASS[loss ? "danger" : "success"]}`}>
+      <span className="inline-flex items-center gap-1">
+        {loss && <AlertTriangle aria-hidden="true" className="size-3.5" />}
+        {formatSignedCurrency(value)}
+      </span>
+      {margin !== undefined && <span className="text-xs font-normal">{formatPercentString(margin)}</span>}
+    </span>
+  );
+}
 
 export default async function ShopeeOrdersPage({ searchParams }: { searchParams: Promise<Params> }) {
   const auth = await requirePermission("channel:view");
@@ -263,28 +305,15 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                     <TableHead className="text-right">SL</TableHead>
                     <TableHead className="text-right">Giá trị SP</TableHead>
                     <TableHead>Ghép SKU</TableHead>
-                    <TableHead className="text-right">Thu nhập Shopee</TableHead>
-                    <TableHead className="text-right">COGS</TableHead>
-                    <TableHead className="text-right">
-                      <span className="inline-flex items-center gap-1">
-                        LN dự kiến
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={<button type="button" aria-label="Giải thích lợi nhuận dự kiến" className="rounded text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none" />}
-                          >
-                            <CircleHelp className="size-3.5" />
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-64 text-left font-normal">{ESTIMATED_PROFIT_HELP}</TooltipContent>
-                        </Tooltip>
-                      </span>
-                    </TableHead>
+                    <HelpHead label="COGS" help={COGS_HELP} aria="Giải thích giá vốn" />
+                    <HelpHead label="DT ước tính" help={ESTIMATED_REVENUE_HELP} aria="Giải thích doanh thu ước tính" />
+                    <HelpHead label="LN dự kiến" help={ESTIMATED_PROFIT_HELP} aria="Giải thích lợi nhuận dự kiến" />
+                    <HelpHead label="LN thực tế" help={ACTUAL_PROFIT_HELP} aria="Giải thích lợi nhuận thực tế" />
                     <TableHead>Tài chính</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.map((o) => {
-                    // PATCH: ≥ 0 → success, < 0 → danger (estimate only — actual profit stays in the detail / KPI).
-                    const eTone = o.estimatedProfitState === "loss" ? "danger" : "success";
                     return (
                       <TableRow key={o.orderId}>
                         <TableCell className="text-muted-foreground">{formatDateTime(o.createdAtChannel)}</TableCell>
@@ -316,19 +345,20 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                             {o.mappingReadiness === "partial" ? ` ${o.mappedLines}/${o.lineCount}` : ""}
                           </StatusBadge>
                         </TableCell>
-                        <TableCell className="text-right">{money(o.shopeeNetIncome, "Chưa có")}</TableCell>
                         <TableCell className="text-right">{money(o.internalCogs, o.cogsReadiness === "partial" ? `Một phần ${o.costedLines}/${o.lineCount}` : "Chưa tính")}</TableCell>
-                        <TableCell className="text-right" title={ESTIMATED_PROFIT_HELP}>
+                        <TableCell className="text-right">{money(o.estimatedOrderRevenue, "Chưa có")}</TableCell>
+                        <TableCell className="text-right">
                           {o.estimatedProfit === null ? (
                             <span className="text-muted-foreground">Chưa tính</span>
                           ) : (
-                            <span className={`inline-flex flex-col items-end font-medium ${TONE_TEXT_CLASS[eTone]}`}>
-                              <span className="inline-flex items-center gap-1">
-                                {eTone === "danger" && <AlertTriangle aria-hidden="true" className="size-3.5" />}
-                                {formatSignedCurrency(o.estimatedProfit)}
-                              </span>
-                              <span className="text-xs font-normal">{formatPercentString(o.estimatedMarginPct)}</span>
-                            </span>
+                            <ProfitValue value={o.estimatedProfit} margin={o.estimatedMarginPct} loss={o.estimatedProfitState === "loss"} />
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {o.profitAfterCogs === null ? (
+                            <span className="text-muted-foreground">{o.settlementState === "missing" ? "Chưa quyết toán" : "Chưa tính"}</span>
+                          ) : (
+                            <ProfitValue value={o.profitAfterCogs} loss={o.profitState === "loss"} />
                           )}
                         </TableCell>
                         <TableCell>

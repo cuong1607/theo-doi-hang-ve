@@ -15,8 +15,53 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Decimal } from "../channels/core/types.ts";
 import { consoleCostLogger, type CostLogger } from "./log.ts";
 
-export type SaleResult = "calculated" | "calculated_negative" | "no_cost" | "unmapped" | "ineligible" | "already" | "not_found";
-export type ReversalResult = "reversed" | "already" | "nothing_posted" | "not_found";
+/**
+ * cost_pending     posted while VAT-pending purchases are in the position (no COGS yet)
+ * calculated_late  a pending sale got its FIRST snapshot once the VAT invoice was linked
+ */
+export type SaleResult = "calculated" | "calculated_negative" | "calculated_late" | "cost_pending" | "no_cost" | "unmapped" | "ineligible" | "already" | "not_found";
+/** withdrawn_pending: a cancelled sale that never had a COGS (VAT pending) — its sale event is removed, nothing reversed. */
+export type ReversalResult = "reversed" | "withdrawn_pending" | "already" | "nothing_posted" | "not_found";
+
+/** One costed order line whose snapshot differs from the current ledger reconstruction (dry-run row). */
+export interface RestatementCandidate {
+  orderItemId: string;
+  orderId: string;
+  externalOrderSn: string;
+  orderStatus: string;
+  createdAtChannel: string | null;
+  productId: string;
+  sku: string | null;
+  productName: string | null;
+  quantity: Decimal;
+  oldCostPerUnit: Decimal;
+  /** NULL = the current reconstruction has no cost (VAT pending) → not restatable. */
+  newCostPerUnit: Decimal | null;
+  oldTotalCogs: Decimal;
+  newTotalCogs: Decimal | null;
+  difference: Decimal | null;
+  oldCostVersion: string | null;
+  restatable: boolean;
+}
+
+export interface RestatementSummary {
+  affectedLines: number;
+  affectedOrders: number;
+  restatableLines: number;
+  pendingLines: number;
+  oldTotalCogs: Decimal;
+  newTotalCogs: Decimal;
+  difference: Decimal;
+}
+
+export interface RestatementResult {
+  batchId: string | null;
+  restated: number;
+  skipped: number;
+  orders: number;
+  oldTotal: Decimal;
+  newTotal: Decimal;
+}
 
 export interface ProductCostState {
   productId: string;
@@ -45,7 +90,10 @@ export interface BackfillCogsResult {
 const SALE_KEYS: Record<string, keyof BackfillCogsResult> = {
   calculated: "calculated",
   calculated_negative: "calculatedNegative",
+  calculated_late: "calculated",
   no_cost: "skippedNoCost",
+  cost_pending: "skippedNoCost",
+  withdrawn_pending: "reversed",
   unmapped: "skippedUnmapped",
   ineligible: "skippedIneligible",
   already: "alreadyCalculated",
@@ -141,6 +189,80 @@ export class CostEngine {
     const count = await this.rpc<number>("cost_rebuild_all", { p_triggered_by: triggeredBy });
     this.log({ event: "COST_REBUILD", result: `all:${count}` });
     return count;
+  }
+
+  // ---------------------------------------------------------- restatement
+  // Historical COGS snapshots never change by themselves (rebuild included).
+  // Restating is an explicit admin step: dry-run → review → apply with a
+  // reason; every restated line keeps old/new values + version in
+  // cogs_restatements.
+
+  /** Dry-run: lines whose locked COGS differs from the current reconstruction. */
+  async restatementCandidates(limit = 500): Promise<RestatementCandidate[]> {
+    type Row = {
+      order_item_id: string;
+      order_id: string;
+      external_order_sn: string;
+      order_status: string;
+      created_at_channel: string | null;
+      product_id: string;
+      sku: string | null;
+      product_name: string | null;
+      quantity: string;
+      old_cost_per_unit: string;
+      new_cost_per_unit: string | null;
+      old_total_cogs: string;
+      new_total_cogs: string | null;
+      difference: string | null;
+      old_cost_version: string | null;
+      restatable: boolean;
+    };
+    const rows = await this.rpc<Row[]>("cost_restatement_candidates", { p_limit: limit });
+    return (rows ?? []).map((r) => ({
+      orderItemId: r.order_item_id,
+      orderId: r.order_id,
+      externalOrderSn: r.external_order_sn,
+      orderStatus: r.order_status,
+      createdAtChannel: r.created_at_channel,
+      productId: r.product_id,
+      sku: r.sku,
+      productName: r.product_name,
+      quantity: r.quantity,
+      oldCostPerUnit: r.old_cost_per_unit,
+      newCostPerUnit: r.new_cost_per_unit,
+      oldTotalCogs: r.old_total_cogs,
+      newTotalCogs: r.new_total_cogs,
+      difference: r.difference,
+      oldCostVersion: r.old_cost_version,
+      restatable: r.restatable,
+    }));
+  }
+
+  async restatementSummary(): Promise<RestatementSummary> {
+    const rows = await this.rpc<
+      Array<{ affected_lines: number | string; affected_orders: number | string; restatable_lines: number | string; pending_lines: number | string; old_total_cogs: string; new_total_cogs: string; difference: string }>
+    >("cost_restatement_summary", {});
+    const r = rows[0];
+    return {
+      affectedLines: Number(r.affected_lines),
+      affectedOrders: Number(r.affected_orders),
+      restatableLines: Number(r.restatable_lines),
+      pendingLines: Number(r.pending_lines),
+      oldTotalCogs: r.old_total_cogs,
+      newTotalCogs: r.new_total_cogs,
+      difference: r.difference,
+    };
+  }
+
+  /** Apply: restates the given lines (re-validated in SQL) and refreshes their orders' internal COGS / profit. */
+  async restateOrderCogs(orderItemIds: string[], reason: string, adjustedBy: string | null = null): Promise<RestatementResult> {
+    const r = await this.rpc<{ batch_id: string | null; restated: number; skipped: number; orders: number; old_total: string; new_total: string }>("cost_restate_order_cogs", {
+      p_item_ids: orderItemIds,
+      p_reason: reason,
+      p_by: adjustedBy,
+    });
+    this.log({ event: "COGS_RESTATED", result: `restated=${r.restated} skipped=${r.skipped}` });
+    return { batchId: r.batch_id, restated: r.restated, skipped: r.skipped, orders: r.orders, oldTotal: r.old_total, newTotal: r.new_total };
   }
 
   /**

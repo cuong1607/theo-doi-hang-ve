@@ -130,3 +130,29 @@ lại. Mã lỗi thật sẽ được bổ sung khi gặp.
   set payload = payload #- '{response,order_income,tax_registration_code}'
   where entity_type = 'escrow' and payload #> '{response,order_income}' ? 'tax_registration_code';
   ```
+
+## 10. Doanh thu đơn hàng ước tính (shopee-fin-v3) — CHỜ KIỂM CHỨNG
+
+- **Mapping ứng viên:** "Doanh thu đơn hàng ước tính" trên Seller Center =
+  `order_income.escrow_amount`.
+- **Cơ sở:** tài liệu Shopee mô tả trường này là số người bán dự kiến nhận và có thể
+  đổi tới khi đơn hoàn thành.
+- **Đã kiểm trên payload đã lưu:**
+  - `escrow_amount` ≠ `buyer_total_amount` ≠ `channel_total_amount`, ví dụ
+    119.073 / 149.837 / 149.837;
+  - với đơn hoàn hàng, giá trị là −2.700 và được giữ nguyên dấu.
+- **Chưa kiểm:** so sánh với Seller Center.
+  - Môi trường dev không có khóa Shopee thật.
+  - Payload escrow trước PATCH chỉ có cho đơn COMPLETED.
+  - Đơn mẫu `261011BXGG89WJ` (Seller Center 74.694) đang ở trạng thái
+    TO_CONFIRM_RECEIVE và chưa có payload.
+- **Cần làm sau deploy:**
+  1. Để job escrow lấy số ước tính cho các đơn đang mở.
+  2. So `estimated_order_revenue` của ≥ 5 đơn, gồm `261011BXGG89WJ` (kỳ vọng 74.694),
+     với Seller Center.
+  3. Ghi kết quả vào bảng dưới.
+  4. Nếu lệch đáng kể, ngừng dùng số này và sửa mapping.
+
+| Mã đơn | Seller Center | `estimated_order_revenue` | Khớp |
+|---|---|---|---|
+| 261011BXGG89WJ | 74.694 | (chờ) | |

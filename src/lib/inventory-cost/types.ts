@@ -46,7 +46,32 @@ export interface CostLedgerEntry {
   avgCostAfter: Decimal | null;
   note: string | null;
   negativeInventory: boolean;
+  /** purchase_in audit (00052): raw receipt price, invoice VAT snapshot, how unitCost was derived. */
+  baseUnitCost: Decimal | null;
+  vatRate: Decimal | null;
+  costBasis: PurchaseCostBasis | null;
+  invoiceId: Uuid | null;
+  /** sale_out posted while VAT-pending units were in the position (cost unknown). */
+  costPending: boolean;
 }
+
+/**
+ * How a purchase's unit cost was derived (migration 00052):
+ *   raw          receipt price (household supplier — no VAT)
+ *   invoice_vat  receipt price × (1 + invoice VAT %) — company, day linked to an invoice
+ *   vat_pending  company receipt not linked to an invoice → cost unknown
+ * NULL = posted before moving-average-v2-vat (raw price).
+ */
+export type PurchaseCostBasis = "raw" | "invoice_vat" | "vat_pending";
+
+/** Costing version stamped on new COGS snapshots (mirror of SQL cost_costing_version()). */
+export const COSTING_VERSION = "moving-average-v2-vat";
+
+export const COST_BASIS_LABELS: Record<PurchaseCostBasis, string> = {
+  raw: "Giá nhập",
+  invoice_vat: "Giá nhập + VAT hóa đơn",
+  vat_pending: "Chờ hóa đơn VAT",
+};
 
 export interface UnitCostResult {
   costMethod: CostMethod;

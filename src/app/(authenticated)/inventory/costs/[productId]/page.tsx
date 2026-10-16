@@ -5,7 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { requirePermission } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { getLedgerSourceLinks, getProductCostLedger, getProductCostState } from "@/lib/inventory-cost/queries";
-import { COST_EVENT_LABELS } from "@/lib/inventory-cost/types";
+import { COST_BASIS_LABELS, COST_EVENT_LABELS } from "@/lib/inventory-cost/types";
 import { Callout } from "@/components/patterns/callout";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { MetricCard } from "@/components/patterns/metric-card";
@@ -57,6 +57,12 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
       {product.negativeQuantity && (
         <Callout tone="warning">Tồn kho giá vốn đang âm. Có thể dữ liệu nhập hàng lịch sử chưa đầy đủ hoặc đơn bán đã được ghi nhận trước hàng nhập.</Callout>
       )}
+      {product.vatPending && (
+        <Callout tone="warning" title="Giá vốn bình quân đang chờ VAT.">
+          Tồn hiện tại có hàng nhập từ NCC công ty chưa được lập hóa đơn (chưa biết VAT) — giá vốn bình quân tạm chưa xác định, đơn bán trong thời gian này để &quot;COGS chưa
+          tính&quot;. Khi lập hóa đơn &quot;từ hàng đã nhận&quot; cho ngày hàng về đó, hệ thống tự tính lại và điền COGS cho các đơn đang chờ.
+        </Callout>
+      )}
       {product.needsRebuild && (
         <Callout tone="danger" title="Lần tự tính giá vốn gần nhất bị lỗi.">
           ({product.lastError ?? "không rõ"}). Phiếu nhập vẫn được lưu — admin hãy bấm &quot;Dựng lại sổ giá vốn (sửa lỗi)&quot;.
@@ -65,7 +71,12 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <MetricCard label="SL tính giá vốn" value={product.hasHistory ? formatDecimal(product.quantityOnHand) : "—"} tone={product.negativeQuantity ? "warning" : "neutral"} />
-        <MetricCard label="Giá vốn bình quân" value={product.movingAverageCost === null ? "Chưa có" : formatDecimal(product.movingAverageCost, " ₫")} />
+        <MetricCard
+          label="Giá vốn bình quân"
+          value={product.movingAverageCost === null ? (product.vatPending ? "Chờ VAT" : "Chưa có") : formatDecimal(product.movingAverageCost, " ₫")}
+          tone={product.vatPending ? "warning" : "neutral"}
+          hint="gồm VAT đầu vào khi áp dụng"
+        />
         <MetricCard label="Giá trị tồn theo giá vốn" value={product.hasHistory && product.movingAverageCost !== null ? formatDecimal(product.inventoryValue, " ₫") : "—"} />
       </div>
 
@@ -86,6 +97,8 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
                   <TableHead className="text-right">SL thay đổi</TableHead>
                   <TableHead className="text-right">SL trước</TableHead>
                   <TableHead className="text-right">SL sau</TableHead>
+                  <TableHead className="text-right">Giá nhập (chưa VAT)</TableHead>
+                  <TableHead className="text-right">VAT</TableHead>
                   <TableHead className="text-right">Đơn giá vốn</TableHead>
                   <TableHead className="text-right">BQ trước</TableHead>
                   <TableHead className="text-right">BQ sau</TableHead>
@@ -118,7 +131,31 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
                       </TableCell>
                       <TableCell className="text-right">{formatDecimal(e.qtyBefore)}</TableCell>
                       <TableCell className={`text-right ${e.qtyAfter.startsWith("-") ? "text-warning-text" : ""}`}>{formatDecimal(e.qtyAfter)}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{e.unitCost === null ? <span className="text-muted-foreground">Chưa tính</span> : formatDecimal(e.unitCost, " ₫")}</TableCell>
+                      <TableCell className="text-right whitespace-nowrap">{e.baseUnitCost === null ? <span className="text-muted-foreground">—</span> : formatDecimal(e.baseUnitCost, " ₫")}</TableCell>
+                      <TableCell className="text-right text-xs whitespace-nowrap">
+                        {e.eventType !== "purchase_in" ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : e.costBasis === "vat_pending" ? (
+                          <span className="text-warning-text">chờ hóa đơn</span>
+                        ) : e.costBasis === "invoice_vat" ? (
+                          <span title={COST_BASIS_LABELS.invoice_vat}>{formatDecimal(e.vatRate)}%</span>
+                        ) : e.costBasis === "raw" ? (
+                          <span className="text-muted-foreground" title={COST_BASIS_LABELS.raw}>
+                            không áp dụng
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground" title="Ghi trước khi tính VAT — dựng lại sổ để cập nhật">
+                            chưa dựng lại
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        {e.unitCost === null ? (
+                          <span className="text-muted-foreground">{e.costPending || e.costBasis === "vat_pending" ? "Chờ VAT" : "Chưa tính"}</span>
+                        ) : (
+                          formatDecimal(e.unitCost, " ₫")
+                        )}
+                      </TableCell>
                       <TableCell className="text-right whitespace-nowrap">{formatDecimal(e.avgCostBefore, " ₫")}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{formatDecimal(e.avgCostAfter, " ₫")}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{e.movementCost === null ? <span className="text-muted-foreground">Chưa tính</span> : formatDecimal(e.movementCost, " ₫")}</TableCell>
@@ -131,7 +168,10 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
           {total > rows.length && <p className="pt-3 text-xs text-muted-foreground">Hiển thị {rows.length} sự kiện gần nhất.</p>}
         </CardContent>
       </Card>
-      <Callout tone="neutral">Sổ giá vốn là bản dựng lại hiện tại. COGS của đơn hàng cũ là snapshot tại thời điểm tính và không tự thay đổi.</Callout>
+      <Callout tone="neutral">
+        Đơn giá vốn của hàng nhập từ NCC công ty = giá nhập (chưa VAT) × (1 + VAT% của hóa đơn NCC đã lập cho ngày hàng về đó). NCC hộ kinh doanh: giá nhập, không cộng VAT. Sổ
+        giá vốn là bản dựng lại hiện tại; COGS của đơn hàng cũ là snapshot tại thời điểm tính và chỉ thay đổi khi admin điều chỉnh có chủ đích.
+      </Callout>
     </PageContainer>
   );
 }
