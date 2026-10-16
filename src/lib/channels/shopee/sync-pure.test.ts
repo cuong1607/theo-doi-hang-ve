@@ -12,14 +12,18 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
-import { isAuthorizedInternalRequest } from "../../cron/auth.ts";
+import { internalSecret, isAuthorizedInternalRequest } from "../../cron/auth.ts";
 import { decideFailure, ExecutionBudget, retryDelaySeconds } from "../core/retry-policy.ts";
-import { getSyncConfig, SYNC_CONFIG_DEFAULTS, SYNC_PRIORITY } from "../core/sync-config.ts";
+import { getSyncConfig, SYNC_CONFIG_DEFAULTS, SYNC_PRIORITY, syncJobPriority } from "../core/sync-config.ts";
+import { syncDisplayState, SYNC_DISPLAY_LABELS } from "../core/sync-display.ts";
+import { isHeartbeatStale } from "../core/sync-heartbeat.ts";
+import { emptyLatency, medianMs, recordLatency, MAX_LATENCY_SAMPLES } from "../core/sync-progress.ts";
+import { continuation } from "../core/sync-runner.ts";
 import { mapWithConcurrency } from "../core/time-windows.ts";
 import { ShopeeConfigError } from "./config.ts";
 import { ShopeeApiError } from "./errors.ts";
 import { ShopeePayloadError } from "./product-adapter.ts";
-import { shouldRefreshOrderDetail, shouldRefreshProductDetail, type LocalOrderState } from "./sync-decisions.ts";
+import { ORDER_DETAIL_TTL_MINUTES, orderDetailTtlMinutes, shouldRefreshOrderDetail, shouldRefreshProductDetail, type LocalOrderState } from "./sync-decisions.ts";
 import { JobRefusedError, toJobFailure } from "./sync-errors.ts";
 import { ApiCallMeter, JobTokenCache } from "./sync-instrumentation.ts";
 
@@ -37,6 +41,22 @@ test("config: conservative defaults (1 job, 3 detail calls in flight)", () => {
   assert.deepEqual(c.warnings, []);
 });
 
+test("PERF-2 config: production cadence 5 / 15 / 60 min, escrow 2 in flight, 1 worker trigger, no chaining, 45 s soft deadline", () => {
+  const c = getSyncConfig({});
+  assert.equal(c.orderIntervalMinutes, 5);
+  assert.equal(c.escrowIntervalMinutes, 15);
+  assert.equal(c.productIntervalMinutes, 60);
+  assert.equal(c.escrowConcurrency, 2);
+  assert.equal(c.schedulerWorkerTriggers, 1);
+  assert.equal(c.maxChainHops, 0);
+  assert.equal(c.workerTimeBudgetMs, 45_000);
+  assert.equal(c.escrowRefreshWindowDays, 14);
+  // triggers can never exceed the global worker cap
+  const capped = getSyncConfig({ SHOPEE_SYNC_SCHEDULER_WORKER_TRIGGERS: "3", SHOPEE_SYNC_GLOBAL_WORKERS: "2" });
+  assert.equal(capped.schedulerWorkerTriggers, 2);
+  assert.equal(capped.warnings.length, 1);
+});
+
 test("config: env overrides within bounds, invalid values fall back with a warning", () => {
   const c = getSyncConfig({ SHOPEE_SYNC_GLOBAL_WORKERS: "2", SHOPEE_SYNC_ORDER_CONCURRENCY: "99", SHOPEE_SYNC_ACTIVE_ORDER_TTL_MINUTES: "abc" });
   assert.equal(c.globalWorkers, 2);
@@ -52,10 +72,15 @@ test("config: rollout allowlist keeps valid shop uuids only", () => {
   assert.equal(c.warnings.length, 1);
 });
 
-test("priority convention: lower = first; manual < incremental < repair < backfill", () => {
-  assert.ok(SYNC_PRIORITY.manual < SYNC_PRIORITY.incremental);
-  assert.ok(SYNC_PRIORITY.incremental < SYNC_PRIORITY.repair);
-  assert.ok(SYNC_PRIORITY.repair < SYNC_PRIORITY.backfill);
+test("priority convention: lower = first; manual/repair (1–5) < order 10 < escrow 20 < product 30 < backfill 100", () => {
+  assert.equal(syncJobPriority("manual", "order"), 1);
+  assert.ok(syncJobPriority("manual", "product") <= 5);
+  assert.equal(syncJobPriority("repair", "escrow"), 5);
+  assert.equal(syncJobPriority("incremental", "order"), 10);
+  assert.equal(syncJobPriority("incremental", "escrow"), 20);
+  assert.equal(syncJobPriority("incremental", "product"), 30);
+  assert.equal(syncJobPriority("backfill", "order"), SYNC_PRIORITY.backfill);
+  assert.ok(syncJobPriority("manual", "product") < syncJobPriority("incremental", "order"));
 });
 
 // ------------------------------------------------------- retry policy
@@ -117,11 +142,30 @@ test("16. provider update_time changed (when the list carries it) → fetch; las
   assert.equal(shouldRefreshOrderDetail(local({ lastSyncedAt: "2026-10-13T23:00:00Z" }), { orderSn: "A", orderStatus: "COMPLETED" }, W).reason, "changed_since_last_sync");
 });
 
-test("18. active order older than the TTL refreshes; recent active order is skipped", () => {
-  const stale = local({ orderStatus: "SHIPPED", lastSyncedAt: "2026-10-14T00:10:00Z" });
-  assert.equal(shouldRefreshOrderDetail(stale, { orderSn: "A", orderStatus: "SHIPPED" }, W).reason, "active_stale");
-  const fresh = local({ orderStatus: "SHIPPED", lastSyncedAt: "2026-10-14T00:50:00Z" });
-  assert.equal(shouldRefreshOrderDetail(fresh, { orderSn: "A", orderStatus: "SHIPPED" }, W).refresh, false);
+test("18. active order older than its status TTL refreshes; recent active order is skipped", () => {
+  // now = 01:00; copies 50 min old
+  const ago50 = "2026-10-14T00:10:00Z";
+  assert.equal(shouldRefreshOrderDetail(local({ orderStatus: "READY_TO_SHIP", lastSyncedAt: ago50 }), { orderSn: "A", orderStatus: "READY_TO_SHIP" }, W).reason, "active_stale");
+  assert.equal(shouldRefreshOrderDetail(local({ orderStatus: "SHIPPED", lastSyncedAt: ago50 }), { orderSn: "A", orderStatus: "SHIPPED" }, W).refresh, false, "SHIPPED: 60-min TTL");
+  const fresh = local({ orderStatus: "READY_TO_SHIP", lastSyncedAt: "2026-10-14T00:50:00Z" });
+  assert.equal(shouldRefreshOrderDetail(fresh, { orderSn: "A", orderStatus: "READY_TO_SHIP" }, W).refresh, false);
+  // IN_CANCEL refreshes after 15 min
+  assert.equal(shouldRefreshOrderDetail(local({ orderStatus: "IN_CANCEL", lastSyncedAt: "2026-10-14T00:40:00Z" }), { orderSn: "A", orderStatus: "IN_CANCEL" }, W).reason, "active_stale");
+});
+
+test("PERF-2 8. order TTL policy lives in one table: active statuses 15–60 min, final statuses never by age", () => {
+  assert.equal(orderDetailTtlMinutes("UNPAID", 30), 30);
+  assert.equal(orderDetailTtlMinutes("READY_TO_SHIP", 30), 30);
+  assert.equal(orderDetailTtlMinutes("PROCESSED", 30), 30);
+  assert.equal(orderDetailTtlMinutes("SHIPPED", 30), 60);
+  assert.equal(orderDetailTtlMinutes("IN_CANCEL", 30), 15);
+  assert.equal(orderDetailTtlMinutes("COMPLETED", 30), null);
+  assert.equal(orderDetailTtlMinutes("CANCELLED", 30), null);
+  assert.equal(orderDetailTtlMinutes("SOME_NEW_STATUS", 30), null, "unknown non-active status: no periodic fetch");
+  for (const v of Object.values(ORDER_DETAIL_TTL_MINUTES)) assert.ok(v === null || (v >= 15 && v <= 60));
+  // a COMPLETED order inside the overlap is never re-fetched by age, however old the copy
+  const old = local({ orderStatus: "COMPLETED", lastSyncedAt: "2026-10-14T00:00:01Z" });
+  assert.equal(shouldRefreshOrderDetail(old, { orderSn: "A", orderStatus: "COMPLETED" }, { ...W, now: new Date("2026-10-20T00:00:00Z") }).refresh, false);
 });
 
 test("local detail missing (no lines / never synced) → fetch; repair → forced", () => {
@@ -215,7 +259,11 @@ test("24 (token). JobTokenCache: one token lookup per shop per job; an auth erro
 
 // ------------------------------------------------------------- auth
 
-test("8. worker/scheduler auth: SYNC_WORKER_SECRET or CRON_SECRET; nothing set → refused", () => {
+test("8. worker/scheduler auth: SHOPEE_SYNC_INTERNAL_SECRET, SYNC_WORKER_SECRET or CRON_SECRET; nothing set → refused", () => {
+  assert.equal(isAuthorizedInternalRequest("Bearer i", { SHOPEE_SYNC_INTERNAL_SECRET: "i" }), true);
+  assert.equal(isAuthorizedInternalRequest("Bearer i", { SHOPEE_SYNC_INTERNAL_SECRET: "other" }), false);
+  assert.equal(internalSecret({ SHOPEE_SYNC_INTERNAL_SECRET: "i", CRON_SECRET: "c" }), "i");
+  assert.equal(internalSecret({}), null);
   assert.equal(isAuthorizedInternalRequest("Bearer w", { SYNC_WORKER_SECRET: "w" }), true);
   assert.equal(isAuthorizedInternalRequest("Bearer c", { CRON_SECRET: "c" }), true);
   assert.equal(isAuthorizedInternalRequest("Bearer x", { SYNC_WORKER_SECRET: "w", CRON_SECRET: "c" }), false);
@@ -264,6 +312,67 @@ test("auto-map is database-only: the action and the mapping module never import 
   const mapping = readFileSync(new URL("src/lib/channels/core/sku-mapping.ts", ROOT), "utf8");
   assert.match(mapping, /rpc\("auto_map_channel_models"/);
   assert.match(mapping, /rpc\("refresh_channel_mapping_review_flags"/);
+});
+
+// ------------------------------------------------------------- PERF-2
+
+test("PERF-2 10. continuation reason: time budget spent → time_budget; call cap → batch_limit (status stays pending)", () => {
+  let t = 0;
+  const timed = new ExecutionBudget({ timeMs: 100, maxApiCalls: 10, clock: () => t });
+  t = 100;
+  assert.deepEqual(continuation(timed, "more_pages"), { kind: "more", reason: "time_budget", remaining: "more_pages" });
+  const capped = new ExecutionBudget({ timeMs: 10_000, maxApiCalls: 1, clock: () => 0 });
+  capped.spend(1);
+  assert.deepEqual(continuation(capped, "more_details"), { kind: "more", reason: "batch_limit", remaining: "more_details" });
+});
+
+test("PERF-2 30. sync matrix state: Chưa đồng bộ / Đang chờ / Đang đồng bộ / Đang thử lại / Đã đồng bộ / Đồng bộ thất bại", () => {
+  const st = (lastSuccessAt: string | null, latest: { status: string; startedAt: string | null } | null, active: Array<{ status: string; startedAt: string | null }>) =>
+    SYNC_DISPLAY_LABELS[syncDisplayState({ lastSuccessAt, latestJob: latest, activeJobs: active })];
+  assert.equal(st(null, null, []), "Chưa đồng bộ");
+  assert.equal(st(null, null, [{ status: "pending", startedAt: null }]), "Đang chờ");
+  assert.equal(st(null, null, [{ status: "running", startedAt: "x" }]), "Đang đồng bộ");
+  assert.equal(st(null, null, [{ status: "pending", startedAt: "x" }]), "Đang đồng bộ", "between slices = still syncing");
+  assert.equal(st("t", null, [{ status: "retry", startedAt: "x" }]), "Đang thử lại");
+  assert.equal(st("t", { status: "success", startedAt: "x" }, []), "Đã đồng bộ");
+  assert.equal(st("t", { status: "failed", startedAt: "x" }, []), "Đồng bộ thất bại");
+  assert.equal(st("t", { status: "cancelled", startedAt: "x" }, []), "Đã đồng bộ");
+});
+
+test("PERF-2 31. scheduler warning: never ran or last run older than the threshold", () => {
+  const now = new Date("2026-10-16T10:00:00Z");
+  assert.equal(isHeartbeatStale(null, now, 5), true);
+  assert.equal(isHeartbeatStale({ last_run_at: null }, now, 5), true);
+  assert.equal(isHeartbeatStale({ last_run_at: "2026-10-16T09:58:00Z" }, now, 5), false);
+  assert.equal(isHeartbeatStale({ last_run_at: "2026-10-16T09:54:00Z" }, now, 5), true);
+  // the default threshold is ≥ 3 scheduler intervals
+  const c = getSyncConfig({});
+  assert.ok(c.schedulerWarnAfterMinutes >= 3 * c.schedulerIntervalMinutes);
+  assert.equal(getSyncConfig({ SHOPEE_SYNC_SCHEDULER_INTERVAL_MINUTES: "5", SHOPEE_SYNC_SCHEDULER_WARN_AFTER_MINUTES: "6" }).schedulerWarnAfterMinutes, 15);
+});
+
+test("PERF-2 13. latency stats: per-api count / total / max, bounded samples, median; the meter times every call", async () => {
+  const s = emptyLatency();
+  for (const v of [30, 10, 20, 1000]) recordLatency(s, v);
+  assert.deepEqual({ n: s.n, totalMs: s.totalMs, maxMs: s.maxMs }, { n: 4, totalMs: 1060, maxMs: 1000 });
+  assert.equal(medianMs(s), 25);
+  for (let i = 0; i < 100; i++) recordLatency(s, 5);
+  assert.equal(s.samples.length, MAX_LATENCY_SAMPLES);
+  let t = 0;
+  const meter = new ApiCallMeter(null, () => t);
+  await meter.track("get_escrow_detail", async () => {
+    t += 120;
+  });
+  assert.deepEqual(meter.latency.get_escrow_detail.samples, [120]);
+});
+
+test("PERF-2 22 + 29 (static). scheduler / worker never call Shopee from the auto-map path; data pages read only the DB", () => {
+  // the scheduler route enqueues + bursts; it never imports a provider or the product sync directly
+  const route = readFileSync(new URL("src/app/api/internal/shopee/sync-scheduler/route.ts", ROOT), "utf8");
+  assert.doesNotMatch(route, /(order|product|payment)-provider|product-sync|order-sync|sku-mapping|ShopeeClient/);
+  // the only Shopee-calling route outside the queue is the read-only latency probe (internal secret)
+  const internals = filesUnder(new URL("src/app/api/internal/shopee/", ROOT), (p) => p.endsWith("route.ts"));
+  for (const file of internals) assert.match(readFileSync(file, "utf8"), /isAuthorizedInternalRequest/, file);
 });
 
 test("32 (static). no Promise.all in the Shopee sync / provider code — fan-out goes through mapWithConcurrency", () => {

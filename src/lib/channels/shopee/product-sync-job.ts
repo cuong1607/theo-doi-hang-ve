@@ -19,7 +19,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { autoMapChannelModels, refreshMappingReviewFlags } from "../core/sku-mapping.ts";
 import { getSyncState } from "../core/sync-log.ts";
-import { firstFailureSummary, type SliceInput, type SliceOutcome, type SyncJobRunner } from "../core/sync-runner.ts";
+import { continuation, firstFailureSummary, type SliceInput, type SliceOutcome, type SyncJobRunner } from "../core/sync-runner.ts";
 import type { ParseIssue } from "./product-adapter.ts";
 import { BASE_INFO_BATCH_SIZE, type ProductProviderContext } from "./product-provider.ts";
 import { PRODUCT_SYNC_TYPE, type ShopeeProductSyncService } from "./product-sync.ts";
@@ -93,7 +93,7 @@ export class ProductSyncJobRunner implements SyncJobRunner {
         // so one chunk (which cannot be split mid-way without losing models)
         // stays short even when Shopee answers slowly.
         const left = budget.apiCallsLeft;
-        if (left < 2 || !budget.canSpend(2)) return { kind: "more" };
+        if (left < 2 || !budget.canSpend(2)) return continuation(budget, "more_details");
         const chunk = cp.pendingItemIds.slice(0, Math.min(BASE_INFO_BATCH_SIZE, left - 1, config.productDetailConcurrency * MODEL_ROUNDS_PER_CHUNK));
         const acc = {
           counts: { fetched: chunk.length, created: 0, updated: 0, failed: 0 },
@@ -122,7 +122,7 @@ export class ProductSyncJobRunner implements SyncJobRunner {
       if (cp.phase !== "discover") break;
 
       // ---- discovery: one get_item_list page
-      if (!budget.canSpend(1)) return { kind: "more" };
+      if (!budget.canSpend(1)) return continuation(budget, "more_pages");
       if (cp.pages >= MAX_DISCOVERY_PAGES) {
         progress.addFailure({ externalId: null, reason: "v2.product.get_item_list: quá số trang cho phép" });
         cp.phase = "finalize";

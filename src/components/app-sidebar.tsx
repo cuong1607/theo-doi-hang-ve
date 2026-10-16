@@ -36,6 +36,8 @@ import {
 import { hasPermission, type Permission, type Role } from "@/lib/auth/permissions";
 import { APP_NAME, BRAND_NAME } from "@/lib/brand";
 import { BrandLogo } from "@/components/brand-logo";
+import { LinkPendingHint } from "@/components/patterns/link-pending-hint";
+import { activeNavHref } from "@/lib/ui/navigation";
 
 type NavItem = {
   title: string;
@@ -116,6 +118,11 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
         icon: Calculator,
         permission: "cost:view",
       },
+    ],
+  },
+  {
+    label: "SHOPEE",
+    items: [
       {
         title: "Sản phẩm Shopee",
         href: "/shopee/products",
@@ -169,6 +176,9 @@ export function AppSidebar({ role }: { role: Role }) {
       items: group.items.filter((item) => !item.permission || hasPermission(role, item.permission)),
     }))
     .filter((group) => group.items.length > 0);
+  // Exactly one active item: the longest href matching the path
+  // (/receipts/new → "Nhập hàng", not also "Lịch sử hàng về").
+  const activeHref = activeNavHref(pathname, visibleGroups.flatMap((g) => g.items.map((i) => i.href)));
 
   return (
     <Sidebar collapsible="icon">
@@ -190,10 +200,7 @@ export function AppSidebar({ role }: { role: Role }) {
             <SidebarGroupContent>
               <SidebarMenu>
                 {group.items.map((item) => {
-                  const isActive =
-                    pathname === item.href ||
-                    (item.href !== "/dashboard" &&
-                      pathname.startsWith(item.href + "/"));
+                  const isActive = item.href === activeHref;
                   return (
                     <SidebarMenuItem key={item.href}>
                       <SidebarMenuButton
@@ -203,6 +210,7 @@ export function AppSidebar({ role }: { role: Role }) {
                       >
                         <item.icon />
                         <span>{item.title}</span>
+                        <LinkPendingHint className="group-data-[collapsible=icon]:hidden" />
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );

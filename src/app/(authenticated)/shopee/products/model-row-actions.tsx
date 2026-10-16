@@ -3,6 +3,10 @@
 import { useEffect, useState, useTransition } from "react";
 import { Info, Link2, MoreHorizontal, Unlink } from "lucide-react";
 
+import { Callout } from "@/components/patterns/callout";
+import { LoadingButton } from "@/components/patterns/loading-button";
+import { toast } from "@/components/patterns/toast";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -59,11 +63,17 @@ function MapDialog({ row, open, onOpenChange }: { row: ModelRowView; open: boole
     if (!selected) return;
     setError(null);
     startTransition(async () => {
-      const res = controlled
-        ? await changeUsedChannelModelMappingAction({ channelModelId: row.channelModelId, internalProductId: selected.id, reason })
-        : await mapChannelModelAction({ channelModelId: row.channelModelId, internalProductId: selected.id });
-      if (res.ok) onOpenChange(false);
-      else setError(res.message);
+      try {
+        const res = controlled
+          ? await changeUsedChannelModelMappingAction({ channelModelId: row.channelModelId, internalProductId: selected.id, reason })
+          : await mapChannelModelAction({ channelModelId: row.channelModelId, internalProductId: selected.id });
+        if (res.ok) {
+          onOpenChange(false);
+          toast.success(`Đã ghép với ${selected.sku}.`);
+        } else setError(res.message);
+      } catch {
+        setError("Không lưu được mapping. Vui lòng thử lại.");
+      }
     });
   }
 
@@ -98,22 +108,29 @@ function MapDialog({ row, open, onOpenChange }: { row: ModelRowView; open: boole
           )}
         </div>
         {controlled && (
-          <div className="space-y-1.5 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          <Callout tone="warning">
             <p>
               Đã có {row.orderItemCount} dòng đơn hàng dùng mapping hiện tại ({row.internalSku}). Đổi mapping chỉ áp dụng cho đơn mới —
               đơn cũ giữ nguyên SKU đã ghi. Bắt buộc ghi lý do (được lưu lịch sử).
             </p>
-            <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Lý do điều chỉnh (tối thiểu 5 ký tự)" />
-          </div>
+            <label className="mt-2 block text-foreground">
+              <span className="sr-only">Lý do điều chỉnh</span>
+              <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Lý do điều chỉnh (tối thiểu 5 ký tự) *" aria-required="true" />
+            </label>
+          </Callout>
         )}
-        {error && <p className="text-sm text-destructive">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-danger-text">
+            {error}
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             Hủy
           </Button>
-          <Button onClick={save} disabled={!selected || pending || (controlled && reason.trim().length < 5)}>
-            {pending ? "Đang lưu..." : selected ? `Ghép với ${selected.sku}` : "Chọn sản phẩm"}
-          </Button>
+          <LoadingButton onClick={save} loading={pending} loadingText="Đang lưu…" disabled={!selected || (controlled && reason.trim().length < 5)}>
+            {selected ? `Ghép với ${selected.sku}` : "Chọn sản phẩm"}
+          </LoadingButton>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -172,30 +189,41 @@ export function ModelRowActions({ row, canMap, canManage }: { row: ModelRowView;
   function unmap() {
     setError(null);
     startTransition(async () => {
-      const res = await unmapChannelModelAction(row.channelModelId);
-      if (res.ok) setConfirmOpen(false);
-      else setError(res.message);
+      try {
+        const res = await unmapChannelModelAction(row.channelModelId);
+        if (res.ok) {
+          setConfirmOpen(false);
+          toast.success("Đã bỏ ghép SKU.");
+        } else setError(res.message);
+      } catch {
+        setError("Không bỏ ghép được. Vui lòng thử lại.");
+      }
     });
   }
 
+  const openMap = () => {
+    setMapKey((k) => k + 1);
+    setMapOpen(true);
+  };
+
   return (
-    <>
+    <div className="flex items-center justify-end gap-1">
+      {/* The main job of this screen: an unmapped unit shows its action directly. */}
+      {canChangeMapping && !row.internalSku && (
+        <Button size="sm" variant="outline" onClick={openMap}>
+          <Link2 /> Ghép SKU
+        </Button>
+      )}
       <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
+        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label={`Thao tác cho ${row.itemName}`} />}>
           <MoreHorizontal />
-          <span className="sr-only">Thao tác</span>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={() => setDetailOpen(true)}>
             <Info /> Chi tiết
           </DropdownMenuItem>
           {canChangeMapping && (
-            <DropdownMenuItem
-              onClick={() => {
-                setMapKey((k) => k + 1);
-                setMapOpen(true);
-              }}
-            >
+            <DropdownMenuItem onClick={openMap}>
               <Link2 /> {usedByOrders ? "Điều chỉnh mapping (có lý do)" : row.internalSku ? "Đổi SKU nội bộ" : "Ghép SKU nội bộ"}
             </DropdownMenuItem>
           )}
@@ -219,17 +247,21 @@ export function ModelRowActions({ row, canMap, canManage }: { row: ModelRowView;
               {row.modelName ? ` — ${row.modelName}` : ""}&quot; sẽ không còn gắn với {row.internalSku}.
             </DialogDescription>
           </DialogHeader>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <p role="alert" className="text-sm text-danger-text">
+              {error}
+            </p>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)} disabled={pending}>
               Hủy
             </Button>
-            <Button variant="destructive" onClick={unmap} disabled={pending}>
-              {pending ? "Đang xử lý..." : "Bỏ ghép"}
-            </Button>
+            <LoadingButton variant="destructive" onClick={unmap} loading={pending} loadingText="Đang bỏ ghép…">
+              Bỏ ghép
+            </LoadingButton>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }

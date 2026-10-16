@@ -20,7 +20,8 @@ import { FixtureShopeeOrderProvider, type OrderFixtureSet } from "./order-provid
 import { FixtureShopeeProductProvider, type ProductFixtureSet } from "./product-provider.ts";
 import { FixtureShopeePaymentProvider } from "./payment-provider.ts";
 import { toJobFailure } from "./sync-errors.ts";
-import { createShopeeRunnerFactory, requestShopeeSync, runShopeeSyncScheduler } from "./sync-service.ts";
+import { createShopeeRunnerFactory, requestShopeeSync, runShopeeSchedulerTick, runShopeeSyncScheduler } from "./sync-service.ts";
+import { getHeartbeats, SCHEDULER_HEARTBEAT } from "../core/sync-heartbeat.ts";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -205,7 +206,7 @@ test("1 + 2. enqueue creates a pending job; a duplicate active request returns t
   const b = await requestShopeeSync(db, { shopId: s, syncType: "order", mode: "manual" });
   assert.equal(b.created, false);
   assert.equal(b.jobId, a.jobId);
-  assert.equal((await job(a.jobId)).priority, 5, "manual click moved the queued job to the front");
+  assert.equal((await job(a.jobId)).priority, 1, "manual click moved the queued job to the front");
   const { count: active } = await db.from("channel_sync_jobs").select("id", { count: "exact", head: true }).eq("shop_id", s).in("status", ["pending", "running", "retry"]);
   assert.equal(active, 1);
   // backfill is its own lane: allowed next to the incremental one, deduped itself
@@ -397,11 +398,11 @@ test("15 + 16 + 17 + 19. re-sync skips unchanged orders; status change and new o
   assert.equal(c!.order_status, "COMPLETED");
 });
 
-test("18. an active order seen again is refreshed once its copy is older than the TTL", async () => {
+test("18. an active order seen again is refreshed once its copy is older than its status TTL", async () => {
   const s = await shop();
   await catalog(s, [1]);
   const h = harness([s]);
-  h.state.orders = orderFixtures([{ sn: `${TAG}-ACT`, status: "SHIPPED" }, { sn: `${TAG}-DONE`, status: "COMPLETED" }]);
+  h.state.orders = orderFixtures([{ sn: `${TAG}-ACT`, status: "READY_TO_SHIP" }, { sn: `${TAG}-DONE`, status: "COMPLETED" }]);
   await requestShopeeSync(db, { shopId: s, syncType: "order", mode: "incremental" });
   await h.drain();
   // window will start 2h10m ago; both copies are 40 min old (inside the window, older than the 30-min TTL)
@@ -603,6 +604,190 @@ test("31. scheduler: due shops get one incremental job per type; a second run cr
   const r4 = await runShopeeSyncScheduler(db, { config, providerMode: "live" });
   assert.equal(r4.enqueued.length, 0);
   await settle([a, b]);
+});
+
+// ============================================================ PERF-2
+
+test("PERF-2 17. priority: manual order (1) → order incremental (10) → escrow (20) → product (30) → backfill (100)", async () => {
+  const [a, b, c] = [await shop(), await shop(), await shop()];
+  const bf = await requestShopeeSync(db, { shopId: a, syncType: "order", mode: "backfill", backfillDays: 3 });
+  const prod = await requestShopeeSync(db, { shopId: a, syncType: "product", mode: "incremental" });
+  const esc = await requestShopeeSync(db, { shopId: b, syncType: "escrow", mode: "incremental" });
+  const ord = await requestShopeeSync(db, { shopId: b, syncType: "order", mode: "incremental" });
+  const man = await requestShopeeSync(db, { shopId: c, syncType: "order", mode: "manual" });
+  const order: string[] = [];
+  for (let i = 0; i < 5; i++) order.push((await claimNextSyncJob(db, `p${i}`, { maxRunning: 50, shopIds: [a, b, c] }))!.id);
+  assert.deepEqual(order, [man.jobId, ord.jobId, esc.jobId, prod.jobId, bf.jobId]);
+  await settle([a, b, c]);
+});
+
+test("PERF-2 1 + 2 + 5 + 6 + 7. scheduler tick: heartbeat, per-shop due types, idempotent, no-due run creates nothing, old jobs pruned", async () => {
+  const [a, b] = [await shop(), await shop()];
+  const config: SyncConfig = { ...getSyncConfig({}), shopAllowlist: [a, b] };
+  const t1 = await runShopeeSchedulerTick(db, { config, providerMode: "fixture" });
+  assert.equal(t1.enqueued.length, 6, "2 shops x (order, product, escrow)");
+  assert.equal(t1.workDue, true);
+  const beat = (await getHeartbeats(db)).get(SCHEDULER_HEARTBEAT)!;
+  assert.ok(beat.last_run_at && beat.last_success_at && beat.last_success_at >= beat.last_run_at);
+  assert.equal((beat.last_result as { enqueued: number }).enqueued, 6);
+
+  const t2 = await runShopeeSchedulerTick(db, { config, providerMode: "fixture" });
+  assert.equal(t2.enqueued.length, 0, "idempotent: active jobs are not duplicated");
+  assert.equal(t2.alreadyQueued.length, 6);
+  const { count: active } = await db.from("channel_sync_jobs").select("id", { count: "exact", head: true }).in("shop_id", [a, b]).in("status", ["pending", "running", "retry"]);
+  assert.equal(active, 6);
+  await settle([a, b]);
+
+  // every type of both shops synced just now → nothing due
+  const nowIso = new Date().toISOString();
+  await db.from("channel_sync_states").upsert(
+    [a, b].flatMap((shop_id) => ["order", "product", "escrow"].map((sync_type) => ({ shop_id, sync_type, last_success_at: nowIso }))),
+    { onConflict: "shop_id,sync_type" },
+  );
+  const t3 = await runShopeeSchedulerTick(db, { config, providerMode: "fixture" });
+  assert.equal(t3.enqueued.length, 0);
+  assert.equal(t3.notDue, 6);
+
+  // order due again after its 5-minute interval; product (60) / escrow (15) not yet
+  const sixMinAgo = new Date(Date.now() - 6 * 60_000).toISOString();
+  await db.from("channel_sync_states").update({ last_success_at: sixMinAgo }).eq("shop_id", a).eq("sync_type", "order");
+  const t4 = await runShopeeSchedulerTick(db, { config, providerMode: "fixture" });
+  assert.deepEqual(t4.enqueued.map((e) => `${e.shopId === a ? "A" : "B"}:${e.syncType}`), ["A:order"]);
+  await settle([a, b]);
+
+  // retention: a success job finished 40 days ago is pruned, a failed one is kept
+  const { data: oldJobs } = await db
+    .from("channel_sync_jobs")
+    .insert([
+      { shop_id: a, sync_type: "product", mode: "incremental", status: "success", finished_at: new Date(Date.now() - 40 * 86400_000).toISOString() },
+      { shop_id: a, sync_type: "product", mode: "incremental", status: "failed", finished_at: new Date(Date.now() - 40 * 86400_000).toISOString() },
+    ])
+    .select("id, status");
+  const t5 = await runShopeeSchedulerTick(db, { config, providerMode: "fixture" });
+  assert.ok(t5.pruned >= 1);
+  const { data: left } = await db.from("channel_sync_jobs").select("id").in("id", oldJobs!.map((j) => j.id));
+  assert.deepEqual(left!.map((j) => j.id), [oldJobs!.find((j) => j.status === "failed")!.id]);
+  await settle([a, b]);
+});
+
+test("PERF-2 12. soft deadline: a slice stops on its time budget → pending with continuation_reason time_budget, then finishes", async () => {
+  const s = await shop();
+  await catalog(s, [1]);
+  let t = 0;
+  const h = harness([s], { config: { sliceTimeBudgetMs: 25_000, maxSliceApiCalls: 100 } });
+  // a worker on a fake clock: every provider call "takes" 10 s
+  const worker = new SyncWorker({
+    db,
+    config: h.config,
+    workerId: `deadline-${Math.random().toString(16).slice(2, 8)}`,
+    createRunner: createShopeeRunnerFactory({
+      db,
+      config: h.config,
+      providers: () => ({
+        mode: "fixture",
+        order: new FixtureShopeeOrderProvider(h.state.orders, {
+          onCall: () => {
+            t += 10_000;
+          },
+        }),
+        product: new FixtureShopeeProductProvider(h.state.products),
+        payment: new FixtureShopeePaymentProvider(h.state.escrow),
+      }),
+    }),
+    classifyError: toJobFailure,
+    logger: () => {},
+    clock: () => t,
+  });
+  h.state.orders = orderFixtures(Array.from({ length: 8 }, (_, i) => ({ sn: `${TAG}-DL-${i}` })), 2);
+  const q = await requestShopeeSync(db, { shopId: s, syncType: "order", mode: "incremental" });
+  const first = await worker.runOne(25_000);
+  assert.equal(first!.status, "pending");
+  assert.equal(first!.continuationReason, "time_budget");
+  assert.equal(first!.apiCalls, 3, "stopped once the 25 s budget was spent (3 calls x 10 s), not at the call cap");
+  const mid = await job(q.jobId);
+  assert.equal(mid.metadata!.continuationReason, "time_budget");
+  assert.equal(mid.status, "pending");
+  assert.equal(mid.finished_at, null, "not finished early");
+  for (let i = 0; i < 20; i++) {
+    const r = await worker.runOne(25_000);
+    if (!r || r.status !== "pending") break;
+  }
+  const done = await job(q.jobId);
+  assert.equal(done.status, "success");
+  const { count: stored } = await db.from("channel_orders").select("id", { count: "exact", head: true }).eq("shop_id", s);
+  assert.equal(stored, 8, "success only after every page and every detail");
+});
+
+test("PERF-2 26 + 28. one shop's failure does not block the others; the global cap still holds", async () => {
+  const [bad, good] = [await shop(), await shop()];
+  await catalog(good, [1]);
+  const config: SyncConfig = { ...getSyncConfig({}), shopAllowlist: [bad, good], globalWorkers: 1 };
+  const goodOrders = orderFixtures([{ sn: `${TAG}-G1` }, { sn: `${TAG}-G2` }]);
+  const worker = new SyncWorker({
+    db,
+    config,
+    workerId: `iso-${Math.random().toString(16).slice(2, 8)}`,
+    createRunner: createShopeeRunnerFactory({
+      db,
+      config,
+      providers: (j) => ({
+        mode: "fixture",
+        order: new FixtureShopeeOrderProvider(goodOrders, {
+          onCall: () => {
+            if (j.shop_id === bad) throw new ShopeeApiError({ apiPath: "/x", errorCode: "error_auth", message: "revoked", httpStatus: 403 });
+          },
+        }),
+        product: new FixtureShopeeProductProvider(productFixtures([])),
+        payment: new FixtureShopeePaymentProvider(new Map()),
+      }),
+    }),
+    classifyError: toJobFailure,
+    logger: () => {},
+  });
+  const qb = await requestShopeeSync(db, { shopId: bad, syncType: "order", mode: "incremental" });
+  const qg = await requestShopeeSync(db, { shopId: good, syncType: "order", mode: "incremental" });
+  const burst = await worker.runBurst({ timeBudgetMs: 60_000 });
+  assert.equal(burst.stoppedBy, "empty");
+  assert.equal((await job(qb.jobId)).status, "failed", "revoked auth: no automatic retry");
+  assert.equal((await job(qg.jobId)).status, "success", "the other shop still synced in the same run");
+  const { count } = await db.from("channel_orders").select("id", { count: "exact", head: true }).eq("shop_id", good);
+  assert.equal(count, 2);
+  // the next scheduler tick still queues the failing shop's other types and the good shop
+  const tick = await runShopeeSchedulerTick(db, { config, providerMode: "fixture" });
+  assert.ok(tick.enqueued.some((e) => e.shopId === good));
+  await settle([bad, good]);
+});
+
+test("PERF-2 16 + 19 + 21. automatic incremental: scheduler-enqueued jobs import a new order with window = last success − overlap; nothing clicked", async () => {
+  const s = await shop();
+  await catalog(s, [1]);
+  const config: SyncConfig = { ...getSyncConfig({}), shopAllowlist: [s] };
+  const h = harness([s], { config });
+  h.state.orders = orderFixtures([{ sn: `${TAG}-AUTO-1` }]);
+  await runShopeeSchedulerTick(db, { config, providerMode: "fixture" });
+  await h.drain();
+  const { data: st1 } = await db.from("channel_sync_states").select("last_success_at").eq("shop_id", s).eq("sync_type", "order").single();
+  assert.ok(st1!.last_success_at);
+
+  // 6 minutes later a new order appears on Shopee
+  const lastSuccess = new Date(Date.now() - 6 * 60_000);
+  await db.from("channel_sync_states").update({ last_success_at: lastSuccess.toISOString(), metadata: {} }).eq("shop_id", s).eq("sync_type", "order");
+  h.state.orders = orderFixtures([{ sn: `${TAG}-AUTO-1` }, { sn: `${TAG}-AUTO-2`, status: "READY_TO_SHIP" }]);
+  h.calls.length = 0;
+  const tick = await runShopeeSchedulerTick(db, { config, providerMode: "fixture" });
+  const orderJob = tick.enqueued.find((e) => e.syncType === "order");
+  assert.ok(orderJob, "order job due after its interval");
+  await h.drain();
+  const j = await job(orderJob!.jobId);
+  assert.equal(j.mode, "incremental");
+  assert.equal(j.status, "success");
+  assert.equal(new Date(j.window_from!).getTime(), lastSuccess.getTime() - config.orderOverlapMinutes * 60_000, "window starts at last success − overlap");
+  const fetched = h.calls.filter((c) => c.apiName === "v2.order.get_order_detail").flatMap((c) => (c.input as { orderSns: string[] }).orderSns);
+  assert.deepEqual(fetched, [`${TAG}-AUTO-2`], "only the new order's detail is fetched");
+  assert.equal((j.metadata!.stats as Record<string, number>).detailsSkippedUnchanged, 1);
+  const { data: o } = await db.from("channel_orders").select("order_status").eq("shop_id", s).eq("external_order_sn", `${TAG}-AUTO-2`).single();
+  assert.equal(o!.order_status, "READY_TO_SHIP");
+  await settle([s]);
 });
 
 test("guards: unknown / inactive shop refused at enqueue; fixture runner refuses a live shop (failed, no retry)", async () => {

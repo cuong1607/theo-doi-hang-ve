@@ -1,36 +1,35 @@
-import { AlertTriangle, FlaskConical } from "lucide-react";
+import { Activity, AlertTriangle, CalendarClock, Clock, FlaskConical, ListTodo, RefreshCw } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { listShops } from "@/lib/channels/core/queries";
 import { getSyncConfig } from "@/lib/channels/core/sync-config";
-import { getQueueCounts, getSyncStatuses, listRecentSyncJobs } from "@/lib/channels/core/sync-status-queries";
+import { getQueueCounts, getSyncHealth, getSyncStatuses, listRecentSyncJobs } from "@/lib/channels/core/sync-status-queries";
 import { getShopeeConfig } from "@/lib/channels/shopee/config";
 import { getShopeeProviderMode } from "@/lib/channels/shopee/provider-mode";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatDateTime, formatDuration } from "@/lib/ui/format";
+import { AutoRefresh } from "@/components/patterns/auto-refresh";
+import { Callout } from "@/components/patterns/callout";
+import { EmptyState } from "@/components/patterns/empty-state";
+import { MetricCard } from "@/components/patterns/metric-card";
+import { PageContainer, PageHeader } from "@/components/patterns/page-header";
+import { StatusBadge } from "@/components/patterns/status-badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-import { fmtDate } from "../shared";
 import { BackfillButton, JobActionButtons, SyncNowButton } from "./sync-buttons";
-import { JobStatusBadge, SYNC_MODE_LABELS, SYNC_TYPE_LABELS, SyncFreshness } from "./sync-status";
+import { hasActiveSync, JobStatusBadge, SchedulerWarning, SYNC_MODE_LABELS, SYNC_TYPE_LABELS, SyncStatusCell } from "./sync-status";
 
 export const dynamic = "force-dynamic";
 // Server actions on this page kick the worker after responding (after()).
 export const maxDuration = 60;
 
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className="text-2xl font-bold">{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-const fmtDuration = (ms: number) => (ms < 1000 ? `${ms} ms` : ms < 60_000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms / 60_000)} phút`);
+/** Matrix columns, in queue priority order (orders first). */
+const MATRIX: Array<{ type: "order" | "escrow" | "product"; label: string; button: string }> = [
+  { type: "order", label: "Đơn hàng", button: "Đồng bộ đơn" },
+  { type: "escrow", label: "Tài chính", button: "Đồng bộ tài chính" },
+  { type: "product", label: "Sản phẩm", button: "Đồng bộ sản phẩm" },
+];
 
 export default async function ShopeeSyncPage() {
   const auth = await requirePermission("channel:view");
@@ -49,84 +48,105 @@ export default async function ShopeeSyncPage() {
   }
 
   const shops = (await listShops()).filter((s) => s.channel === "shopee");
-  const [statuses, jobs, queue] = await Promise.all([getSyncStatuses(shops.map((s) => s.id)), listRecentSyncJobs({}, 30), getQueueCounts()]);
+  const [statuses, jobs, queue, health] = await Promise.all([getSyncStatuses(shops.map((s) => s.id)), listRecentSyncJobs({}, 30), getQueueCounts(), getSyncHealth()]);
   const shopName = new Map(shops.map((s) => [s.id, s.shopName]));
   const config = getSyncConfig();
+  const now = new Date();
+  const syncing = hasActiveSync(statuses) || queue.running > 0;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Đồng bộ Shopee</h2>
-        <p className="text-muted-foreground">
-          Đồng bộ chạy nền theo hàng đợi: trang chỉ đọc dữ liệu đã lưu, nút &quot;Đồng bộ ngay&quot; chỉ thêm yêu cầu vào hàng đợi.
-        </p>
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Đồng bộ Shopee"
+        description='Đơn hàng, tài chính và sản phẩm tự đồng bộ định kỳ (lịch chạy mỗi phút). Trang chỉ đọc dữ liệu đã lưu; "Đồng bộ ngay" chỉ đưa yêu cầu lên đầu hàng đợi — không cần bấm để dữ liệu tiếp tục cập nhật.'
+        meta={<AutoRefresh active={syncing} />}
+      />
 
+      {canManage && <SchedulerWarning health={health} />}
       {modeConfig.mode === "fixture" ? (
-        <p className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          <FlaskConical className="mt-0.5 size-4 shrink-0" />
+        <Callout tone="info" icon={FlaskConical}>
           Đang sử dụng dữ liệu fixture/test. Shopee production API chưa được kích hoạt.
-        </p>
+        </Callout>
       ) : liveProblem || modeConfig.problem ? (
-        <p className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          Chưa kết nối API Shopee. {modeConfig.problem ?? liveProblem}
-        </p>
+        <Callout tone="danger" title="Chưa kết nối API Shopee.">
+          {modeConfig.problem ?? liveProblem}
+        </Callout>
       ) : null}
 
-      <div className="grid grid-cols-3 gap-4">
-        <Stat label="Đang chờ" value={queue.pending} />
-        <Stat label="Đang chạy" value={queue.running} />
-        <Stat label="Chờ thử lại" value={queue.retry} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <MetricCard label="Đang chờ" icon={ListTodo} value={queue.pending} hint="job trong hàng đợi" />
+        <MetricCard label="Đang chạy" icon={Activity} value={queue.running} tone={queue.running > 0 ? "info" : "neutral"} hint={`tối đa ${config.globalWorkers} job cùng lúc`} />
+        <MetricCard label="Chờ thử lại" icon={RefreshCw} value={queue.retry} tone={queue.retry > 0 ? "warning" : "neutral"} hint="tự chạy lại theo backoff" />
+        <MetricCard
+          label="Scheduler"
+          icon={CalendarClock}
+          value={
+            <StatusBadge tone={health.schedulerStale ? "warning" : "success"} className="h-6 text-sm">
+              {health.schedulerStale ? "Có thể đang dừng" : "Đang hoạt động"}
+            </StatusBadge>
+          }
+          hint={
+            <>
+              Chạy gần nhất: {health.scheduler?.last_run_at ? formatDateTime(health.scheduler.last_run_at) : "chưa từng chạy"}
+              <br />
+              Worker: {health.worker?.last_success_at ? formatDateTime(health.worker.last_success_at) : "chưa chạy"}
+              {canManage && health.scheduler?.last_error && health.scheduler.last_error_at && (!health.scheduler.last_success_at || health.scheduler.last_error_at > health.scheduler.last_success_at) ? (
+                <span className="block text-danger-text">Lỗi: {health.scheduler.last_error}</span>
+              ) : null}
+            </>
+          }
+        />
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Shop ({shops.length})</CardTitle>
+          <CardTitle>Trạng thái theo shop</CardTitle>
+          <CardDescription>Mỗi ô: trạng thái hiện tại, tiến độ, thời gian chạy, lần thành công gần nhất và lỗi gần nhất.</CardDescription>
         </CardHeader>
         <CardContent>
           {shops.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Chưa có shop Shopee nào. Kết nối shop ở trang Tích hợp Shopee.</p>
+            <EmptyState title="Chưa có shop Shopee nào." description="Kết nối shop ở trang Tích hợp Shopee để bắt đầu đồng bộ." />
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Shop</TableHead>
-                  <TableHead>Đơn hàng</TableHead>
-                  <TableHead>Sản phẩm</TableHead>
-                  <TableHead>Tài chính (escrow)</TableHead>
-                  {(canSync || canManage) && <TableHead className="text-right">Thao tác</TableHead>}
+                  {MATRIX.map((m) => (
+                    <TableHead key={m.type}>{m.label}</TableHead>
+                  ))}
+                  {canManage && <TableHead className="text-right">Khác</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {shops.map((shop) => {
                   const usable = shop.isActive && shop.dataSource === modeConfig.mode && !liveProblem && !modeConfig.problem;
                   return (
-                    <TableRow key={shop.id} className="align-top">
+                    <TableRow key={shop.id} className="align-top hover:bg-transparent">
                       <TableCell className="whitespace-nowrap">
                         <p className="font-medium">{shop.shopName}</p>
-                        <p className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-                          <Badge variant={shop.dataSource === "fixture" ? "secondary" : "outline"}>{shop.dataSource === "fixture" ? "FIXTURE" : "LIVE"}</Badge>#{shop.externalShopId}
+                        <p className="mt-1 flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
+                          <StatusBadge tone={shop.dataSource === "fixture" ? "info" : "neutral"} icon={false}>
+                            {shop.dataSource === "fixture" ? "FIXTURE" : "LIVE"}
+                          </StatusBadge>
+                          #{shop.externalShopId}
                         </p>
-                        {!shop.isActive && <p className="text-xs text-destructive">Đang tạm ngưng</p>}
+                        {!shop.isActive && <p className="mt-1 text-xs text-warning-text">Đang tạm ngưng</p>}
                       </TableCell>
-                      <TableCell>
-                        <SyncFreshness status={statuses.get(`${shop.id}|order`)} canSeeErrors={canManage} />
-                      </TableCell>
-                      <TableCell>
-                        <SyncFreshness status={statuses.get(`${shop.id}|product`)} canSeeErrors={canManage} />
-                      </TableCell>
-                      <TableCell>
-                        <SyncFreshness status={statuses.get(`${shop.id}|escrow`)} canSeeErrors={canManage} />
-                      </TableCell>
-                      {(canSync || canManage) && (
+                      {MATRIX.map((m) => (
+                        <TableCell key={m.type} className="whitespace-normal">
+                          <SyncStatusCell
+                            status={statuses.get(`${shop.id}|${m.type}`)}
+                            canSeeErrors={canManage}
+                            now={now}
+                            action={canSync ? <SyncNowButton shopId={shop.id} syncType={m.type} label="Đồng bộ ngay" variant="outline" disabled={!usable} /> : undefined}
+                          />
+                        </TableCell>
+                      ))}
+                      {canManage && (
                         <TableCell>
                           <div className="flex flex-col items-end gap-2">
-                            {canSync && <SyncNowButton shopId={shop.id} syncType="order" label="Đồng bộ đơn ngay" disabled={!usable} />}
-                            {canSync && <SyncNowButton shopId={shop.id} syncType="product" label="Đồng bộ sản phẩm ngay" disabled={!usable} />}
-                            {canSync && <SyncNowButton shopId={shop.id} syncType="escrow" label="Đồng bộ tài chính" disabled={!usable} />}
-                            {canManage && <BackfillButton shopId={shop.id} syncType="order" days={30} label="Backfill đơn 30 ngày" disabled={!usable} />}
-                            {canManage && <BackfillButton shopId={shop.id} syncType="product" label="Quét toàn bộ sản phẩm" disabled={!usable} />}
+                            <BackfillButton shopId={shop.id} syncType="order" days={30} label="Backfill đơn 30 ngày" disabled={!usable} />
+                            <BackfillButton shopId={shop.id} syncType="product" label="Quét toàn bộ sản phẩm" disabled={!usable} />
                           </div>
                         </TableCell>
                       )}
@@ -142,12 +162,13 @@ export default async function ShopeeSyncPage() {
       <Card>
         <CardHeader>
           <CardTitle>Job gần đây</CardTitle>
+          <CardDescription>30 job mới nhất trên mọi shop. Di chuột lên số lệnh API để xem từng loại.</CardDescription>
         </CardHeader>
         <CardContent>
           {jobs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Chưa có job đồng bộ nào.</p>
+            <EmptyState icon={Clock} title="Chưa có job đồng bộ nào." description="Lịch tự động sẽ tạo job đầu tiên trong vài phút, hoặc bấm “Đồng bộ ngay”." />
           ) : (
-            <Table>
+            <Table stickyHeader>
               <TableHeader>
                 <TableRow>
                   <TableHead>Tạo lúc</TableHead>
@@ -155,7 +176,7 @@ export default async function ShopeeSyncPage() {
                   <TableHead>Loại</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead className="text-right">Bản ghi</TableHead>
-                  <TableHead className="text-right">API</TableHead>
+                  <TableHead className="text-right">Lệnh API</TableHead>
                   <TableHead className="text-right">Bỏ qua (không đổi)</TableHead>
                   <TableHead className="text-right">Thời gian chạy</TableHead>
                   <TableHead>Lỗi</TableHead>
@@ -165,38 +186,48 @@ export default async function ShopeeSyncPage() {
               <TableBody>
                 {jobs.map((job) => (
                   <TableRow key={job.id} className="align-top">
-                    <TableCell className="whitespace-nowrap text-xs">{fmtDate(job.createdAt)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-xs">{shopName.get(job.shopId) ?? job.shopId.slice(0, 8)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-xs">
+                    <TableCell className="text-xs">{formatDateTime(job.createdAt)}</TableCell>
+                    <TableCell className="max-w-40 truncate text-xs" title={shopName.get(job.shopId)}>
+                      {shopName.get(job.shopId) ?? job.shopId.slice(0, 8)}
+                    </TableCell>
+                    <TableCell className="text-xs">
                       {SYNC_TYPE_LABELS[job.syncType] ?? job.syncType} · {SYNC_MODE_LABELS[job.mode] ?? job.mode}
                     </TableCell>
-                    <TableCell className="whitespace-nowrap text-xs">
+                    <TableCell className="text-xs">
                       <JobStatusBadge job={job} />
                       <p className="mt-1 text-muted-foreground">
-                        lượt {job.attemptCount}/{job.maxAttempts}
-                        {job.status === "retry" && job.nextAttemptAt ? ` · lúc ${fmtDate(job.nextAttemptAt)}` : ""}
+                        lần thử {job.attemptCount}/{job.maxAttempts}
+                        {job.status === "retry" && job.nextAttemptAt ? ` · lúc ${formatDateTime(job.nextAttemptAt)}` : ""}
+                        {job.continuationReason && job.status === "pending" ? ` · chạy tiếp (${job.continuationReason === "time_budget" ? "hết thời gian lượt" : "hết lượt gọi API"})` : ""}
                       </p>
                     </TableCell>
-                    <TableCell className="text-right text-xs whitespace-nowrap">
+                    <TableCell className="text-right text-xs">
                       quét {job.recordsFetched} · mới {job.recordsCreated} · cập nhật {job.recordsUpdated}
-                      {job.recordsFailed ? <span className="text-destructive"> · lỗi {job.recordsFailed}</span> : null}
+                      {job.recordsFailed ? <span className="text-warning-text"> · lỗi {job.recordsFailed}</span> : null}
                     </TableCell>
-                    <TableCell className="text-right text-xs" title={Object.entries(job.apiCallsByName).map(([k, v]) => `${k}: ${v}`).join("\n")}>
+                    <TableCell className="text-right text-xs" title={Object.entries(job.apiCallsByName).map(([k, v]) => `${k}: ${v}`).join("\n") || undefined}>
                       {job.apiCalls}
-                      {job.rateLimitHits ? <span className="text-destructive"> ({job.rateLimitHits} rate-limit)</span> : null}
+                      {job.rateLimitHits ? (
+                        <span className="text-warning-text">
+                          {" "}
+                          <AlertTriangle aria-hidden="true" className="inline size-3" /> {job.rateLimitHits} rate-limit
+                        </span>
+                      ) : null}
                     </TableCell>
                     <TableCell className="text-right text-xs">{job.detailsSkippedUnchanged}</TableCell>
-                    <TableCell className="text-right text-xs whitespace-nowrap">
-                      {fmtDuration(job.durationMs)}
-                      {job.slices > 1 ? ` · ${job.slices} lượt chạy` : ""}
+                    <TableCell className="text-right text-xs">
+                      {formatDuration(job.durationMs)}
+                      {job.slices > 1 ? ` · ${job.slices} lượt` : ""}
                     </TableCell>
-                    <TableCell className="max-w-[260px] text-xs text-destructive">
+                    <TableCell className="max-w-[260px] text-xs whitespace-normal">
                       {job.errorCode ? (
-                        <>
+                        <span className="text-danger-text">
                           {job.errorCode}
                           {canManage && job.errorMessage ? <span className="block break-words text-muted-foreground">{job.errorMessage}</span> : null}
-                        </>
-                      ) : null}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     {canManage && (
                       <TableCell className="text-right">
@@ -220,23 +251,29 @@ export default async function ShopeeSyncPage() {
           <CardHeader>
             <CardTitle>Cấu hình đồng bộ</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p className="text-muted-foreground">
-              Job chạy đồng thời: <b>{config.globalWorkers}</b> · chi tiết đơn song song: <b>{config.orderDetailConcurrency}</b> · chi tiết sản phẩm song song:{" "}
-              <b>{config.productDetailConcurrency}</b> · tối đa <b>{config.maxSliceApiCalls}</b> lệnh API / lượt chạy · đơn mỗi <b>{config.orderIntervalMinutes}</b> phút · sản phẩm
-              mỗi <b>{config.productIntervalMinutes}</b> phút · TTL đơn đang xử lý <b>{config.activeOrderTtlMinutes}</b> phút.
+          <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              Nhịp tự động: đơn mỗi <b className="text-foreground">{config.orderIntervalMinutes}</b> phút · tài chính mỗi <b className="text-foreground">{config.escrowIntervalMinutes}</b> phút
+              · sản phẩm mỗi <b className="text-foreground">{config.productIntervalMinutes}</b> phút · chồng lấn cửa sổ đơn <b className="text-foreground">{config.orderOverlapMinutes}</b> phút.
+            </p>
+            <p>
+              Job chạy đồng thời: <b className="text-foreground">{config.globalWorkers}</b> · chi tiết đơn song song: <b className="text-foreground">{config.orderDetailConcurrency}</b> · chi
+              tiết sản phẩm song song: <b className="text-foreground">{config.productDetailConcurrency}</b> · escrow song song: <b className="text-foreground">{config.escrowConcurrency}</b> · tối
+              đa <b className="text-foreground">{config.maxSliceApiCalls}</b> lệnh API / lượt · mỗi lần worker chạy tối đa{" "}
+              <b className="text-foreground">{Math.round(config.workerTimeBudgetMs / 1000)}</b> giây.
             </p>
             {config.warnings.map((w) => (
-              <p key={w} className="text-destructive">
+              <Callout key={w} tone="warning">
                 {w}
-              </p>
+              </Callout>
             ))}
-            <p className="text-muted-foreground">
-              Lịch chạy định kỳ cần một bộ hẹn giờ gọi <code>/api/internal/shopee/sync-scheduler</code> (xem docs/shopee-sync-operations.md). Nếu chưa cấu hình, đồng bộ chỉ chạy khi bấm &quot;Đồng bộ ngay&quot;.
+            <p>
+              Lịch chạy: Supabase pg_cron gọi <code className="rounded bg-muted px-1">/api/internal/shopee/sync-scheduler</code> mỗi phút; mỗi lần gọi tạo job đến hạn rồi xử lý hàng
+              đợi trong giới hạn thời gian (xem docs/shopee-sync-operations.md).
             </p>
           </CardContent>
         </Card>
       )}
-    </div>
+    </PageContainer>
   );
 }

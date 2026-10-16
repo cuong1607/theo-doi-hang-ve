@@ -23,7 +23,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { getSyncState } from "../core/sync-log.ts";
-import { firstFailureSummary, type SliceInput, type SliceOutcome, type SyncJobRunner } from "../core/sync-runner.ts";
+import { continuation, firstFailureSummary, type SliceInput, type SliceOutcome, type SyncJobRunner } from "../core/sync-runner.ts";
 import { mapWithConcurrency, splitTimeWindows } from "../core/time-windows.ts";
 import { errorInfo, JobRefusedError } from "./sync-errors.ts";
 import { MAX_ORDER_WINDOW_SECONDS, ORDER_DETAIL_BATCH_SIZE, type OrderProviderContext } from "./order-provider.ts";
@@ -97,7 +97,7 @@ export class OrderSyncJobRunner implements SyncJobRunner {
       // ---- details for what discovery queued
       if (cp.pendingSns.length > 0) {
         const affordable = Math.min(config.orderDetailConcurrency, budget.apiCallsLeft);
-        if (affordable < 1 || !budget.canSpend(1)) return { kind: "more" };
+        if (affordable < 1 || !budget.canSpend(1)) return continuation(budget, "more_details");
         const take = cp.pendingSns.slice(0, affordable * ORDER_DETAIL_BATCH_SIZE);
         const batches: string[][] = [];
         for (let i = 0; i < take.length; i += ORDER_DETAIL_BATCH_SIZE) batches.push(take.slice(i, i + ORDER_DETAIL_BATCH_SIZE));
@@ -134,7 +134,7 @@ export class OrderSyncJobRunner implements SyncJobRunner {
       if (cp.phase !== "discover" || cp.windowIndex >= windows.length) break;
 
       // ---- discovery: one list page
-      if (!budget.canSpend(1)) return { kind: "more" };
+      if (!budget.canSpend(1)) return continuation(budget, "more_pages");
       const window = windows[cp.windowIndex];
       let page: Awaited<ReturnType<ShopeeOrderSyncService["fetchOrderListPage"]>>;
       try {

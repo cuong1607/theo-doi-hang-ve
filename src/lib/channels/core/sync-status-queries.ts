@@ -12,6 +12,8 @@ import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { getSyncConfig } from "./sync-config.ts";
+import { getHeartbeats, isHeartbeatStale, SCHEDULER_HEARTBEAT, WORKER_HEARTBEAT, type HeartbeatRow } from "./sync-heartbeat.ts";
 import type { SyncJobRow, SyncJobStatus } from "./sync-jobs.ts";
 
 export interface SyncJobView {
@@ -43,6 +45,13 @@ export interface SyncJobView {
   rateLimitHits: number;
   slices: number;
   durationMs: number;
+  /** SHOPEE-PERF-2 progress: list pages read, escrow eligible / processed / remaining. */
+  pages: number;
+  eligible: number | null;
+  processed: number;
+  remaining: number | null;
+  /** Set while the job is between slices (normal continuation). */
+  continuationReason: string | null;
 }
 
 export interface SyncStatusView {
@@ -97,6 +106,32 @@ export function toJobView(r: Pick<SyncJobRow, "id" | "shop_id" | "sync_type" | "
     rateLimitHits: num(m.rateLimitHits),
     slices: num(m.slices),
     durationMs: num(m.durationMs),
+    pages: num(stats.pages),
+    eligible: typeof stats.eligible === "number" ? stats.eligible : null,
+    processed: num(stats.ordersChecked),
+    remaining: typeof stats.remaining === "number" ? stats.remaining : null,
+    continuationReason: typeof m.continuationReason === "string" ? m.continuationReason : null,
+  };
+}
+
+export interface SyncHealthView {
+  scheduler: HeartbeatRow | null;
+  worker: HeartbeatRow | null;
+  /** Scheduler never ran / last run older than config.schedulerWarnAfterMinutes. */
+  schedulerStale: boolean;
+  warnAfterMinutes: number;
+}
+
+/** Scheduler / worker heartbeat for the "cron stopped?" warning (one query). */
+export async function getSyncHealth(now: Date = new Date()): Promise<SyncHealthView> {
+  const { schedulerWarnAfterMinutes } = getSyncConfig();
+  const beats = await getHeartbeats(createAdminClient());
+  const scheduler = beats.get(SCHEDULER_HEARTBEAT) ?? null;
+  return {
+    scheduler,
+    worker: beats.get(WORKER_HEARTBEAT) ?? null,
+    schedulerStale: isHeartbeatStale(scheduler, now, schedulerWarnAfterMinutes),
+    warnAfterMinutes: schedulerWarnAfterMinutes,
   };
 }
 

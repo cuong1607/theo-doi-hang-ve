@@ -1,26 +1,54 @@
 "use client";
 
-import { useState, useTransition } from "react";
+// Admin repair action (SHOPEE-4 cost engine): rebuilds the moving-average
+// ledger from receipts + posted sales. Never rewrites locked order COGS.
+// UIUX-1: a confirmation (it can take a while on the whole catalogue),
+// loading state, toast with the result.
+import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 
+import { LoadingButton } from "@/components/patterns/loading-button";
+import { useAsyncAction } from "@/components/patterns/use-async-action";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-import { rebuildAllCostsAction, rebuildProductCostAction, type CostActionResult } from "./actions";
+import { rebuildAllCostsAction, rebuildProductCostAction } from "./actions";
 
 export function RebuildCostButton({ productId }: { productId?: string }) {
-  const [pending, startTransition] = useTransition();
-  const [result, setResult] = useState<CostActionResult | null>(null);
+  const [open, setOpen] = useState(false);
+  const { run, pending } = useAsyncAction({ errorMessage: "Không dựng lại được sổ giá vốn." });
+  const label = productId ? "Dựng lại sổ giá vốn (sửa lỗi)" : "Dựng lại sổ giá vốn toàn bộ (sửa lỗi)";
   return (
-    <div className="space-y-2">
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={pending}
-        onClick={() => startTransition(async () => setResult(productId ? await rebuildProductCostAction(productId) : await rebuildAllCostsAction()))}
-      >
-        <RefreshCw className={pending ? "animate-spin" : ""} /> {productId ? "Tính lại giá vốn" : "Tính lại giá vốn toàn bộ"}
+    <>
+      <Button size="sm" variant="outline" disabled={pending} onClick={() => setOpen(true)} title="Thao tác sửa lỗi (admin) — không cần cho vận hành hằng ngày">
+        <RefreshCw className={pending ? "animate-spin" : ""} /> {label}
       </Button>
-      {result && <p className={`text-sm ${result.ok ? "text-primary" : "text-destructive"}`}>{result.message}</p>}
-    </div>
+      <Dialog open={open} onOpenChange={(v) => !pending && setOpen(v)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{label}?</DialogTitle>
+            <DialogDescription>
+              Dựng lại sổ giá vốn bình quân {productId ? "của sản phẩm này" : "của toàn bộ sản phẩm"} từ phiếu nhập và đơn đã ghi. Chỉ dùng khi sửa lỗi dữ liệu. COGS đã chốt
+              của đơn cũ giữ nguyên.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+              Hủy
+            </Button>
+            <LoadingButton
+              loading={pending}
+              loadingText="Đang dựng lại…"
+              onClick={async () => {
+                await run(() => (productId ? rebuildProductCostAction(productId) : rebuildAllCostsAction()));
+                setOpen(false);
+              }}
+            >
+              Dựng lại
+            </LoadingButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

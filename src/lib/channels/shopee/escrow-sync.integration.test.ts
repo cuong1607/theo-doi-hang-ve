@@ -376,6 +376,95 @@ test("14. escrow job through the queue: bounded batches, checkpointed stats, rep
   await assert.rejects(requestShopeeSync(db, { shopId: s, syncType: "escrow", mode: "backfill", backfillDays: 10 }));
 });
 
+test("PERF-2 23 + 24 + 25. 98-order escrow backlog drains over several bounded worker runs (≤ escrowConcurrency in flight); stable old order skipped", async () => {
+  const s = await shop();
+  const backlog = [];
+  for (let i = 0; i < 98; i++) backlog.push(await order(s));
+  // stable: completed 40 days ago and already synced → outside the refresh window
+  const stable = await order(s, { updatedAt: new Date(Date.now() - 40 * 86400_000).toISOString() });
+  const bySn = new Map<string, unknown>([...backlog, stable].map((o) => [o.sn, escrow(o.sn)]));
+  await service(bySn).syncOrder(stable.id);
+
+  const calls: string[] = [];
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const fixture = new FixtureShopeePaymentProvider(bySn);
+  const payment: ShopeePaymentProvider = {
+    mode: "fixture",
+    async getEscrowDetail(ctx, input) {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      calls.push(input.orderSn);
+      await new Promise((r) => setTimeout(r, 5));
+      try {
+        return await fixture.getEscrowDetail(ctx, input);
+      } finally {
+        inFlight--;
+      }
+    },
+  };
+  const config: SyncConfig = { ...getSyncConfig({}), shopAllowlist: [s] };
+  assert.equal(config.escrowConcurrency, 2);
+  assert.equal(config.maxSliceApiCalls, 30);
+  const worker = new SyncWorker({
+    db,
+    config,
+    workerId: `t5b-${Math.random().toString(16).slice(2, 8)}`,
+    createRunner: createShopeeRunnerFactory({
+      db,
+      config,
+      providers: () => ({
+        mode: "fixture",
+        order: new FixtureShopeeOrderProvider({ listPages: [], ordersBySn: new Map() }),
+        product: new FixtureShopeeProductProvider({ listPages: [], itemBaseInfo: {}, modelLists: new Map() } as never),
+        payment,
+      }),
+    }),
+    classifyError: toJobFailure,
+    logger: () => {},
+  });
+
+  // enqueued ONCE (as the scheduler would) — no further clicks
+  const job = await requestShopeeSync(db, { shopId: s, syncType: "escrow", mode: "incremental" });
+  assert.equal((await db.from("channel_sync_jobs").select("priority").eq("id", job.jobId).single()).data!.priority, 20);
+  const runs = [];
+  const remainingSeen: number[] = [];
+  for (let i = 0; i < 20; i++) {
+    const r = await worker.runOne(30_000);
+    if (!r) break;
+    runs.push(r);
+    const { data: j } = await db.from("channel_sync_jobs").select("status, metadata").eq("id", job.jobId).single();
+    const m = j!.metadata as { stats: Record<string, number>; continuationReason?: string };
+    if (r.status === "pending") {
+      assert.equal(j!.status, "pending", "normal continuation is pending — not success / retry / failed");
+      assert.equal(m.continuationReason, "batch_limit");
+      assert.equal(r.continuationReason, "batch_limit");
+      assert.ok(r.apiCalls <= config.maxSliceApiCalls, `slice made ${r.apiCalls} calls`);
+      remainingSeen.push(m.stats.remaining);
+    }
+  }
+  assert.equal(runs.at(-1)!.status, "success");
+  assert.ok(runs.length >= 4, `bounded: ${runs.length} worker runs for 98 orders at ${config.maxSliceApiCalls} calls/slice`);
+  assert.ok(runs.slice(0, -1).every((r) => r.status === "pending"));
+  assert.deepEqual([...remainingSeen].sort((a, b) => b - a), remainingSeen, "remaining only goes down");
+  const { data: done } = await db.from("channel_sync_jobs").select("status, metadata, finished_at").eq("id", job.jobId).single();
+  const stats = (done!.metadata as { stats: Record<string, number>; continuationReason?: string }).stats;
+  assert.equal(stats.eligible, 98, "eligible counted at start (the stable old order is not)");
+  assert.equal(stats.ordersChecked, 98);
+  assert.equal(stats.escrowFetched, 98);
+  assert.equal(stats.remaining, 0);
+  assert.equal((done!.metadata as Record<string, unknown>).continuationReason, undefined, "cleared once finished");
+  assert.ok(done!.finished_at);
+  assert.equal(new Set(calls).size, 98, "each backlog order fetched exactly once");
+  assert.equal(calls.length, 98);
+  assert.equal(calls.includes(stable.sn), false, "stable old financial record skipped");
+  assert.ok(maxInFlight <= config.escrowConcurrency && maxInFlight >= 2, `max in flight ${maxInFlight}`);
+  const { count } = await db.from("order_financials").select("order_id", { count: "exact", head: true }).in("order_id", backlog.map((o) => o.id)).not("escrow_synced_at", "is", null);
+  assert.equal(count, 98);
+  const { data: st } = await db.from("channel_sync_states").select("last_success_at").eq("shop_id", s).eq("sync_type", "escrow").single();
+  assert.ok(st!.last_success_at, "clean escrow job advances the escrow sync state");
+});
+
 // ================================================================ VIEW / SUMMARY / SECURITY
 
 test("15. list view + DB summary: null vs zero, totals only add known values, profit state", async () => {

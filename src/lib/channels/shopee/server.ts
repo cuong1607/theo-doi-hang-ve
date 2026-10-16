@@ -9,9 +9,12 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
+import { internalSecret } from "@/lib/cron/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { getSyncConfig } from "../core/sync-config.ts";
+import { markHeartbeatError, markHeartbeatSuccess, WORKER_HEARTBEAT } from "../core/sync-heartbeat.ts";
+import { mapWithConcurrency } from "../core/time-windows.ts";
 import { SyncWorker, type BurstReport } from "../core/sync-worker.ts";
 import { ShopeeClient } from "./client.ts";
 import { getShopeeConfig, ShopeeConfigError, type ShopeeConfig } from "./config.ts";
@@ -83,13 +86,48 @@ export function getShopeeSyncWorker(): SyncWorker {
       payment: new RealShopeePaymentProvider({ client, connections: tokens }),
     };
   };
+  const region = process.env.VERCEL_REGION ?? "local";
   return new SyncWorker({
     db,
     config,
-    workerId: `${process.env.VERCEL_REGION ?? "local"}-${randomUUID().slice(0, 8)}`,
+    workerId: `${region}-${randomUUID().slice(0, 8)}`,
     createRunner: createShopeeRunnerFactory({ db, config, providers }),
     classifyError: toJobFailure,
+    region,
   });
+}
+
+/**
+ * SHOPEE-PERF-2: what one scheduler tick (or the worker endpoint) runs:
+ * `bursts` workers side by side (≤ config.globalWorkers — the claim's global
+ * cap is the real limit), each a time-bounded burst of slices, then the
+ * worker heartbeat. Never throws: callers run it inside after().
+ */
+export async function runShopeeWorkerBursts(options: { bursts: number; timeBudgetMs: number; source: string }): Promise<BurstReport[]> {
+  const config = getSyncConfig();
+  const db = createAdminClient();
+  const bursts = Math.max(1, Math.min(options.bursts, config.globalWorkers));
+  try {
+    const reports = await mapWithConcurrency(Array.from({ length: bursts }, (_, i) => i), bursts, () =>
+      getShopeeSyncWorker().runBurst({ timeBudgetMs: options.timeBudgetMs }),
+    );
+    const slices = reports.flatMap((r) => r.slices);
+    await markHeartbeatSuccess(db, WORKER_HEARTBEAT, {
+      source: options.source,
+      region: process.env.VERCEL_REGION ?? "local",
+      bursts,
+      slices: slices.length,
+      recovered: reports.reduce((a, r) => a + r.recovered, 0),
+      stoppedBy: reports.map((r) => r.stoppedBy),
+      jobs: slices.map((s) => `${s.syncType}:${s.status}${s.continuationReason ? `(${s.continuationReason})` : ""}`).slice(0, 20),
+    }).catch(() => undefined);
+    return reports;
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 300) : String(err);
+    console.error(JSON.stringify({ source: "sync-worker", event: "SYNC_WORKER_FAILED", trigger: options.source, message }));
+    await markHeartbeatError(db, WORKER_HEARTBEAT, message).catch(() => undefined);
+    return [];
+  }
 }
 
 /**
@@ -119,7 +157,7 @@ export async function kickShopeeSyncWorker(options: { origin: string | null; hop
  * to reach the endpoint; we stop waiting after a few seconds.
  */
 export async function chainShopeeSyncWorker(origin: string, hop: number): Promise<void> {
-  const secret = process.env.SYNC_WORKER_SECRET || process.env.CRON_SECRET;
+  const secret = internalSecret(process.env);
   if (!secret) return;
   const url = new URL("/api/internal/shopee/sync-worker", origin);
   url.searchParams.set("hop", String(hop));

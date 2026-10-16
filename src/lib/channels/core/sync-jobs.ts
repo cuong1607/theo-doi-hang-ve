@@ -15,6 +15,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { decideFailure, type JobFailure } from "./retry-policy.ts";
+import { emptyLatency, recordLatency, type LatencyStats } from "./sync-progress.ts";
 
 export const SYNC_TYPES = ["product", "order", "escrow", "income", "return", "payout"] as const;
 export type SyncType = (typeof SYNC_TYPES)[number];
@@ -200,7 +201,11 @@ export class JobLease {
     this.now = now;
   }
 
+  /** SHOPEE-PERF-2: round-trip time of every job write (one Supabase request each). */
+  readonly dbLatency: LatencyStats = emptyLatency();
+
   private async write(columns: Record<string, unknown>): Promise<{ cancel_requested: boolean }> {
+    const started = Date.now();
     const { data, error } = await this.db
       .from("channel_sync_jobs")
       .update(columns)
@@ -208,6 +213,7 @@ export class JobLease {
       .eq("status", "running")
       .eq("lock_owner", this.workerId)
       .select("cancel_requested");
+    recordLatency(this.dbLatency, Date.now() - started);
     if (error) throw new Error(`Không cập nhật được job: ${error.message}`);
     const row = (data ?? [])[0] as { cancel_requested: boolean } | undefined;
     if (!row) throw new LeaseLostError(this.job.id);

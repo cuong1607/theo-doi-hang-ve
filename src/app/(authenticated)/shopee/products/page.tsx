@@ -1,21 +1,31 @@
-import { AlertTriangle, FlaskConical, PackageSearch } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Boxes, CheckCircle2, CircleDashed, FlaskConical, PackageSearch, SearchCheck, TriangleAlert, Archive } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { listShops } from "@/lib/channels/core/queries";
 import { getShopeeProductMappingSummary, getShopeeProducts, type ChannelModelFilters } from "@/lib/channels/core/product-queries";
-import { getSyncStatuses } from "@/lib/channels/core/sync-status-queries";
+import { getSyncHealth, getSyncStatuses } from "@/lib/channels/core/sync-status-queries";
 import { isMappingStatus } from "@/lib/channels/core/types";
 import { getShopeeConfig } from "@/lib/channels/shopee/config";
 import { getShopeeProviderMode } from "@/lib/channels/shopee/provider-mode";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCurrency, formatDateTime, formatQuantity } from "@/lib/ui/format";
+import { activeFilterCount, parsePage, parsePageSize } from "@/lib/ui/list-query";
+import { MAPPING_STATUS_TONE } from "@/lib/ui/status";
+import { AutoRefresh } from "@/components/patterns/auto-refresh";
+import { Callout } from "@/components/patterns/callout";
+import { DataTablePagination } from "@/components/patterns/data-table-pagination";
+import { EmptyState } from "@/components/patterns/empty-state";
+import { MetricCard, MetricGrid } from "@/components/patterns/metric-card";
+import { PageContainer, PageHeader } from "@/components/patterns/page-header";
+import { StatusBadge } from "@/components/patterns/status-badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ListPagination } from "@/components/list-pagination";
 
-import { fmtDate, formatDecimal, MAPPING_LABELS, MAPPING_VARIANT, toModelView } from "../shared";
+import { MAPPING_LABELS, PRODUCT_FILTER_KEYS, toModelView } from "../shared";
 import { BackfillButton, SyncNowButton } from "../sync/sync-buttons";
-import { FreshnessSummary, SyncFreshness } from "../sync/sync-status";
+import { FreshnessSummary, hasActiveSync, SchedulerWarning, SyncStatusCell } from "../sync/sync-status";
 import { ModelRowActions } from "./model-row-actions";
 import { ShopeeProductFilters } from "./product-filters";
 import { AutoMapButton, CreateFixtureShopButton } from "./sync-controls";
@@ -24,32 +34,17 @@ export const dynamic = "force-dynamic";
 // "Đồng bộ ngay" kicks the background worker after responding (after()).
 export const maxDuration = 60;
 
-const PAGE_SIZE = 20;
+type Params = { shop?: string; mapping?: string; status?: string; name?: string; sku?: string; isku?: string; page?: string; size?: string };
 
-function SummaryCard({ label, value, tone }: { label: string; value: number; tone?: "warn" | "danger" }) {
-  const color = tone === "danger" && value > 0 ? "text-destructive" : tone === "warn" && value > 0 ? "text-amber-600" : "";
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className={`text-2xl font-bold ${color}`}>{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-export default async function ShopeeProductsPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ shop?: string; mapping?: string; status?: string; name?: string; sku?: string; isku?: string; page?: string }>;
-}) {
+export default async function ShopeeProductsPage({ searchParams }: { searchParams: Promise<Params> }) {
   const auth = await requirePermission("channel:view");
   const role = auth.profile.role;
   const canManage = hasPermission(role, "channel:manage");
   const canSync = hasPermission(role, "channel:sync");
   const canMap = hasPermission(role, "channel:map");
   const params = await searchParams;
-  const page = Math.max(1, Number(params.page) || 1);
+  const page = parsePage(params.page);
+  const pageSize = parsePageSize(params.size);
 
   const modeConfig = getShopeeProviderMode();
   let liveProblem: string | null = null;
@@ -73,73 +68,82 @@ export default async function ShopeeProductsPage({
     internalSku: params.isku?.trim() || undefined,
   };
 
-  const [{ rows, total }, summary, syncStatuses] = await Promise.all([
-    getShopeeProducts(filters, page, PAGE_SIZE),
+  const [{ rows, total }, summary, syncStatuses, health] = await Promise.all([
+    getShopeeProducts(filters, page, pageSize),
     getShopeeProductMappingSummary(shopFilter),
     getSyncStatuses(
       shops.map((s) => s.id),
       ["product"],
     ),
+    getSyncHealth(),
   ]);
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const hasFilter = Object.values(filters).some(Boolean);
+  const query: Record<string, string | undefined> = Object.fromEntries(PRODUCT_FILTER_KEYS.map((k) => [k, params[k]?.trim() || undefined]));
+  const hasFilter = activeFilterCount(query, PRODUCT_FILTER_KEYS) > 0;
+  const syncing = hasActiveSync(syncStatuses);
+  const now = new Date();
+  const unmappedHref = `/shopee/products?mapping=unmapped`;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Sản phẩm Shopee</h2>
-        <p className="text-muted-foreground">
-          Đồng bộ sản phẩm / biến thể từ Shopee và ghép với SKU nội bộ. Giá và tồn kho Shopee chỉ để tham khảo — không phải giá vốn hay tồn kho nội bộ.
-        </p>
-        <FreshnessSummary shops={shops} statuses={syncStatuses} syncType="product" />
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Sản phẩm Shopee"
+        description="Biến thể đồng bộ từ Shopee và SKU nội bộ được ghép. Giá và tồn kho Shopee chỉ để tham khảo — không phải giá vốn hay tồn kho nội bộ."
+        meta={
+          <>
+            <FreshnessSummary shops={shops} statuses={syncStatuses} syncType="product" schedulerStale={health.schedulerStale} />
+            <AutoRefresh active={syncing} />
+          </>
+        }
+      />
 
+      {canManage && <SchedulerWarning health={health} />}
       {modeConfig.mode === "fixture" ? (
-        <p className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          <FlaskConical className="mt-0.5 size-4 shrink-0" />
+        <Callout tone="info" icon={FlaskConical}>
           API Shopee production chưa được kích hoạt. Dữ liệu đồng bộ hiện tại đang sử dụng fixture/test mode (chỉ cho shop fixture).
-        </p>
+        </Callout>
       ) : liveProblem || modeConfig.problem ? (
-        <p className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          Chưa kết nối API Shopee. {modeConfig.problem ?? liveProblem}
-        </p>
+        <Callout tone="danger" title="Chưa kết nối API Shopee.">
+          {modeConfig.problem ?? liveProblem}
+        </Callout>
       ) : null}
 
       {(canSync || canManage) && (
         <Card>
           <CardHeader>
             <CardTitle>Shop &amp; đồng bộ</CardTitle>
+            <CardDescription>
+              <b>Đồng bộ sản phẩm</b>: Shopee → hệ thống (tự động mỗi giờ, chạy nền). <b>Tự động ghép SKU</b>: chỉ dùng dữ liệu đã đồng bộ — không gọi Shopee, không ghi đè ghép tay.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {shops.length === 0 && <p className="text-sm text-muted-foreground">Chưa có shop Shopee nào. Kết nối shop ở trang Tích hợp Shopee.</p>}
+            {shops.length === 0 && <EmptyState title="Chưa có shop Shopee nào." description="Kết nối shop ở trang Tích hợp Shopee." className="py-6" />}
             {shops.map((shop) => {
               const sourceMatches = shop.isActive && shop.dataSource === modeConfig.mode && !liveProblem && !modeConfig.problem;
               return (
-                <div key={shop.id} className="flex flex-col gap-3 border-b pb-4 last:border-b-0 last:pb-0 md:flex-row md:items-start md:justify-between">
-                  <div className="space-y-1 text-sm">
-                    <p className="flex flex-wrap items-center gap-2 font-medium">
-                      {shop.shopName}
-                      <Badge variant={shop.dataSource === "fixture" ? "secondary" : "outline"}>{shop.dataSource === "fixture" ? "FIXTURE" : "LIVE"}</Badge>
-                      <span className="text-muted-foreground">#{shop.externalShopId}</span>
+                <div key={shop.id} className="grid gap-4 border-b pb-4 last:border-b-0 last:pb-0 md:grid-cols-[minmax(10rem,14rem)_1fr_auto]">
+                  <div className="space-y-1">
+                    <p className="font-medium">{shop.shopName}</p>
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <StatusBadge tone={shop.dataSource === "fixture" ? "info" : "neutral"} icon={false}>
+                        {shop.dataSource === "fixture" ? "FIXTURE" : "LIVE"}
+                      </StatusBadge>
+                      #{shop.externalShopId}
                     </p>
-                    <SyncFreshness status={syncStatuses.get(`${shop.id}|product`)} canSeeErrors={canManage} />
                     {!sourceMatches && (
                       <p className="text-xs text-muted-foreground">
                         {shop.dataSource === "fixture" ? "Shop fixture chỉ đồng bộ được ở fixture mode." : "Shop thật chỉ đồng bộ được khi API Shopee (live) đã được cấu hình."}
                       </p>
                     )}
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-start gap-2">
-                      {canSync && <SyncNowButton shopId={shop.id} syncType="product" label="Đồng bộ sản phẩm" disabled={!sourceMatches} />}
-                      {canManage && <BackfillButton shopId={shop.id} syncType="product" label="Quét toàn bộ" disabled={!sourceMatches} />}
-                      {canManage && <AutoMapButton shopId={shop.id} />}
-                    </div>
-                    <p className="max-w-md text-xs text-muted-foreground">
-                      <b>Đồng bộ sản phẩm</b>: Shopee → dữ liệu trong hệ thống (chạy nền theo hàng đợi). <b>Tự động ghép SKU</b>: ghép biến thể đã đồng bộ với SKU
-                      nội bộ, chỉ dùng dữ liệu trong hệ thống — không gọi Shopee. Có biến thể mới trên Shopee thì đồng bộ sản phẩm trước, rồi mới ghép.
-                    </p>
+                  <SyncStatusCell
+                    status={syncStatuses.get(`${shop.id}|product`)}
+                    canSeeErrors={canManage}
+                    now={now}
+                    action={canSync ? <SyncNowButton shopId={shop.id} syncType="product" label="Đồng bộ sản phẩm" variant="outline" disabled={!sourceMatches} /> : undefined}
+                  />
+                  <div className="flex flex-col items-start gap-2 md:items-end">
+                    {canManage && <AutoMapButton shopId={shop.id} />}
+                    {canManage && <BackfillButton shopId={shop.id} syncType="product" label="Quét toàn bộ" disabled={!sourceMatches} />}
                   </div>
                 </div>
               );
@@ -149,23 +153,30 @@ export default async function ShopeeProductsPage({
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
-        <SummaryCard label="Biến thể đang bán" value={summary.activeModels} />
-        <SummaryCard label="Đã ghép" value={summary.activeMapped} />
-        <SummaryCard label="Chưa ghép" value={summary.activeUnmapped} tone="warn" />
-        <SummaryCard label="Xung đột" value={summary.activeConflict} tone="danger" />
-        <SummaryCard label="Cần kiểm tra lại" value={summary.reviewRequired} tone="warn" />
-        <SummaryCard label="Ngừng bán / đã xóa" value={summary.inactiveModels} />
-      </div>
-      {summary.activeModels > 0 && summary.activeUnmapped + summary.activeConflict > 0 && (
-        <p className="text-sm text-muted-foreground">
-          Cần ghép hết các biến thể đang bán trước khi bắt đầu đồng bộ đơn hàng (SHOPEE-3).
-        </p>
+      <MetricGrid>
+        <MetricCard label="Biến thể đang bán" icon={Boxes} value={summary.activeModels.toLocaleString("vi-VN")} />
+        <MetricCard label="Đã ghép" icon={CheckCircle2} value={summary.activeMapped.toLocaleString("vi-VN")} />
+        <MetricCard label="Chưa ghép" icon={CircleDashed} value={summary.activeUnmapped.toLocaleString("vi-VN")} tone={summary.activeUnmapped > 0 ? "warning" : "neutral"} hint="đơn có biến thể này sẽ thiếu giá vốn" />
+        <MetricCard label="Xung đột" icon={TriangleAlert} value={summary.activeConflict} tone={summary.activeConflict > 0 ? "danger" : "neutral"} hint="SKU khớp nhiều sản phẩm nội bộ" />
+        <MetricCard label="Cần kiểm tra lại" icon={SearchCheck} value={summary.reviewRequired} tone={summary.reviewRequired > 0 ? "warning" : "neutral"} />
+        <MetricCard label="Ngừng bán / đã xóa" icon={Archive} value={summary.inactiveModels.toLocaleString("vi-VN")} />
+      </MetricGrid>
+      {summary.activeModels > 0 && summary.activeUnmapped + summary.activeConflict > 0 && mappingFilter !== "unmapped" && (
+        <Callout
+          tone="warning"
+          action={
+            <Button size="sm" variant="outline" nativeButton={false} render={<Link href={unmappedHref} />}>
+              Xem biến thể chưa ghép <ArrowRight />
+            </Button>
+          }
+        >
+          {summary.activeUnmapped + summary.activeConflict} biến thể đang bán chưa ghép được SKU nội bộ — đơn chứa các biến thể này sẽ thiếu giá vốn (COGS).
+        </Callout>
       )}
 
       <Card>
-        <CardHeader className="flex-row flex-wrap items-center justify-between gap-4 space-y-0">
-          <CardTitle>Biến thể Shopee ({total})</CardTitle>
+        <CardHeader className="gap-3">
+          <CardTitle>Biến thể Shopee ({total.toLocaleString("vi-VN")})</CardTitle>
           <ShopeeProductFilters
             shops={shops.map((s) => ({ id: s.id, name: s.shopName }))}
             values={{ shop: shopFilter ?? "", mapping: mappingFilter ?? "", status: filters.itemStatus ?? "", name: filters.itemName ?? "", sku: filters.channelSku ?? "", isku: filters.internalSku ?? "" }}
@@ -173,24 +184,31 @@ export default async function ShopeeProductsPage({
         </CardHeader>
         <CardContent>
           {rows.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-12 text-center">
-              <PackageSearch className="size-8 text-muted-foreground" />
-              <p className="font-medium">{hasFilter ? "Không có biến thể phù hợp." : "Chưa có dữ liệu sản phẩm Shopee — hãy chạy đồng bộ."}</p>
-            </div>
+            hasFilter ? (
+              <EmptyState variant="no-results" title="Không tìm thấy biến thể phù hợp." description="Thử bỏ bớt bộ lọc hoặc tìm theo từ khóa khác." />
+            ) : (
+              <EmptyState
+                icon={PackageSearch}
+                title="Chưa có dữ liệu sản phẩm Shopee."
+                description="Sản phẩm sẽ xuất hiện sau lần đồng bộ đầu tiên (tự động mỗi giờ)."
+                action={
+                  <Button size="sm" variant="outline" nativeButton={false} render={<Link href="/shopee/sync" />}>
+                    Xem trạng thái đồng bộ
+                  </Button>
+                }
+              />
+            )
           ) : (
             <>
-              <Table>
+              <Table stickyHeader>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Shop</TableHead>
-                    <TableHead>Sản phẩm Shopee</TableHead>
-                    <TableHead>Biến thể</TableHead>
-                    <TableHead>SKU Shopee</TableHead>
+                    <TableHead>Sản phẩm / biến thể Shopee</TableHead>
+                    <TableHead>Ghép SKU</TableHead>
                     <TableHead className="text-right">Giá Shopee</TableHead>
                     <TableHead className="text-right">Tồn Shopee</TableHead>
-                    <TableHead>SKU nội bộ</TableHead>
-                    <TableHead>Trạng thái ghép</TableHead>
                     <TableHead>Trạng thái Shopee</TableHead>
+                    {shops.length > 1 && <TableHead>Shop</TableHead>}
                     <TableHead>Đồng bộ</TableHead>
                     <TableHead className="text-right">Thao tác</TableHead>
                   </TableRow>
@@ -199,42 +217,47 @@ export default async function ShopeeProductsPage({
                   {rows.map((row) => {
                     const view = toModelView(row);
                     return (
-                      <TableRow key={row.channelModelId} className={row.isActive ? "" : "opacity-60"}>
-                        <TableCell className="whitespace-nowrap">
-                          {row.shopName}
-                          {row.dataSource === "fixture" && (
-                            <Badge variant="secondary" className="ml-1">
-                              FIXTURE
-                            </Badge>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="max-w-[260px]">
-                            <p className="truncate font-medium" title={row.itemName}>
+                      <TableRow key={row.channelModelId} className={row.isActive ? "" : "text-muted-foreground"}>
+                        <TableCell className="whitespace-normal">
+                          <div className="max-w-[340px] min-w-52">
+                            <p className="truncate font-medium text-foreground" title={row.itemName}>
                               {row.itemName}
                             </p>
-                            <p className="text-xs text-muted-foreground">
-                              #{row.externalItemId}
+                            <p className="truncate text-xs text-muted-foreground" title={row.modelName ?? undefined}>
+                              {row.isSynthetic ? "Không biến thể" : row.modelName ?? `#${row.externalModelId}`} · #{row.externalItemId}
                               {row.isKit ? " · combo" : ""}
+                              {row.dataSource === "fixture" ? " · FIXTURE" : ""}
                             </p>
+                            {row.removedAt && <p className="text-xs text-warning-text">Đã gỡ khỏi Shopee</p>}
                           </div>
                         </TableCell>
-                        <TableCell>
-                          {row.isSynthetic ? <span className="text-muted-foreground">Không biến thể</span> : row.modelName ?? `#${row.externalModelId}`}
-                          {row.removedAt && <p className="text-xs text-destructive">đã gỡ khỏi Shopee</p>}
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{row.channelSku ?? <span className="text-muted-foreground">(trống)</span>}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap">{formatDecimal(row.channelCurrentPrice, " ₫")}</TableCell>
-                        <TableCell className="text-right">{formatDecimal(row.availableStock)}</TableCell>
-                        <TableCell className="font-mono text-xs">{row.internalSku ?? "—"}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-col items-start gap-1">
-                            <Badge variant={MAPPING_VARIANT[row.mappingStatus]}>{MAPPING_LABELS[row.mappingStatus]}</Badge>
-                            {row.mappingReviewRequired && <Badge variant="destructive">Cần kiểm tra lại</Badge>}
+                        <TableCell className="whitespace-normal">
+                          {/* Shopee SKU → internal SKU, the one thing this screen is for. */}
+                          <div className="flex min-w-56 flex-wrap items-center gap-1.5 text-xs">
+                            <span className="font-mono">{row.channelSku ?? <span className="text-muted-foreground">(trống)</span>}</span>
+                            <ArrowRight aria-hidden="true" className="size-3 text-muted-foreground" />
+                            {row.internalSku ? (
+                              <span className="font-mono font-medium text-foreground" title={view.internalProductName ?? undefined}>
+                                {row.internalSku}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">chưa có</span>
+                            )}
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            <StatusBadge tone={row.isActive && row.mappingStatus === "unmapped" ? "warning" : MAPPING_STATUS_TONE[row.mappingStatus]}>{MAPPING_LABELS[row.mappingStatus]}</StatusBadge>
+                            {row.mappingReviewRequired && <StatusBadge tone="warning">Cần kiểm tra lại</StatusBadge>}
                           </div>
                         </TableCell>
+                        <TableCell className="text-right">{formatCurrency(row.channelCurrentPrice)}</TableCell>
+                        <TableCell className="text-right">{formatQuantity(row.availableStock)}</TableCell>
                         <TableCell className="text-xs">{row.itemStatus ?? "—"}</TableCell>
-                        <TableCell className="text-xs whitespace-nowrap">{fmtDate(row.lastSyncedAt)}</TableCell>
+                        {shops.length > 1 && (
+                          <TableCell className="max-w-36 truncate" title={row.shopName}>
+                            {row.shopName}
+                          </TableCell>
+                        )}
+                        <TableCell className="text-xs text-muted-foreground">{formatDateTime(row.lastSyncedAt)}</TableCell>
                         <TableCell className="text-right">
                           <ModelRowActions row={view} canMap={canMap} canManage={canManage} />
                         </TableCell>
@@ -243,23 +266,11 @@ export default async function ShopeeProductsPage({
                   })}
                 </TableBody>
               </Table>
-              <ListPagination
-                page={page}
-                totalPages={totalPages}
-                buildHref={(p) => {
-                  const sp = new URLSearchParams();
-                  for (const [k, v] of Object.entries({ shop: shopFilter, mapping: mappingFilter, status: filters.itemStatus, name: filters.itemName, sku: filters.channelSku, isku: filters.internalSku })) {
-                    if (v) sp.set(k, v);
-                  }
-                  if (p > 1) sp.set("page", String(p));
-                  const qs = sp.toString();
-                  return qs ? `/shopee/products?${qs}` : "/shopee/products";
-                }}
-              />
+              <DataTablePagination pathname="/shopee/products" query={query} page={page} pageSize={pageSize} total={total} />
             </>
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

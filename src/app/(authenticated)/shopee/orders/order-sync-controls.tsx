@@ -1,21 +1,26 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Calculator } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { LoadingButton } from "@/components/patterns/loading-button";
+import { useAsyncAction } from "@/components/patterns/use-async-action";
 
-import { backfillOrderCogsAction, type OrderActionResult } from "./actions";
+import { backfillOrderCogsAction } from "./actions";
 
 /** Database-only (no Shopee call): computes COGS for orders still missing it. */
 export function BackfillCogsButton() {
-  const [pending, startTransition] = useTransition();
-  const [result, setResult] = useState<OrderActionResult | null>(null);
+  const { run, pending } = useAsyncAction({ errorMessage: "Không tính được COGS còn thiếu. Vui lòng thử lại.", refresh: true });
   return (
-    <div className="space-y-2 border-t pt-4">
-      <Button size="sm" variant="outline" disabled={pending} onClick={() => startTransition(async () => setResult(await backfillOrderCogsAction()))}>
-        {pending ? "Đang tính..." : "Tính COGS còn thiếu"}
-      </Button>
-      {result && <p className={`text-sm ${result.ok ? "text-primary" : "text-destructive"}`}>{result.message}</p>}
-    </div>
+    <LoadingButton
+      size="sm"
+      variant="outline"
+      loading={pending}
+      loadingText="Đang tính COGS…"
+      icon={<Calculator />}
+      title="Tính giá vốn cho các đơn còn thiếu theo sổ giá vốn hiện tại — không gọi Shopee, không đổi COGS đã chốt"
+      onClick={() => run(backfillOrderCogsAction)}
+    >
+      Tính COGS còn thiếu
+    </LoadingButton>
   );
 }

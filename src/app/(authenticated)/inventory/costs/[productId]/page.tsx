@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { getLedgerSourceLinks, getProductCostLedger, getProductCostState } from "@/lib/inventory-cost/queries";
 import { COST_EVENT_LABELS } from "@/lib/inventory-cost/types";
-import { Badge } from "@/components/ui/badge";
+import { Callout } from "@/components/patterns/callout";
+import { EmptyState } from "@/components/patterns/empty-state";
+import { MetricCard } from "@/components/patterns/metric-card";
+import { PageContainer, PageHeader } from "@/components/patterns/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -25,17 +28,6 @@ const SOURCE_LABELS: Record<string, string> = {
   return_item: "Hàng trả",
 };
 
-function Stat({ label, value, tone }: { label: string; value: string; tone?: "danger" }) {
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        <p className="text-sm text-muted-foreground">{label}</p>
-        <p className={`text-xl font-bold ${tone === "danger" ? "text-destructive" : ""}`}>{value}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
 export default async function ProductCostDetailPage({ params }: { params: Promise<{ productId: string }> }) {
   const auth = await requirePermission("cost:view");
   const canManage = hasPermission(auth.profile.role, "cost:manage");
@@ -47,38 +39,34 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
   const links = await getLedgerSourceLinks(rows);
 
   return (
-    <div className="space-y-6">
-      <Link href="/inventory/costs" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+    <PageContainer>
+      <Link href="/inventory/costs" className="inline-flex items-center gap-1 rounded text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
         <ArrowLeft className="size-4" /> Giá vốn sản phẩm
       </Link>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">{product.name}</h2>
-          <p className="font-mono text-sm text-muted-foreground">
+      <PageHeader
+        title={product.name}
+        description={
+          <span className="font-mono">
             {product.sku}
             {product.supplierName ? ` · ${product.supplierName}` : ""}
-          </p>
-        </div>
-        {canManage && <RebuildCostButton productId={productId} />}
-      </div>
+          </span>
+        }
+        actions={canManage ? <RebuildCostButton productId={productId} /> : undefined}
+      />
 
       {product.negativeQuantity && (
-        <p className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          Tồn kho giá vốn đang âm. Có thể dữ liệu nhập hàng lịch sử chưa đầy đủ hoặc đơn bán đã được ghi nhận trước hàng nhập.
-        </p>
+        <Callout tone="warning">Tồn kho giá vốn đang âm. Có thể dữ liệu nhập hàng lịch sử chưa đầy đủ hoặc đơn bán đã được ghi nhận trước hàng nhập.</Callout>
       )}
       {product.needsRebuild && (
-        <p className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          Lần tự tính giá vốn gần nhất bị lỗi ({product.lastError ?? "không rõ"}). Phiếu nhập vẫn được lưu — admin hãy bấm &quot;Tính lại giá vốn&quot;.
-        </p>
+        <Callout tone="danger" title="Lần tự tính giá vốn gần nhất bị lỗi.">
+          ({product.lastError ?? "không rõ"}). Phiếu nhập vẫn được lưu — admin hãy bấm &quot;Dựng lại sổ giá vốn (sửa lỗi)&quot;.
+        </Callout>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Stat label="SL tính giá vốn" value={product.hasHistory ? formatDecimal(product.quantityOnHand) : "—"} tone={product.negativeQuantity ? "danger" : undefined} />
-        <Stat label="Giá vốn bình quân" value={product.movingAverageCost === null ? "Chưa có" : formatDecimal(product.movingAverageCost, " ₫")} />
-        <Stat label="Giá trị tồn theo giá vốn" value={product.hasHistory && product.movingAverageCost !== null ? formatDecimal(product.inventoryValue, " ₫") : "—"} />
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <MetricCard label="SL tính giá vốn" value={product.hasHistory ? formatDecimal(product.quantityOnHand) : "—"} tone={product.negativeQuantity ? "warning" : "neutral"} />
+        <MetricCard label="Giá vốn bình quân" value={product.movingAverageCost === null ? "Chưa có" : formatDecimal(product.movingAverageCost, " ₫")} />
+        <MetricCard label="Giá trị tồn theo giá vốn" value={product.hasHistory && product.movingAverageCost !== null ? formatDecimal(product.inventoryValue, " ₫") : "—"} />
       </div>
 
       <Card>
@@ -87,7 +75,7 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
         </CardHeader>
         <CardContent>
           {rows.length === 0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Chưa có lịch sử giá vốn.</p>
+            <EmptyState title="Chưa có lịch sử giá vốn." description="Sổ giá vốn bắt đầu từ phiếu nhập đầu tiên của sản phẩm." />
           ) : (
             <Table>
               <TableHeader>
@@ -112,7 +100,7 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
                       <TableCell className="text-xs whitespace-nowrap">{fmtDate(e.eventTime)}</TableCell>
                       <TableCell className="text-xs">
                         {COST_EVENT_LABELS[e.eventType]}
-                        {e.negativeInventory && <p className="text-destructive">tồn âm</p>}
+                        {e.negativeInventory && <p className="text-warning-text">tồn âm</p>}
                       </TableCell>
                       <TableCell className="text-xs">
                         {SOURCE_LABELS[e.sourceType] ?? e.sourceType}{" "}
@@ -124,12 +112,12 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
                           <span className="font-mono">{e.sourceExternalId ?? ""}</span>
                         )}
                       </TableCell>
-                      <TableCell className={`text-right ${e.quantityChange.startsWith("-") ? "text-destructive" : "text-primary"}`}>
+                      <TableCell className={`text-right ${e.quantityChange.startsWith("-") ? "text-warning-text" : "text-success-text"}`}>
                         {e.quantityChange.startsWith("-") ? "" : "+"}
                         {formatDecimal(e.quantityChange)}
                       </TableCell>
                       <TableCell className="text-right">{formatDecimal(e.qtyBefore)}</TableCell>
-                      <TableCell className={`text-right ${e.qtyAfter.startsWith("-") ? "text-destructive" : ""}`}>{formatDecimal(e.qtyAfter)}</TableCell>
+                      <TableCell className={`text-right ${e.qtyAfter.startsWith("-") ? "text-warning-text" : ""}`}>{formatDecimal(e.qtyAfter)}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{e.unitCost === null ? <span className="text-muted-foreground">Chưa tính</span> : formatDecimal(e.unitCost, " ₫")}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{formatDecimal(e.avgCostBefore, " ₫")}</TableCell>
                       <TableCell className="text-right whitespace-nowrap">{formatDecimal(e.avgCostAfter, " ₫")}</TableCell>
@@ -143,9 +131,7 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
           {total > rows.length && <p className="pt-3 text-xs text-muted-foreground">Hiển thị {rows.length} sự kiện gần nhất.</p>}
         </CardContent>
       </Card>
-      <p className="text-xs text-muted-foreground">
-        <Badge variant="outline">Lưu ý</Badge> Sổ giá vốn là bản dựng lại hiện tại. COGS của đơn hàng cũ là snapshot tại thời điểm tính và không tự thay đổi.
-      </p>
-    </div>
+      <Callout tone="neutral">Sổ giá vốn là bản dựng lại hiện tại. COGS của đơn hàng cũ là snapshot tại thời điểm tính và không tự thay đổi.</Callout>
+    </PageContainer>
   );
 }

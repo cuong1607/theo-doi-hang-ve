@@ -20,7 +20,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { saveMeaningfulOrderSnapshot } from "../core/snapshots.ts";
-import { firstFailureSummary, type SliceInput, type SliceOutcome, type SyncJobRunner } from "../core/sync-runner.ts";
+import { continuation, firstFailureSummary, type SliceInput, type SliceOutcome, type SyncJobRunner } from "../core/sync-runner.ts";
+import { mapWithConcurrency } from "../core/time-windows.ts";
 import { ShopeeApiError } from "./errors.ts";
 import { parseEscrowDetail } from "./escrow-adapter.ts";
 import { FINANCIAL_CALCULATION_VERSION } from "./financial-dictionary.ts";
@@ -192,11 +193,21 @@ export class EscrowSyncJobRunner implements SyncJobRunner {
         pendingOrderIds = (data ?? []).map((r) => r.id as string);
       }
       progress.checkpoint = { pendingOrderIds };
+      progress.stats.eligible = pendingOrderIds ? pendingOrderIds.length : await this.countCandidates(job.shop_id, config, now());
       const first = await lease.checkpoint(progress.toPatch({ windowTo: now().toISOString() }));
       if (first.cancelRequested) return { kind: "cancelled" };
     }
     const cp = progress.checkpoint!;
     const seenThisSlice = new Set<string>();
+    const concurrency = Math.max(1, config.escrowConcurrency);
+    // "remaining" for the status screen / log: what the job still has to do.
+    const refreshRemaining = async () => {
+      progress.stats.remaining = cp.pendingOrderIds ? cp.pendingOrderIds.length : await this.countCandidates(job.shop_id, config, now());
+    };
+    const stop = async (outcome: SliceOutcome): Promise<SliceOutcome> => {
+      await refreshRemaining();
+      return outcome;
+    };
 
     for (;;) {
       let batch: Array<{ id: string; force: boolean }>;
@@ -204,53 +215,30 @@ export class EscrowSyncJobRunner implements SyncJobRunner {
         batch = cp.pendingOrderIds.slice(0, config.escrowBatchSize).map((id) => ({ id, force: true }));
       } else {
         const limit = Math.min(config.escrowBatchSize, budget.apiCallsLeft);
-        if (limit < 1) return { kind: "more" };
-        const { data, error } = await this.db.rpc("get_orders_needing_escrow_sync", {
-          p_shop_id: job.shop_id,
-          p_limit: limit,
-          p_now: now().toISOString(),
-          p_statuses: [...ESCROW_ELIGIBLE_STATUSES],
-          p_refresh_window_days: config.escrowRefreshWindowDays,
-          p_refresh_interval_hours: config.escrowRefreshIntervalHours,
-          p_error_backoff_hours: config.escrowErrorBackoffHours,
-          p_calculation_version: FINANCIAL_CALCULATION_VERSION,
-        });
+        if (limit < 1 || !budget.canSpend(1)) return stop(continuation(budget, "more_records"));
+        const { data, error } = await this.db.rpc("get_orders_needing_escrow_sync", this.candidateArgs(job.shop_id, config, now(), limit));
         if (error) throw new Error(`Không đọc được đơn cần đồng bộ tài chính: ${error.message}`);
         batch = ((data ?? []) as Array<{ order_id: string }>).filter((r) => !seenThisSlice.has(r.order_id)).map((r) => ({ id: r.order_id, force: false }));
       }
       if (batch.length === 0) break;
 
-      for (const item of batch) {
-        if (!budget.canSpend(1)) return { kind: "more" };
-        seenThisSlice.add(item.id);
-        progress.incr("ordersChecked");
-        try {
-          const r = await this.sync.syncOrder(item.id, { force: item.force });
-          progress.incrIn("outcomes", r.status);
-          if (r.status === "applied" || r.status === "unchanged") {
-            progress.incr("escrowFetched");
-            if (r.status === "applied") progress.counters.updated++;
-            if (r.financialStatus === "settlement_available") progress.incr("settlementAvailable");
-            if (r.reconciliationStatus) progress.incr(r.reconciliationStatus);
-            if (r.missingCogs) progress.incr("missingCogs");
-            for (const f of r.unknownFields) progress.incrIn("unknownFields", f);
-          } else if (r.status === "not_ready") {
-            progress.incr("notReady");
-          } else if (r.status === "failed") {
-            progress.incr("errors");
-            progress.addFailure({ externalId: r.orderSn, reason: `escrow [${r.errorCode}] ${r.errorMessage ?? ""}` });
-          }
-        } catch (err) {
-          if (isJobLevelProviderError(err) || err instanceof JobRefusedError) throw err;
-          progress.incr("errors");
-          progress.addFailure({ externalId: item.id, reason: `escrow: ${errorInfo(err).message}` });
+      // ≤ escrowConcurrency get_escrow_detail calls in flight; checkpoint after every group.
+      for (let i = 0; i < batch.length; ) {
+        const affordable = Math.min(concurrency, budget.apiCallsLeft);
+        if (affordable < 1 || !budget.canSpend(1)) return stop(continuation(budget, "more_records"));
+        const group = batch.slice(i, i + affordable);
+        i += group.length;
+        for (const item of group) seenThisSlice.add(item.id);
+        await mapWithConcurrency(group, concurrency, (item) => this.processOne(item, progress));
+        if (cp.pendingOrderIds) {
+          const done = new Set(group.map((g) => g.id));
+          cp.pendingOrderIds = cp.pendingOrderIds.filter((id) => !done.has(id));
         }
-        progress.counters.fetched++;
-        if (cp.pendingOrderIds) cp.pendingOrderIds = cp.pendingOrderIds.filter((id) => id !== item.id);
         if ((await lease.checkpoint(progress.toPatch())).cancelRequested) return { kind: "cancelled" };
       }
       if (cp.pendingOrderIds && cp.pendingOrderIds.length === 0) break;
     }
+    await refreshRemaining();
 
     const failureCount = progress.failureCount;
     const summary = firstFailureSummary(progress.failures, failureCount);
@@ -263,5 +251,52 @@ export class EscrowSyncJobRunner implements SyncJobRunner {
       errorCode: summary?.code ?? null,
       errorMessage: summary?.message ?? null,
     };
+  }
+
+  /** One order of the batch. Only job-level errors (rate limit, auth, refused) escape. */
+  private async processOne(item: { id: string; force: boolean }, progress: SliceInput["progress"]) {
+    progress.incr("ordersChecked");
+    try {
+      const r = await this.sync.syncOrder(item.id, { force: item.force });
+      progress.incrIn("outcomes", r.status);
+      if (r.status === "applied" || r.status === "unchanged") {
+        progress.incr("escrowFetched");
+        if (r.status === "applied") progress.counters.updated++;
+        if (r.financialStatus === "settlement_available") progress.incr("settlementAvailable");
+        if (r.reconciliationStatus) progress.incr(r.reconciliationStatus);
+        if (r.missingCogs) progress.incr("missingCogs");
+        for (const f of r.unknownFields) progress.incrIn("unknownFields", f);
+      } else if (r.status === "not_ready") {
+        progress.incr("notReady");
+      } else if (r.status === "failed") {
+        progress.incr("errors");
+        progress.addFailure({ externalId: r.orderSn, reason: `escrow [${r.errorCode}] ${r.errorMessage ?? ""}` });
+      }
+    } catch (err) {
+      if (isJobLevelProviderError(err) || err instanceof JobRefusedError) throw err;
+      progress.incr("errors");
+      progress.addFailure({ externalId: item.id, reason: `escrow: ${errorInfo(err).message}` });
+    }
+    progress.counters.fetched++;
+  }
+
+  /** The candidate rule's parameters — one policy (sync-config) for the list and the count. */
+  private candidateArgs(shopId: string, config: SliceInput["config"], at: Date, limit?: number) {
+    return {
+      p_shop_id: shopId,
+      ...(limit !== undefined ? { p_limit: limit } : {}),
+      p_now: at.toISOString(),
+      p_statuses: [...ESCROW_ELIGIBLE_STATUSES],
+      p_refresh_window_days: config.escrowRefreshWindowDays,
+      p_refresh_interval_hours: config.escrowRefreshIntervalHours,
+      p_error_backoff_hours: config.escrowErrorBackoffHours,
+      p_calculation_version: FINANCIAL_CALCULATION_VERSION,
+    };
+  }
+
+  private async countCandidates(shopId: string, config: SliceInput["config"], at: Date): Promise<number> {
+    const { data, error } = await this.db.rpc("count_orders_needing_escrow_sync", this.candidateArgs(shopId, config, at));
+    if (error) throw new Error(`Không đếm được đơn cần đồng bộ tài chính: ${error.message}`);
+    return Number(data ?? 0);
   }
 }

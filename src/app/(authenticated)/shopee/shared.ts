@@ -3,6 +3,7 @@
 // never converted to floats. NULL renders as "—" / a status label, never as 0.
 import type { ChannelModelListRow } from "@/lib/channels/core/product-queries";
 import type { MappingStatus } from "@/lib/channels/core/types";
+import { formatDateTime, formatDecimalString } from "@/lib/ui/format";
 
 import type { ModelRowView } from "./products/model-row-actions";
 
@@ -13,23 +14,15 @@ export const MAPPING_LABELS: Record<MappingStatus, string> = {
   mapping_conflict: "Xung đột",
 };
 
-export const MAPPING_VARIANT: Record<MappingStatus, "default" | "secondary" | "destructive" | "outline"> = {
-  unmapped: "secondary",
-  auto_mapped: "outline",
-  manual_mapped: "default",
-  mapping_conflict: "destructive",
-};
+/** URL query keys of the Shopee product list filters. */
+export const PRODUCT_FILTER_KEYS = ["shop", "mapping", "status", "name", "sku", "isku"] as const;
 
-const dateTime = new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-export const fmtDate = (iso: string | null) => (iso ? dateTime.format(new Date(iso)) : "—");
+/** dd/MM/yyyy HH:mm (Asia/Ho_Chi_Minh) — src/lib/ui/format.ts. */
+export const fmtDate = (iso: string | null) => formatDateTime(iso);
 
 /** Formats a NUMERIC string for display without converting it to a float. */
 export function formatDecimal(value: string | null, unit = ""): string {
-  if (value === null) return "—";
-  const [intPart, frac = ""] = value.replace(/^-/, "").split(".");
-  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-  const trimmedFrac = frac.replace(/0+$/, "");
-  return `${value.startsWith("-") ? "-" : ""}${grouped}${trimmedFrac ? `,${trimmedFrac}` : ""}${unit}`;
+  return value === null ? "—" : formatDecimalString(value, unit);
 }
 
 export function toModelView(row: ChannelModelListRow): ModelRowView {

@@ -6,10 +6,11 @@ import Link from "next/link";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
 import { formatCurrency } from "@/lib/format";
-import { PAYMENT_STATUS_BADGE_VARIANT, PAYMENT_STATUS_LABELS } from "@/lib/debt/status";
+import { PAYMENT_STATUS_LABELS } from "@/lib/debt/status";
+import { PAYMENT_STATUS_TONE } from "@/lib/ui/status";
+import { StatusBadge } from "@/components/patterns/status-badge";
 import type { InvoiceDebtRow } from "@/lib/debt/invoice-debt";
 import { createPayment, type PaymentFormState } from "@/lib/payments/actions";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -199,13 +200,13 @@ export function DebtInvoiceSelection({ rows, canPay }: { rows: InvoiceDebtRow[];
                   <TableCell>{formatCurrency(row.vat_amount)}</TableCell>
                   <TableCell className="font-medium">{formatCurrency(row.final_amount)}</TableCell>
                   <TableCell>{formatCurrency(row.paid_amount)}</TableCell>
-                  <TableCell className={row.remaining_amount > 0 ? "font-medium text-destructive" : undefined}>
+                  <TableCell className={row.remaining_amount > 0 ? "font-medium text-warning-text" : undefined}>
                     {formatCurrency(row.remaining_amount)}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={PAYMENT_STATUS_BADGE_VARIANT[row.payment_status]}>
+                    <StatusBadge tone={PAYMENT_STATUS_TONE[row.payment_status]}>
                       {PAYMENT_STATUS_LABELS[row.payment_status]}
-                    </Badge>
+                    </StatusBadge>
                   </TableCell>
                   <TableCell className="text-right">
                     <Button

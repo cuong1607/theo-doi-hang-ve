@@ -20,7 +20,7 @@ import type { SyncConfig } from "./sync-config.ts";
 import { claimNextSyncJob, JobLease, LeaseLostError, recoverStaleSyncJobs, RUNNABLE_SYNC_TYPES, type SyncJobRow } from "./sync-jobs.ts";
 import { finishSyncLog, saveSyncState, startSyncLog } from "./sync-log.ts";
 import { JobProgress } from "./sync-progress.ts";
-import type { SliceOutcome, SyncJobRunner } from "./sync-runner.ts";
+import type { ContinuationReason, RemainingWork, SliceOutcome, SyncJobRunner } from "./sync-runner.ts";
 
 export interface RunnerHandle {
   runner: SyncJobRunner;
@@ -41,6 +41,9 @@ export interface SliceReport {
   apiCalls: number;
   durationMs: number;
   errorCode?: string;
+  /** status "pending": why the slice stopped (SHOPEE-PERF-2). */
+  continuationReason?: ContinuationReason;
+  remainingWork?: RemainingWork;
 }
 
 export interface BurstReport {
@@ -63,6 +66,7 @@ export class SyncWorker {
   private readonly clock: () => number;
   private readonly random?: () => number;
   private readonly log: WorkerLogger;
+  private readonly region: string;
 
   constructor(deps: {
     db: SupabaseClient;
@@ -74,7 +78,10 @@ export class SyncWorker {
     clock?: () => number;
     random?: () => number;
     logger?: WorkerLogger;
+    /** Where this worker runs (VERCEL_REGION) — tagged on every slice for the region benchmark. */
+    region?: string;
   }) {
+    this.region = deps.region ?? "local";
     this.db = deps.db;
     this.config = deps.config;
     this.workerId = deps.workerId;
@@ -115,6 +122,8 @@ export class SyncWorker {
     const lease = new JobLease(this.db, job, this.workerId, this.now);
     const budget = new ExecutionBudget({ timeMs: Math.min(this.config.sliceTimeBudgetMs, timeLeftMs), maxApiCalls: this.config.maxSliceApiCalls, clock: this.clock });
     const progress = new JobProgress<unknown>(job, this.clock);
+    progress.attachDbLatency(lease.dbLatency);
+    progress.markRegion(this.region);
     const base = { jobId: job.id, shopId: job.shop_id, syncType: job.sync_type, mode: job.mode };
     const report = (status: SliceReport["status"], extra: Partial<SliceReport> = {}): SliceReport => {
       const r: SliceReport = { ...base, status, apiCalls: Object.values(progress.apiCalls()).reduce((a, b) => a + b, 0) - this.baseCalls(job), durationMs: this.clock() - started, ...extra };
@@ -145,9 +154,14 @@ export class SyncWorker {
 
     try {
       if (outcome.kind === "more") {
+        // Normal continuation: back to pending (due now), never success / retry / failed.
+        progress.meta.continuationReason = outcome.reason ?? "batch_limit";
+        progress.meta.remainingWork = outcome.remaining ?? null;
         await lease.continueLater(progress.toPatch());
-        return report("pending");
+        return report("pending", { continuationReason: outcome.reason ?? "batch_limit", remainingWork: outcome.remaining });
       }
+      delete progress.meta.continuationReason;
+      delete progress.meta.remainingWork;
       if (outcome.kind === "cancelled") {
         await lease.cancelled(progress.toPatch(), job.cancelled_by);
         await this.closeJob(job, progress, "cancelled", { code: "cancelled", message: "Đã hủy theo yêu cầu." }, null);

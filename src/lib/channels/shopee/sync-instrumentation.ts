@@ -15,6 +15,7 @@
 // Metadata only — never tokens, signatures or payloads.
 // ============================================================
 import type { ExecutionBudget } from "../core/retry-policy.ts";
+import { emptyLatency, recordLatency, type LatencyStats } from "../core/sync-progress.ts";
 import { ShopeeApiError } from "./errors.ts";
 import type { ListOrdersInput, OrderProviderContext, ShopeeOrderProvider } from "./order-provider.ts";
 import type { PaymentProviderContext, ShopeePaymentProvider } from "./payment-provider.ts";
@@ -23,21 +24,28 @@ import type { ShopeeTokenSource } from "./token.ts";
 
 export class ApiCallMeter {
   readonly calls: Record<string, number> = {};
+  /** SHOPEE-PERF-2: wall-clock latency per api name (region benchmark). */
+  readonly latency: Record<string, LatencyStats> = {};
   rateLimitHits = 0;
   private readonly budget: ExecutionBudget | null;
+  private readonly clock: () => number;
 
-  constructor(budget: ExecutionBudget | null = null) {
+  constructor(budget: ExecutionBudget | null = null, clock: () => number = Date.now) {
     this.budget = budget;
+    this.clock = clock;
   }
 
   async track<T>(apiName: string, fn: () => Promise<T>): Promise<T> {
     this.calls[apiName] = (this.calls[apiName] ?? 0) + 1;
     this.budget?.spend(1);
+    const started = this.clock();
     try {
       return await fn();
     } catch (err) {
       if (err instanceof ShopeeApiError && err.category === "rate_limit") this.rateLimitHits++;
       throw err;
+    } finally {
+      recordLatency((this.latency[apiName] ??= emptyLatency()), this.clock() - started);
     }
   }
 

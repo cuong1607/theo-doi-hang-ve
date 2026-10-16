@@ -4,10 +4,11 @@ import { AlertTriangle, PackageSearch, Wallet } from "lucide-react";
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getOutstandingList, getOutstandingSummary, type OutstandingStatus } from "@/lib/outstanding/list";
-import { STATUS_BADGE_VARIANT, STATUS_LABELS } from "@/lib/outstanding/status";
+import { STATUS_LABELS } from "@/lib/outstanding/status";
+import { OUTSTANDING_STATUS_TONE } from "@/lib/ui/status";
+import { StatusBadge } from "@/components/patterns/status-badge";
 import { formatCurrency } from "@/lib/format";
 import { ListPagination } from "@/components/list-pagination";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -197,9 +198,9 @@ export default async function OutstandingPage({
                           {formatCurrency(row.remaining_value)}
                         </TableCell>
                         <TableCell>
-                          <Badge variant={STATUS_BADGE_VARIANT[row.status]}>
+                          <StatusBadge tone={OUTSTANDING_STATUS_TONE[row.status]}>
                             {STATUS_LABELS[row.status]}
-                          </Badge>
+                          </StatusBadge>
                         </TableCell>
                         <TableCell className="text-right">
                           <Button

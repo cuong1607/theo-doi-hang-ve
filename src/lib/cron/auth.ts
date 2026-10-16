@@ -20,10 +20,19 @@ export function isAuthorizedCronSecret(authHeader: string | null, expectedSecret
 }
 
 /**
- * SHOPEE-PERF-1 internal endpoints (/api/internal/*): SYNC_WORKER_SECRET
- * (for pg_cron / an external scheduler / the worker's own chaining) or
- * CRON_SECRET (what Vercel Cron sends). Both unset → always refused.
+ * Internal endpoints (/api/internal/*): SHOPEE_SYNC_INTERNAL_SECRET
+ * (SHOPEE-PERF-2 name — pg_cron sends it), SYNC_WORKER_SECRET (PERF-1 name,
+ * still accepted) or CRON_SECRET (what Vercel Cron sends). None set →
+ * always refused.
  */
+const INTERNAL_SECRET_VARS = ["SHOPEE_SYNC_INTERNAL_SECRET", "SYNC_WORKER_SECRET", "CRON_SECRET"] as const;
+
 export function isAuthorizedInternalRequest(authHeader: string | null, env: Record<string, string | undefined>): boolean {
-  return isAuthorizedCronSecret(authHeader, env.SYNC_WORKER_SECRET) || isAuthorizedCronSecret(authHeader, env.CRON_SECRET);
+  return INTERNAL_SECRET_VARS.some((name) => isAuthorizedCronSecret(authHeader, env[name]));
+}
+
+/** The secret this server uses to call its own internal endpoints (first one set). */
+export function internalSecret(env: Record<string, string | undefined>): string | null {
+  for (const name of INTERNAL_SECRET_VARS) if (env[name]) return env[name]!;
+  return null;
 }

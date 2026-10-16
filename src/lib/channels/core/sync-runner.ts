@@ -23,8 +23,18 @@ export interface SliceInput<C = unknown> {
   now: () => Date;
 }
 
+/**
+ * SHOPEE-PERF-2: why a slice stopped with work left (normal continuation —
+ * the job goes back to pending, never to retry / failed / success):
+ *   reason     time_budget (slice deadline) | batch_limit (API-call cap)
+ *   remaining  more_pages (discovery not finished) | more_details (queued
+ *              detail fetches) | more_records (escrow candidates left)
+ */
+export type ContinuationReason = "time_budget" | "batch_limit";
+export type RemainingWork = "more_pages" | "more_details" | "more_records";
+
 export type SliceOutcome =
-  | { kind: "more" }
+  | { kind: "more"; reason?: ContinuationReason; remaining?: RemainingWork }
   | { kind: "cancelled" }
   | {
       kind: "done";
@@ -39,6 +49,11 @@ export type SliceOutcome =
 
 export interface SyncJobRunner {
   runSlice(input: SliceInput): Promise<SliceOutcome>;
+}
+
+/** "Stop here, more to do" — reason read off the slice budget. */
+export function continuation(budget: ExecutionBudget, remaining: RemainingWork): SliceOutcome {
+  return { kind: "more", reason: budget.expired ? "time_budget" : "batch_limit", remaining };
 }
 
 /** First record failure as the log's error (or a fatal one). */

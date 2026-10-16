@@ -28,6 +28,20 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  /* UIUX-1 semantic status tones: solid (icons, bars), soft (badge/callout
+     background), text (readable foreground on soft). Never hardcode
+     amber-/green-/red- classes in pages — use these. */
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-text: var(--success-text);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-text: var(--warning-text);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-text: var(--danger-text);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-text: var(--info-text);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -71,6 +85,17 @@
   --accent: oklch(0.94 0.035 355);
   --accent-foreground: oklch(0.36 0.15 355);
   --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.58 0.13 155);
+  --success-soft: oklch(0.96 0.035 155);
+  --success-text: oklch(0.42 0.1 155);
+  --warning: oklch(0.74 0.15 70);
+  --warning-soft: oklch(0.97 0.045 85);
+  --warning-text: oklch(0.47 0.11 60);
+  --danger-soft: oklch(0.97 0.022 27);
+  --danger-text: oklch(0.5 0.19 27);
+  --info: oklch(0.58 0.14 250);
+  --info-soft: oklch(0.96 0.025 250);
+  --info-text: oklch(0.45 0.13 255);
   --border: oklch(0.87 0.022 355);
   --input: oklch(0.87 0.022 355);
   --ring: oklch(0.6 0.17 355);
@@ -107,6 +132,17 @@
   --accent: oklch(0.3 0.06 355);
   --accent-foreground: oklch(0.86 0.08 355);
   --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.72 0.14 155);
+  --success-soft: oklch(0.3 0.05 155);
+  --success-text: oklch(0.82 0.11 155);
+  --warning: oklch(0.8 0.14 75);
+  --warning-soft: oklch(0.32 0.06 70);
+  --warning-text: oklch(0.86 0.11 80);
+  --danger-soft: oklch(0.3 0.07 25);
+  --danger-text: oklch(0.8 0.12 25);
+  --info: oklch(0.72 0.12 250);
+  --info-soft: oklch(0.3 0.05 250);
+  --info-text: oklch(0.83 0.09 250);
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 17%);
   --ring: oklch(0.72 0.15 355);
@@ -141,5 +177,76 @@
   h4,
   [data-slot="card-title"] {
     color: var(--heading);
+  }
+}
+
+/* ------------------------------------------------------------------
+   UIUX-1 motion: short (150–250 ms), ease-out, nothing bouncy. Large
+   tables and numbers are never animated. Respect reduced motion.
+   ------------------------------------------------------------------ */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes progress-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@utility animate-page-in {
+  animation: page-in 200ms ease-out both;
+}
+
+@utility animate-skeleton {
+  animation: skeleton-pulse 1.8s ease-in-out infinite;
+}
+
+@utility animate-progress-indeterminate {
+  animation: progress-indeterminate 1.4s ease-in-out infinite;
+}
+
+@utility animate-toast-in {
+  animation: toast-in 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

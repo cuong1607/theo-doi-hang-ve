@@ -16,7 +16,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { ExecutionBudget } from "../core/retry-policy.ts";
-import { MAX_BACKFILL_DAYS, SYNC_PRIORITY, type SyncConfig } from "../core/sync-config.ts";
+import { MAX_BACKFILL_DAYS, syncJobPriority, type SyncConfig } from "../core/sync-config.ts";
+import { markHeartbeatError, markHeartbeatRun, markHeartbeatSuccess, SCHEDULER_HEARTBEAT } from "../core/sync-heartbeat.ts";
 import { enqueueSyncJob, recoverStaleSyncJobs, SyncJobError, type EnqueueResult, type RunnableSyncType, type SyncJobRow, type SyncMode } from "../core/sync-jobs.ts";
 import type { RunnerFactory, RunnerHandle } from "../core/sync-worker.ts";
 import { OrderSyncJobRunner, MAX_REPAIR_ORDER_SNS } from "./order-sync-job.ts";
@@ -71,13 +72,11 @@ export async function requestShopeeSync(db: SupabaseClient, req: ShopeeSyncReque
     }
   }
 
-  const priority =
-    req.mode === "manual" ? SYNC_PRIORITY.manual : req.mode === "incremental" ? SYNC_PRIORITY.incremental : req.mode === "repair" ? SYNC_PRIORITY.repair : SYNC_PRIORITY.backfill;
   return enqueueSyncJob(db, {
     shopId: req.shopId,
     syncType: req.syncType,
     mode: req.mode,
-    priority,
+    priority: syncJobPriority(req.mode, req.syncType),
     windowFrom,
     windowTo,
     metadata: { trigger: req.createdBy ? "user" : "scheduler", ...(scope ? { scope } : {}) },
@@ -207,6 +206,56 @@ export async function runShopeeSyncScheduler(db: SupabaseClient, options: { conf
     }
   }
   return result;
+}
+
+export interface SchedulerTickResult extends SchedulerResult {
+  /** Finished jobs older than config.jobRetentionDays deleted this run. */
+  pruned: number;
+  pruneError: string | null;
+  /** At least one job is claimable now → the caller starts worker burst(s). */
+  workDue: boolean;
+  durationMs: number;
+}
+
+/** Old finished jobs removed per scheduler run (bounded; the backlog clears over a few runs). */
+const PRUNE_BATCH = 500;
+
+/**
+ * SHOPEE-PERF-2: one cron tick of the scheduler, with health tracking:
+ *   heartbeat "run" → recover stale + enqueue due jobs → prune old finished
+ *   jobs → heartbeat "success" (or "error", then rethrow).
+ * Starting workers is the caller's job (route: after() bursts).
+ */
+export async function runShopeeSchedulerTick(db: SupabaseClient, options: { config: SyncConfig; providerMode: ProviderMode; now?: Date }): Promise<SchedulerTickResult> {
+  const started = Date.now();
+  const now = options.now ?? new Date();
+  await markHeartbeatRun(db, SCHEDULER_HEARTBEAT, now);
+  try {
+    const result = await runShopeeSyncScheduler(db, options);
+    // Housekeeping never fails the tick.
+    let pruned = 0;
+    let pruneError: string | null = null;
+    const { data: prunedRows, error: pruneErr } = await db.rpc("prune_channel_sync_jobs", { p_older_than_days: options.config.jobRetentionDays, p_limit: PRUNE_BATCH });
+    if (pruneErr) pruneError = pruneErr.message.slice(0, 200);
+    else pruned = Number(prunedRows ?? 0);
+    const workDue = await hasDueSyncJobs(db);
+    const tick: SchedulerTickResult = { ...result, pruned, pruneError, workDue, durationMs: Date.now() - started };
+    await markHeartbeatSuccess(db, SCHEDULER_HEARTBEAT, {
+      recovered: tick.recovered,
+      enqueued: tick.enqueued.length,
+      alreadyQueued: tick.alreadyQueued.length,
+      notDue: tick.notDue,
+      skippedShops: tick.skippedShops.length,
+      pruned,
+      pruneError,
+      workDue,
+      durationMs: tick.durationMs,
+    });
+    return tick;
+  } catch (err) {
+    await markHeartbeatError(db, SCHEDULER_HEARTBEAT, err instanceof Error ? err.message : String(err)).catch(() => undefined);
+    throw err;
+  }
 }
 
 /** True when at least one job is claimable now (used to decide whether to chain another worker run). */

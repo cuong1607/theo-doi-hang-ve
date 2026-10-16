@@ -1,62 +1,64 @@
 import Link from "next/link";
-import { Calculator, Info } from "lucide-react";
+import { Calculator } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { getProductCostOverview, type CostWarningFilter } from "@/lib/inventory-cost/queries";
-import { Badge } from "@/components/ui/badge";
+import { formatCurrency, formatDateTime, formatQuantity } from "@/lib/ui/format";
+import { parsePage, parsePageSize } from "@/lib/ui/list-query";
+import { Callout } from "@/components/patterns/callout";
+import { DataTablePagination } from "@/components/patterns/data-table-pagination";
+import { EmptyState } from "@/components/patterns/empty-state";
+import { PageContainer, PageHeader } from "@/components/patterns/page-header";
+import { StatusBadge } from "@/components/patterns/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ListPagination } from "@/components/list-pagination";
 
-import { fmtDate, formatDecimal } from "../../shopee/shared";
 import { CostFilters } from "./cost-filters";
 import { RebuildCostButton } from "./rebuild-button";
 
 export const dynamic = "force-dynamic";
 
-const PAGE_SIZE = 30;
 const WARNINGS = new Set(["negative", "missing_cost", "no_history", "needs_rebuild"]);
 
-export default async function InventoryCostsPage({ searchParams }: { searchParams: Promise<{ q?: string; warning?: string; page?: string }> }) {
+export default async function InventoryCostsPage({ searchParams }: { searchParams: Promise<{ q?: string; warning?: string; page?: string; size?: string }> }) {
   const auth = await requirePermission("cost:view");
   const canManage = hasPermission(auth.profile.role, "cost:manage");
   const params = await searchParams;
-  const page = Math.max(1, Number(params.page) || 1);
+  const page = parsePage(params.page);
+  const pageSize = parsePageSize(params.size);
   const q = params.q?.trim() ?? "";
   const warning = WARNINGS.has(params.warning ?? "") ? (params.warning as CostWarningFilter) : undefined;
-  const { rows, total } = await getProductCostOverview({ search: q || undefined, warning }, page, PAGE_SIZE);
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const { rows, total } = await getProductCostOverview({ search: q || undefined, warning }, page, pageSize);
+  const hasFilter = Boolean(q || warning);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Giá vốn sản phẩm</h2>
-          <p className="text-muted-foreground">Giá vốn bình quân di động tính từ phiếu nhập hàng và đơn bán đã ghi nhận.</p>
-        </div>
-        {canManage && <RebuildCostButton />}
-      </div>
+    <PageContainer>
+      <PageHeader
+        title="Giá vốn sản phẩm"
+        description="Giá vốn bình quân di động tính từ phiếu nhập hàng và đơn bán đã ghi nhận — tự cập nhật khi có phiếu nhập hoặc đơn mới."
+        actions={canManage ? <RebuildCostButton /> : undefined}
+      />
 
-      <p className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-        <Info className="mt-0.5 size-4 shrink-0" />
+      <Callout tone="info">
         &quot;SL tính giá vốn&quot; = hàng nhập đã biết trừ hàng bán đã ghi nhận. Đây không phải tồn kho thực tế cho tới khi kiểm kê / nhập tồn đầu kỳ.
-      </p>
+      </Callout>
 
       <Card>
-        <CardHeader className="flex-row flex-wrap items-center justify-between gap-4 space-y-0">
-          <CardTitle>Sản phẩm ({total})</CardTitle>
+        <CardHeader className="gap-3">
+          <CardTitle>Sản phẩm ({total.toLocaleString("vi-VN")})</CardTitle>
           <CostFilters q={q} warning={warning ?? ""} />
         </CardHeader>
         <CardContent>
           {rows.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 py-12 text-center">
-              <Calculator className="size-8 text-muted-foreground" />
-              <p className="font-medium">Không có sản phẩm phù hợp.</p>
-            </div>
+            hasFilter ? (
+              <EmptyState variant="no-results" title="Không tìm thấy sản phẩm phù hợp." description="Thử từ khóa khác hoặc bỏ lọc cảnh báo." />
+            ) : (
+              <EmptyState icon={Calculator} title="Chưa có sản phẩm nào." description="Giá vốn xuất hiện khi sản phẩm có phiếu nhập." />
+            )
           ) : (
             <>
-              <Table>
+              <Table stickyHeader>
                 <TableHeader>
                   <TableRow>
                     <TableHead>SKU</TableHead>
@@ -72,54 +74,44 @@ export default async function InventoryCostsPage({ searchParams }: { searchParam
                   {rows.map((r) => (
                     <TableRow key={r.productId}>
                       <TableCell className="font-mono text-xs">
-                        <Link href={`/inventory/costs/${r.productId}`} className="text-primary underline-offset-4 hover:underline">
+                        <Link href={`/inventory/costs/${r.productId}`} className="rounded text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
                           {r.sku}
                         </Link>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="max-w-[320px] truncate" title={r.name}>
                         {r.name}
                         {!r.isActive && (
-                          <Badge variant="secondary" className="ml-1">
+                          <StatusBadge tone="neutral" icon={false} className="ml-1.5">
                             Ngừng HĐ
-                          </Badge>
+                          </StatusBadge>
                         )}
                       </TableCell>
-                      <TableCell className={`text-right ${r.negativeQuantity ? "text-destructive" : ""}`}>{r.hasHistory ? formatDecimal(r.quantityOnHand) : "—"}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{r.movingAverageCost === null ? <span className="text-muted-foreground">Chưa có</span> : formatDecimal(r.movingAverageCost, " ₫")}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap">{r.hasHistory && r.movingAverageCost !== null ? formatDecimal(r.inventoryValue, " ₫") : "—"}</TableCell>
-                      <TableCell className="text-xs whitespace-nowrap">{fmtDate(r.lastEventTime)}</TableCell>
+                      <TableCell className={`text-right ${r.negativeQuantity ? "font-medium text-warning-text" : ""}`}>{r.hasHistory ? formatQuantity(r.quantityOnHand) : "—"}</TableCell>
+                      <TableCell className="text-right">{r.movingAverageCost === null ? <span className="text-muted-foreground">Chưa có</span> : formatCurrency(r.movingAverageCost)}</TableCell>
+                      <TableCell className="text-right">{r.hasHistory && r.movingAverageCost !== null ? formatCurrency(r.inventoryValue) : "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{formatDateTime(r.lastEventTime)}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
-                          {r.negativeQuantity && <Badge variant="destructive">Tồn tính giá vốn âm</Badge>}
-                          {r.missingCost && <Badge variant="destructive">Thiếu dữ liệu giá vốn</Badge>}
-                          {!r.hasHistory && <Badge variant="secondary">Chưa có lịch sử</Badge>}
+                          {r.negativeQuantity && <StatusBadge tone="warning">Tồn tính giá vốn âm</StatusBadge>}
+                          {r.missingCost && <StatusBadge tone="warning">Thiếu dữ liệu giá vốn</StatusBadge>}
+                          {!r.hasHistory && <StatusBadge tone="neutral">Chưa có lịch sử</StatusBadge>}
                           {r.needsRebuild && (
-                            <Badge variant="destructive" title={r.lastError ?? ""}>
+                            <StatusBadge tone="danger" title={r.lastError ?? ""}>
                               Cần tính lại
-                            </Badge>
+                            </StatusBadge>
                           )}
+                          {!r.negativeQuantity && !r.missingCost && r.hasHistory && !r.needsRebuild && <span className="text-xs text-muted-foreground">—</span>}
                         </div>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-              <ListPagination
-                page={page}
-                totalPages={totalPages}
-                buildHref={(p) => {
-                  const sp = new URLSearchParams();
-                  if (q) sp.set("q", q);
-                  if (warning) sp.set("warning", warning);
-                  if (p > 1) sp.set("page", String(p));
-                  const qs = sp.toString();
-                  return qs ? `/inventory/costs?${qs}` : "/inventory/costs";
-                }}
-              />
+              <DataTablePagination pathname="/inventory/costs" query={{ q: q || undefined, warning }} page={page} pageSize={pageSize} total={total} />
             </>
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }

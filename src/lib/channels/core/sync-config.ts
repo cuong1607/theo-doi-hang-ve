@@ -33,10 +33,27 @@ export interface SyncConfig {
   /** Scheduler cadence per sync type. */
   orderIntervalMinutes: number;
   productIntervalMinutes: number;
-  /** Self-chaining worker hops after a burst when work remains (0 = off). */
+  /**
+   * Self-chaining worker hops after a burst when work remains (0 = off).
+   * SHOPEE-PERF-2: off by default — the per-minute cron drains the queue;
+   * chaining stays available for setups without a frequent cron.
+   */
   maxChainHops: number;
   /** SHOPEE-5 escrow: orders fetched per slice (each = 1 get_escrow_detail call). */
   escrowBatchSize: number;
+  /** SHOPEE-PERF-2: get_escrow_detail calls in flight inside one escrow job. */
+  escrowConcurrency: number;
+  /**
+   * SHOPEE-PERF-2: worker bursts one scheduler run starts (≤ globalWorkers;
+   * the claim's global cap still decides how many jobs actually run).
+   */
+  schedulerWorkerTriggers: number;
+  /** Expected cron cadence of the scheduler (pg_cron: every minute). */
+  schedulerIntervalMinutes: number;
+  /** The UI warns when the scheduler has not run for this long. */
+  schedulerWarnAfterMinutes: number;
+  /** Finished (success / cancelled) jobs older than this are pruned by the scheduler. */
+  jobRetentionDays: number;
   /** Scheduler cadence for escrow jobs. */
   escrowIntervalMinutes: number;
   /** After completion, escrow is re-fetched this many days (it can still change). */
@@ -67,11 +84,16 @@ export const SYNC_CONFIG_DEFAULTS: SyncConfig = {
   sliceTimeBudgetMs: 20_000,
   workerTimeBudgetMs: 45_000,
   staleJobMinutes: 3,
-  orderIntervalMinutes: 10,
+  orderIntervalMinutes: 5,
   productIntervalMinutes: 60,
-  maxChainHops: 10,
+  maxChainHops: 0,
   escrowBatchSize: 20,
-  escrowIntervalMinutes: 60,
+  escrowConcurrency: 2,
+  schedulerWorkerTriggers: 1,
+  schedulerIntervalMinutes: 1,
+  schedulerWarnAfterMinutes: 5,
+  jobRetentionDays: 30,
+  escrowIntervalMinutes: 15,
   escrowRefreshWindowDays: 14,
   escrowRefreshIntervalHours: 24,
   escrowErrorBackoffHours: 6,
@@ -93,6 +115,11 @@ const ENV_KEYS: Record<NumericKey, { key: string; min: number; max: number }> = 
   productIntervalMinutes: { key: "SHOPEE_SYNC_PRODUCT_INTERVAL_MINUTES", min: 5, max: 7 * 24 * 60 },
   maxChainHops: { key: "SHOPEE_SYNC_MAX_CHAIN_HOPS", min: 0, max: 50 },
   escrowBatchSize: { key: "SHOPEE_SYNC_ESCROW_BATCH_SIZE", min: 1, max: 100 },
+  escrowConcurrency: { key: "SHOPEE_SYNC_ESCROW_CONCURRENCY", min: 1, max: 5 },
+  schedulerWorkerTriggers: { key: "SHOPEE_SYNC_SCHEDULER_WORKER_TRIGGERS", min: 1, max: 5 },
+  schedulerIntervalMinutes: { key: "SHOPEE_SYNC_SCHEDULER_INTERVAL_MINUTES", min: 1, max: 60 },
+  schedulerWarnAfterMinutes: { key: "SHOPEE_SYNC_SCHEDULER_WARN_AFTER_MINUTES", min: 2, max: 24 * 60 },
+  jobRetentionDays: { key: "SHOPEE_SYNC_JOB_RETENTION_DAYS", min: 1, max: 365 },
   escrowIntervalMinutes: { key: "SHOPEE_SYNC_ESCROW_INTERVAL_MINUTES", min: 5, max: 7 * 24 * 60 },
   escrowRefreshWindowDays: { key: "SHOPEE_SYNC_ESCROW_REFRESH_WINDOW_DAYS", min: 0, max: 90 },
   escrowRefreshIntervalHours: { key: "SHOPEE_SYNC_ESCROW_REFRESH_INTERVAL_HOURS", min: 1, max: 24 * 30 },
@@ -125,16 +152,36 @@ export function getSyncConfig(env: Env = process.env): SyncConfig & { warnings: 
     warnings.push("SHOPEE_SYNC_SLICE_BUDGET_MS lớn hơn SHOPEE_SYNC_WORKER_BUDGET_MS — giới hạn lại bằng ngân sách worker.");
     config.sliceTimeBudgetMs = config.workerTimeBudgetMs;
   }
+  if (config.schedulerWorkerTriggers > config.globalWorkers) {
+    warnings.push("SHOPEE_SYNC_SCHEDULER_WORKER_TRIGGERS lớn hơn SHOPEE_SYNC_GLOBAL_WORKERS — giới hạn lại bằng số job chạy đồng thời.");
+    config.schedulerWorkerTriggers = config.globalWorkers;
+  }
+  if (config.schedulerWarnAfterMinutes < config.schedulerIntervalMinutes * 2) {
+    warnings.push("SHOPEE_SYNC_SCHEDULER_WARN_AFTER_MINUTES nhỏ hơn 2 chu kỳ scheduler — nâng lên 3 chu kỳ.");
+    config.schedulerWarnAfterMinutes = config.schedulerIntervalMinutes * 3;
+  }
   return { ...config, warnings };
 }
 
-/** Job priorities: LOWER value is picked FIRST. */
+/**
+ * Job priorities: LOWER value is picked FIRST. Live data wins over
+ * financial refresh, which wins over the catalog; a user's click (manual)
+ * or a repair jumps the queue; a historical backfill never blocks anything.
+ */
 export const SYNC_PRIORITY = {
-  manual: 5,
-  incremental: 10,
-  repair: 50,
+  manual: { order: 1, escrow: 2, product: 3 },
+  repair: 5,
+  incremental: { order: 10, escrow: 20, product: 30 },
   backfill: 100,
 } as const;
+
+/** Priority of a job (unknown sync types queue after the known ones of the same mode). */
+export function syncJobPriority(mode: "incremental" | "manual" | "repair" | "backfill", syncType: string): number {
+  if (mode === "repair") return SYNC_PRIORITY.repair;
+  if (mode === "backfill") return SYNC_PRIORITY.backfill;
+  const table = SYNC_PRIORITY[mode] as Record<string, number>;
+  return table[syncType] ?? (mode === "manual" ? 4 : 40);
+}
 
 /** Backfill windows (Shopee get_order_list: ≤ 15 days per request). */
 export const MAX_BACKFILL_DAYS = 180;

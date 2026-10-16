@@ -1,4 +1,9 @@
+// Shopee order display labels. Colours are NOT here — status → tone lives in
+// src/lib/ui/status.ts (one place for the whole app).
 import type { CogsReadiness, MappingReadiness } from "@/lib/channels/core/order-queries";
+
+/** URL query keys of the order list filters (shared by the page and <OrderFilters>). */
+export const ORDER_FILTER_KEYS = ["shop", "status", "mapping", "financial", "fin", "sn", "sku", "from", "to"] as const;
 
 export const READINESS_LABELS: Record<MappingReadiness, string> = {
   complete: "Đầy đủ",
@@ -7,24 +12,11 @@ export const READINESS_LABELS: Record<MappingReadiness, string> = {
   no_items: "Không có dòng",
 };
 
-export const READINESS_VARIANT: Record<MappingReadiness, "default" | "secondary" | "destructive" | "outline"> = {
-  complete: "outline",
-  partial: "destructive",
-  unmapped: "destructive",
-  no_items: "secondary",
-};
-
 /** COGS is never shown as 0 when unknown. */
 export const COGS_LABELS: Record<CogsReadiness, string> = {
   complete: "Đầy đủ",
   partial: "Một phần",
   incomplete: "Chưa tính",
-};
-
-export const COGS_VARIANT: Record<CogsReadiness, "default" | "secondary" | "destructive" | "outline"> = {
-  complete: "outline",
-  partial: "destructive",
-  incomplete: "secondary",
 };
 
 export const COST_METHOD_LABELS: Record<string, string> = {
@@ -47,10 +39,4 @@ export const RECONCILIATION_LABELS: Record<"matched" | "warning" | "mismatch", s
   matched: "Khớp đối soát",
   warning: "Lệch nhỏ",
   mismatch: "Lệch đối soát",
-};
-
-export const RECONCILIATION_VARIANT: Record<"matched" | "warning" | "mismatch", "default" | "secondary" | "destructive" | "outline"> = {
-  matched: "outline",
-  warning: "secondary",
-  mismatch: "destructive",
 };

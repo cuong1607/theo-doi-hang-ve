@@ -1,8 +1,7 @@
-import type { ComponentType } from "react";
+import { Suspense } from "react";
 import { requirePermission } from "@/lib/auth/session";
 import Link from "next/link";
 import {
-  AlertTriangle,
   ArrowLeftRight,
   CalendarDays,
   FileClock,
@@ -10,6 +9,7 @@ import {
   PackageCheck,
   PackageX,
   Wallet,
+  type LucideIcon,
 } from "lucide-react";
 
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -28,9 +28,15 @@ import {
   getTopOutstanding,
 } from "@/lib/dashboard/queries";
 import type { SupplierType } from "@/lib/debt/invoice-debt";
-import { STATUS_BADGE_VARIANT, STATUS_LABELS } from "@/lib/outstanding/status";
+import { STATUS_LABELS } from "@/lib/outstanding/status";
+import { OUTSTANDING_STATUS_TONE } from "@/lib/ui/status";
 import type { OutstandingStatus } from "@/lib/outstanding/list";
-import { Badge } from "@/components/ui/badge";
+import { hasPermission } from "@/lib/auth/permissions";
+import { ErrorState } from "@/components/patterns/error-state";
+import { MetricCard } from "@/components/patterns/metric-card";
+import { PageContainer, PageHeader, SectionHeader } from "@/components/patterns/page-header";
+import { MetricSkeleton } from "@/components/patterns/skeletons";
+import { StatusBadge } from "@/components/patterns/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -43,6 +49,7 @@ import {
 } from "@/components/ui/table";
 
 import { DashboardFilters } from "./dashboard-filters";
+import { ShopeeKpis } from "./shopee-kpis";
 
 const SHIFT_LABELS: Record<string, string> = {
   morning: "Ca sáng",
@@ -86,7 +93,8 @@ export default async function DashboardPage({
     supplierType?: string;
   }>;
 }) {
-  await requirePermission("dashboard:view");
+  const auth = await requirePermission("dashboard:view");
+  const canSeeShopee = hasPermission(auth.profile.role, "channel:view");
   const params = await searchParams;
   const range: RangePreset = isRangePreset(params.range ?? "") ? (params.range as RangePreset) : "today";
   const supplierId = (params.supplier ?? "").trim();
@@ -141,19 +149,10 @@ export default async function DashboardPage({
 
   if (hasError) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Tổng quan</h2>
-          <p className="text-muted-foreground">Thống kê hoạt động nhập hàng và hóa đơn.</p>
-        </div>
-        <Card>
-          <CardContent className="flex flex-col items-center gap-2 py-16 text-center">
-            <AlertTriangle className="size-8 text-destructive" />
-            <p className="font-medium">Đã xảy ra lỗi khi tải dữ liệu tổng quan.</p>
-            <p className="text-sm text-muted-foreground">Vui lòng tải lại trang để thử lại.</p>
-          </CardContent>
-        </Card>
-      </div>
+      <PageContainer>
+        <PageHeader title="Tổng quan" description="Thống kê hoạt động nhập hàng, hóa đơn và Shopee." />
+        <ErrorState title="Không tải được dữ liệu tổng quan." description="Vui lòng tải lại trang để thử lại; nếu vẫn lỗi, báo quản trị viên." />
+      </PageContainer>
     );
   }
 
@@ -161,11 +160,8 @@ export default async function DashboardPage({
   const maxSupplierAmount = Math.max(1, ...(supplierTotals ?? []).map((s) => s.total_amount));
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Tổng quan</h2>
-        <p className="text-muted-foreground">Thống kê hoạt động nhập hàng và hóa đơn.</p>
-      </div>
+    <PageContainer>
+      <PageHeader title="Tổng quan" description="Thống kê hoạt động nhập hàng, hóa đơn và Shopee." />
 
       <Card>
         <CardHeader className="flex-col items-start gap-4 space-y-0">
@@ -181,8 +177,14 @@ export default async function DashboardPage({
         </CardHeader>
       </Card>
 
-      {/* Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {canSeeShopee && (
+        <Suspense fallback={<MetricSkeleton count={6} />}>
+          <ShopeeKpis fromDate={fromDate} toDate={toDate} />
+        </Suspense>
+      )}
+
+      <SectionHeader title="Hàng về" description="Phiếu nhập và chênh lệch giao/nhận trong khoảng lọc." />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatCard
           title="Số lượt tổng hợp hàng về"
           description="Số cặp (ngày, NCC) có hàng về — khác với số phiếu nhập thực tế bên dưới"
@@ -226,40 +228,31 @@ export default async function DashboardPage({
           value={String(outstandingSummary?.watching_invoice_count ?? 0)}
           icon={FileClock}
         />
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">SKU sắp hết / cần xuất bù</CardTitle>
-            <PackageX className="size-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline gap-4">
-              <div>
-                <div className="text-2xl font-bold">{outstandingSummary?.low_sku_count ?? 0}</div>
-                <p className="text-xs text-muted-foreground">Sắp hết</p>
-              </div>
-              <div>
-                <div className="text-2xl font-bold text-destructive">
-                  {outstandingSummary?.need_makeup_sku_count ?? 0}
-                </div>
-                <p className="text-xs text-muted-foreground">Cần xuất bù</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <MetricCard
+          label="SKU sắp hết / cần xuất bù"
+          icon={PackageX}
+          value={
+            <span className="flex items-baseline gap-4">
+              <span>
+                {outstandingSummary?.low_sku_count ?? 0}
+                <span className="ml-1 text-xs font-normal text-muted-foreground">sắp hết</span>
+              </span>
+              <span className={(outstandingSummary?.need_makeup_sku_count ?? 0) > 0 ? "text-warning-text" : undefined}>
+                {outstandingSummary?.need_makeup_sku_count ?? 0}
+                <span className="ml-1 text-xs font-normal text-muted-foreground">cần xuất bù</span>
+              </span>
+            </span>
+          }
+        />
       </div>
 
       {/* PHASE UP5: Financial report — invoice/discount/VAT/debt metrics,
           separate from the receipt-based cards above. Ưu tiên Tổng phải trả /
           Đã thanh toán / Còn nợ; chiết khấu + VAT xuống hàng phụ, cùng cách
           bố cục với /debts (Phase UP4). */}
-      <div>
-        <h3 className="text-lg font-semibold tracking-tight">Báo cáo tài chính hóa đơn</h3>
-        <p className="text-sm text-muted-foreground">
-          Số liệu hóa đơn/chiết khấu/VAT/công nợ theo bộ lọc ở trên (theo ngày hóa đơn).
-        </p>
-      </div>
+      <SectionHeader title="Báo cáo tài chính hóa đơn" description="Số liệu hóa đơn/chiết khấu/VAT/công nợ theo bộ lọc ở trên (theo ngày hóa đơn)." />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
           title="Tổng phải trả"
           description="Tổng final_amount các hóa đơn trong khoảng lọc"
@@ -281,7 +274,7 @@ export default async function DashboardPage({
         />
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-3">
         <SubStatCard
           title="Tổng giá trị trước điều chỉnh"
           value={formatCurrency(financialSummary?.total_subtotal_amount ?? 0)}
@@ -327,7 +320,7 @@ export default async function DashboardPage({
                       <TableCell>{formatCurrency(s.vat_total)}</TableCell>
                       <TableCell className="font-medium">{formatCurrency(s.final_total)}</TableCell>
                       <TableCell>{formatCurrency(s.paid_total)}</TableCell>
-                      <TableCell className={s.remaining_total > 0 ? "font-medium text-destructive" : undefined}>
+                      <TableCell className={s.remaining_total > 0 ? "font-medium text-warning-text" : undefined}>
                         {formatCurrency(s.remaining_total)}
                       </TableCell>
                     </TableRow>
@@ -371,7 +364,7 @@ export default async function DashboardPage({
                       <TableCell>{formatCurrency(t.vat_total)}</TableCell>
                       <TableCell className="font-medium">{formatCurrency(t.final_total)}</TableCell>
                       <TableCell>{formatCurrency(t.paid_total)}</TableCell>
-                      <TableCell className={t.remaining_total > 0 ? "font-medium text-destructive" : undefined}>
+                      <TableCell className={t.remaining_total > 0 ? "font-medium text-warning-text" : undefined}>
                         {formatCurrency(t.remaining_total)}
                       </TableCell>
                     </TableRow>
@@ -485,7 +478,7 @@ export default async function DashboardPage({
                       <TableCell>{row.supplier_name}</TableCell>
                       <TableCell>{row.total_delivered_qty}</TableCell>
                       <TableCell>{row.total_received_qty}</TableCell>
-                      <TableCell className={row.total_difference_qty < 0 ? "text-destructive" : undefined}>
+                      <TableCell className={row.total_difference_qty < 0 ? "text-warning-text" : undefined}>
                         {row.total_difference_qty}
                       </TableCell>
                       <TableCell>{formatCurrency(row.total_amount)}</TableCell>
@@ -550,50 +543,29 @@ export default async function DashboardPage({
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageContainer>
   );
 }
 
+/** Receipt / invoice KPI — the shared MetricCard; `emphasis` = needs attention (warning, never alarm-red). */
 function StatCard({
   title,
   description,
   value,
-  icon: Icon,
+  icon,
   emphasis,
 }: {
   title: string;
   description: string;
   value: string;
-  icon: ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   emphasis?: boolean;
 }) {
-  return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        <Icon className="size-4 text-muted-foreground" />
-      </CardHeader>
-      <CardContent>
-        <div className={emphasis ? "text-2xl font-bold text-destructive" : "text-2xl font-bold"}>
-          {value}
-        </div>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
-  );
+  return <MetricCard label={title} hint={description} value={value} icon={icon} tone={emphasis ? "warning" : "neutral"} />;
 }
 
 function SubStatCard({ title, value }: { title: string; value: string }) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-xs font-normal text-muted-foreground">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="text-lg font-semibold">{value}</div>
-      </CardContent>
-    </Card>
-  );
+  return <MetricCard label={title} value={<span className="text-lg">{value}</span>} />;
 }
 
 function Bar({
@@ -641,7 +613,7 @@ function OutstandingMiniList({
                 </p>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <Badge variant={STATUS_BADGE_VARIANT[row.status]}>{STATUS_LABELS[row.status]}</Badge>
+                <StatusBadge tone={OUTSTANDING_STATUS_TONE[row.status]}>{STATUS_LABELS[row.status]}</StatusBadge>
                 <Button
                   variant="outline"
                   size="sm"

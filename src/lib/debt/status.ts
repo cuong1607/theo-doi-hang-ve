@@ -6,8 +6,4 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   paid: "Đã thanh toán",
 };
 
-export const PAYMENT_STATUS_BADGE_VARIANT: Record<PaymentStatus, "destructive" | "secondary" | "outline"> = {
-  unpaid: "destructive",
-  partial: "secondary",
-  paid: "outline",
-};
+// Colours: src/lib/ui/status.ts (UIUX-1).

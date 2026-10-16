@@ -4,9 +4,10 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { getOutstandingDetail } from "@/lib/outstanding/detail";
-import { STATUS_BADGE_VARIANT, STATUS_LABELS } from "@/lib/outstanding/status";
+import { STATUS_LABELS } from "@/lib/outstanding/status";
+import { OUTSTANDING_STATUS_TONE } from "@/lib/ui/status";
+import { StatusBadge } from "@/components/patterns/status-badge";
 import { formatCurrency } from "@/lib/format";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -72,7 +73,7 @@ export default async function OutstandingDetailPage({
           <InfoField label="SL hóa đơn" value={String(row.invoice_qty)} />
           <div className="space-y-0.5">
             <p className="text-muted-foreground">Trạng thái</p>
-            <Badge variant={STATUS_BADGE_VARIANT[row.status]}>{STATUS_LABELS[row.status]}</Badge>
+            <StatusBadge tone={OUTSTANDING_STATUS_TONE[row.status]}>{STATUS_LABELS[row.status]}</StatusBadge>
           </div>
         </CardContent>
       </Card>
@@ -110,7 +111,7 @@ export default async function OutstandingDetailPage({
                     <TableCell>{formatDateVN(r.receipt_date)}</TableCell>
                     <TableCell>{r.receipt_no}</TableCell>
                     <TableCell>{SHIFT_LABELS[r.shift] ?? r.shift}</TableCell>
-                    <TableCell className="text-emerald-600 dark:text-emerald-400">
+                    <TableCell className="text-success-text">
                       +{r.received_qty}
                     </TableCell>
                   </TableRow>
