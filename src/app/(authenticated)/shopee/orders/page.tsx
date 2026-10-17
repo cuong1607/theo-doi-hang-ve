@@ -73,6 +73,9 @@ function finFilter(fin: string | undefined): Partial<ChannelOrderFilters> {
       return { reconciliation: "mismatch" };
     case "cogs_missing":
       return { settlementState: "available", cogsMissing: true };
+    case "no_cogs":
+      // SHOPEE-8 drilldown: every order without complete COGS (settled or not)
+      return { cogsMissing: true };
     case "settlement_missing":
       return { settlementState: "missing" };
     default:

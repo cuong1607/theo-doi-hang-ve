@@ -28,7 +28,8 @@ const FIN_VIEW_OPTIONS: FilterOption[] = [
   { label: "Có lãi", value: "profit" },
   { label: "Lỗ", value: "loss" },
   { label: "Lệch đối soát", value: "mismatch" },
-  { label: "Thiếu giá vốn", value: "cogs_missing" },
+  { label: "Thiếu giá vốn (đã có settlement)", value: "cogs_missing" },
+  { label: "Chưa đủ giá vốn (mọi đơn)", value: "no_cogs" },
   { label: "Chưa có settlement", value: "settlement_missing" },
 ];
 

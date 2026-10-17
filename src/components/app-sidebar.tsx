@@ -21,6 +21,8 @@ import {
   RefreshCw,
   Undo2,
   Landmark,
+  Gauge,
+  ChartColumn,
 } from "lucide-react";
 
 import {
@@ -125,6 +127,18 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
   {
     label: "SHOPEE",
     items: [
+      {
+        title: "Dashboard Shopee",
+        href: "/shopee/dashboard",
+        icon: Gauge,
+        permission: "channel:view",
+      },
+      {
+        title: "Phân tích Shopee",
+        href: "/shopee/analytics",
+        icon: ChartColumn,
+        permission: "channel:view",
+      },
       {
         title: "Sản phẩm Shopee",
         href: "/shopee/products",
