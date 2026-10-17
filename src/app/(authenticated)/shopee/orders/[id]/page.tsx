@@ -167,6 +167,7 @@ export default async function ShopeeOrderDetailPage({ params }: { params: Promis
                     <TableCell className="text-right">
                       {line.totalCogs === null ? <span className="text-muted-foreground">Chưa tính</span> : formatCurrency(line.totalCogs)}
                       {line.costPending && <p className="text-xs text-warning-text">chờ hóa đơn VAT của NCC</p>}
+                      {line.costProvisional && <p className="text-xs text-warning-text">tạm tính (VAT mặc định)</p>}
                       {line.negativeInventory && <p className="text-xs text-warning-text">tồn tính giá vốn âm</p>}
                     </TableCell>
                     <TableCell className="text-right">
@@ -181,6 +182,12 @@ export default async function ShopeeOrderDetailPage({ params }: { params: Promis
             <Callout tone="warning" className="mt-4">
               Có dòng hàng nhập từ NCC công ty chưa được lập hóa đơn (chưa biết VAT đầu vào) — COGS để &quot;Chưa tính&quot; thay vì đoán VAT. COGS sẽ tự điền khi lập hóa đơn
               &quot;từ hàng đã nhận&quot; cho ngày hàng về tương ứng.
+            </Callout>
+          )}
+          {detail.lines.some((l) => l.costProvisional) && (
+            <Callout tone="warning" className="mt-4" title="COGS tạm tính.">
+              Có dòng hàng nhập từ NCC công ty chưa được lập hóa đơn — giá vốn đang tính theo VAT mặc định. Khi lập hóa đơn &quot;từ hàng đã nhận&quot; cho ngày hàng về tương ứng,
+              COGS và lợi nhuận dự kiến của đơn này tự cập nhật theo VAT thật (có ghi lịch sử điều chỉnh).
             </Callout>
           )}
           {detail.lines.some((l) => l.negativeInventory) && (

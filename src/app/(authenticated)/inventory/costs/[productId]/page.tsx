@@ -63,6 +63,12 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
           tính&quot;. Khi lập hóa đơn &quot;từ hàng đã nhận&quot; cho ngày hàng về đó, hệ thống tự tính lại và điền COGS cho các đơn đang chờ.
         </Callout>
       )}
+      {product.costProvisional && (
+        <Callout tone="warning" title="Giá vốn bình quân đang tạm tính.">
+          Tồn hiện tại có hàng nhập từ NCC công ty chưa được lập hóa đơn — giá nhập đang tính theo VAT mặc định. Đơn bán trong thời gian này có COGS &quot;Tạm tính&quot;. Khi lập
+          hóa đơn &quot;từ hàng đã nhận&quot; cho ngày hàng về đó, giá vốn và COGS của các đơn tạm tính tự cập nhật theo VAT thật của hóa đơn.
+        </Callout>
+      )}
       {product.needsRebuild && (
         <Callout tone="danger" title="Lần tự tính giá vốn gần nhất bị lỗi.">
           ({product.lastError ?? "không rõ"}). Phiếu nhập vẫn được lưu — admin hãy bấm &quot;Dựng lại sổ giá vốn (sửa lỗi)&quot;.
@@ -74,8 +80,8 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
         <MetricCard
           label="Giá vốn bình quân"
           value={product.movingAverageCost === null ? (product.vatPending ? "Chờ VAT" : "Chưa có") : formatDecimal(product.movingAverageCost, " ₫")}
-          tone={product.vatPending ? "warning" : "neutral"}
-          hint="gồm VAT đầu vào khi áp dụng"
+          tone={product.vatPending || product.costProvisional ? "warning" : "neutral"}
+          hint={product.costProvisional ? "Tạm tính — có hàng chưa có hóa đơn (VAT mặc định)" : "gồm VAT đầu vào khi áp dụng"}
         />
         <MetricCard label="Giá trị tồn theo giá vốn" value={product.hasHistory && product.movingAverageCost !== null ? formatDecimal(product.inventoryValue, " ₫") : "—"} />
       </div>
@@ -139,6 +145,10 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
                           <span className="text-warning-text">chờ hóa đơn</span>
                         ) : e.costBasis === "invoice_vat" ? (
                           <span title={COST_BASIS_LABELS.invoice_vat}>{formatDecimal(e.vatRate)}%</span>
+                        ) : e.costBasis === "provisional_vat" ? (
+                          <span className="text-warning-text" title={`${COST_BASIS_LABELS.provisional_vat} — tự đúng lại khi lập hóa đơn`}>
+                            {formatDecimal(e.vatRate)}% tạm tính
+                          </span>
                         ) : e.costBasis === "raw" ? (
                           <span className="text-muted-foreground" title={COST_BASIS_LABELS.raw}>
                             không áp dụng
@@ -153,7 +163,10 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
                         {e.unitCost === null ? (
                           <span className="text-muted-foreground">{e.costPending || e.costBasis === "vat_pending" ? "Chờ VAT" : "Chưa tính"}</span>
                         ) : (
-                          formatDecimal(e.unitCost, " ₫")
+                          <>
+                            {formatDecimal(e.unitCost, " ₫")}
+                            {e.eventType === "sale_out" && e.costProvisional && <p className="text-xs text-warning-text">tạm tính</p>}
+                          </>
                         )}
                       </TableCell>
                       <TableCell className="text-right whitespace-nowrap">{formatDecimal(e.avgCostBefore, " ₫")}</TableCell>
@@ -169,8 +182,9 @@ export default async function ProductCostDetailPage({ params }: { params: Promis
         </CardContent>
       </Card>
       <Callout tone="neutral">
-        Đơn giá vốn của hàng nhập từ NCC công ty = giá nhập (chưa VAT) × (1 + VAT% của hóa đơn NCC đã lập cho ngày hàng về đó). NCC hộ kinh doanh: giá nhập, không cộng VAT. Sổ
-        giá vốn là bản dựng lại hiện tại; COGS của đơn hàng cũ là snapshot tại thời điểm tính và chỉ thay đổi khi admin điều chỉnh có chủ đích.
+        Đơn giá vốn của hàng nhập từ NCC công ty = giá nhập (chưa VAT) × (1 + VAT% của hóa đơn NCC đã lập cho ngày hàng về đó); chưa có hóa đơn thì tạm tính theo VAT mặc định
+        và tự đúng lại khi lập hóa đơn. NCC hộ kinh doanh: giá nhập, không cộng VAT. Sổ giá vốn là bản dựng lại hiện tại; COGS đã chốt của đơn hàng cũ chỉ thay đổi khi admin
+        điều chỉnh có chủ đích — riêng COGS &quot;tạm tính&quot; tự cập nhật theo VAT thật khi hóa đơn được lập.
       </Callout>
     </PageContainer>
   );

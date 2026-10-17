@@ -1236,11 +1236,23 @@ estimated_profit_state  = profit (≥ 0) | loss (< 0) | insufficient
   |---|---|---|---|
   | Hộ kinh doanh | — | `unit_price` | `raw` |
   | Công ty | có | `round(unit_price × (1 + invoice.vat_rate/100), 4)` | `invoice_vat` |
-  | Công ty | **chưa** | NULL (không đoán 8 %) | `vat_pending` |
+  | Công ty | **chưa** (hoặc hóa đơn chưa có VAT) | `round(unit_price × (1 + cost_settings.default_vat_rate/100), 4)` — **Tạm tính** (00054) | `provisional_vat` |
+  | Công ty | chưa, và `default_vat_rate` = NULL | NULL | `vat_pending` |
 
   VAT lấy từ snapshot `vat_rate` của **chính hóa đơn đó**. Luôn tính lại từ giá phiếu
   gốc nên VAT không thể cộng hai lần.
-- **Chờ VAT**: khi có hàng `vat_pending` trong tồn, giá vốn bình quân = chưa xác định
+- **Tạm tính (00054, quyết định của chủ shop 17/10/2026)**: NCC công ty chưa có hóa đơn
+  → giá nhập × (1 + VAT mặc định, `cost_settings.default_vat_rate` = 8). Bình quân có
+  hàng tạm tính trong tồn → `product_cost_state.cost_provisional`; đơn bán lúc đó chốt
+  COGS kèm `channel_order_items.cost_provisional = true` (UI "Tạm tính"). Mỗi lần dựng
+  lại sổ (gắn hóa đơn, đổi VAT, sửa phiếu, đổi loại NCC, đổi VAT mặc định),
+  `cost_true_up_provisional_sales` đưa các dòng **tạm tính** (chưa hoàn kho) về giá
+  dựng lại hiện tại; dòng thành chính thức khi giá không còn tạm tính. Mỗi lần đổi
+  giá trị ghi một dòng `cogs_restatements` (`source = 'provisional_true_up'`,
+  `adjusted_by` NULL). Dòng **chính thức** không bao giờ tự đổi (vẫn chỉ qua điều
+  chỉnh tường minh); dòng tạm tính không nằm trong danh sách điều chỉnh. Giới hạn: đơn
+  huỷ đã hoàn kho giữ giá tạm tính lúc hoàn.
+- **Chờ VAT** (chỉ khi tắt VAT mặc định): khi có hàng `vat_pending` trong tồn, giá vốn bình quân = chưa xác định
   (`product_cost_state.vat_pending`). Đơn bán trong khoảng đó vẫn trừ số lượng nhưng
   không có COGS (`cost_pending`, "Chưa tính"). Khi tồn về ≤ 0, lần nhập kế tiếp bắt đầu
   bình quân mới. Đơn chờ VAT bị huỷ → rút sự kiện bán (`withdrawn_pending`).
@@ -1252,7 +1264,8 @@ estimated_profit_state  = profit (≥ 0) | loss (< 0) | insufficient
   115.200; bán 2 → COGS 230.400. DT ước tính 300.000, COGS 216.000 (200.000 trước
   VAT) → LN dự kiến 84.000.
 - **UI** `/inventory/costs/[productId]`: Giá nhập (chưa VAT) · VAT · Đơn giá vốn ·
-  BQ trước/sau. Danh sách: badge + bộ lọc "Chờ hóa đơn VAT".
+  BQ trước/sau. Danh sách: badge + bộ lọc "Tạm tính (chưa có hóa đơn)" / "Chờ hóa đơn VAT".
+  Đơn Shopee: nhãn "Tạm tính" dưới COGS và LN dự kiến (`v_channel_order_summary.cogs_provisional`).
 
 ### Historical COGS Restatement
 

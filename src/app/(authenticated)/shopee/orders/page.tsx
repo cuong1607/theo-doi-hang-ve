@@ -63,7 +63,10 @@ const ESTIMATED_PROFIT_HELP = [
   "Biên lợi nhuận dự kiến = Lợi nhuận dự kiến / Tổng giá trị đơn hàng.",
 ];
 const ESTIMATED_REVENUE_HELP = ["Doanh thu đơn hàng ước tính do Shopee cung cấp (số người bán dự kiến nhận, đã trừ phí và thuế Shopee). Có thể thay đổi tới khi đơn hoàn thành."];
-const COGS_HELP = ["COGS có bao gồm VAT đầu vào theo hóa đơn NCC khi áp dụng."];
+const COGS_HELP = [
+  "COGS có bao gồm VAT đầu vào theo hóa đơn NCC khi áp dụng.",
+  '"Tạm tính": hàng của NCC công ty chưa có hóa đơn — tạm tính theo VAT mặc định, tự cập nhật theo VAT thật khi lập hóa đơn.',
+];
 const ACTUAL_PROFIT_HELP = ["Lợi nhuận thực tế = Thu nhập Shopee thực nhận (sau quyết toán) - Giá vốn."];
 
 /** NULL money is "not known yet" — said in words, never shown as 0. */
@@ -101,6 +104,15 @@ function ProfitValue({ value, margin, loss }: { value: string; margin?: string |
         {formatSignedCurrency(value)}
       </span>
       {margin !== undefined && <span className="text-xs font-normal">{formatPercentString(margin)}</span>}
+    </span>
+  );
+}
+
+/** COGS uses a provisional (default-VAT) purchase cost — corrects itself when the supplier invoice is linked. */
+function ProvisionalHint() {
+  return (
+    <span className="block text-xs text-warning-text" title="Có hàng nhập từ NCC công ty chưa có hóa đơn — giá vốn tính theo VAT mặc định, tự cập nhật khi lập hóa đơn">
+      Tạm tính
     </span>
   );
 }
@@ -345,13 +357,19 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                             {o.mappingReadiness === "partial" ? ` ${o.mappedLines}/${o.lineCount}` : ""}
                           </StatusBadge>
                         </TableCell>
-                        <TableCell className="text-right">{money(o.internalCogs, o.cogsReadiness === "partial" ? `Một phần ${o.costedLines}/${o.lineCount}` : "Chưa tính")}</TableCell>
+                        <TableCell className="text-right">
+                          {money(o.internalCogs, o.cogsReadiness === "partial" ? `Một phần ${o.costedLines}/${o.lineCount}` : "Chưa tính")}
+                          {o.cogsProvisional && o.internalCogs !== null && <ProvisionalHint />}
+                        </TableCell>
                         <TableCell className="text-right">{money(o.estimatedOrderRevenue, "Chưa có")}</TableCell>
                         <TableCell className="text-right">
                           {o.estimatedProfit === null ? (
                             <span className="text-muted-foreground">Chưa tính</span>
                           ) : (
-                            <ProfitValue value={o.estimatedProfit} margin={o.estimatedMarginPct} loss={o.estimatedProfitState === "loss"} />
+                            <>
+                              <ProfitValue value={o.estimatedProfit} margin={o.estimatedMarginPct} loss={o.estimatedProfitState === "loss"} />
+                              {o.cogsProvisional && <ProvisionalHint />}
+                            </>
                           )}
                         </TableCell>
                         <TableCell className="text-right">

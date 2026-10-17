@@ -20,7 +20,7 @@ import { RebuildCostButton } from "./rebuild-button";
 
 export const dynamic = "force-dynamic";
 
-const WARNINGS = new Set(["negative", "missing_cost", "no_history", "needs_rebuild", "vat_pending"]);
+const WARNINGS = new Set(["negative", "missing_cost", "no_history", "needs_rebuild", "vat_pending", "provisional"]);
 
 export default async function InventoryCostsPage({ searchParams }: { searchParams: Promise<{ q?: string; warning?: string; page?: string; size?: string }> }) {
   const auth = await requirePermission("cost:view");
@@ -100,6 +100,7 @@ export default async function InventoryCostsPage({ searchParams }: { searchParam
                       <TableCell className={`text-right ${r.negativeQuantity ? "font-medium text-warning-text" : ""}`}>{r.hasHistory ? formatQuantity(r.quantityOnHand) : "—"}</TableCell>
                       <TableCell className="text-right">
                         {r.movingAverageCost === null ? <span className="text-muted-foreground">{r.vatPending ? "Chờ VAT" : "Chưa có"}</span> : formatCurrency(r.movingAverageCost)}
+                        {r.costProvisional && r.movingAverageCost !== null && <p className="text-xs text-warning-text">Tạm tính</p>}
                       </TableCell>
                       <TableCell className="text-right">{r.hasHistory && r.movingAverageCost !== null ? formatCurrency(r.inventoryValue) : "—"}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{formatDateTime(r.lastEventTime)}</TableCell>
@@ -111,13 +112,18 @@ export default async function InventoryCostsPage({ searchParams }: { searchParam
                           ) : (
                             r.missingCost && <StatusBadge tone="warning">Thiếu dữ liệu giá vốn</StatusBadge>
                           )}
+                          {r.costProvisional && (
+                            <StatusBadge tone="warning" title="Có hàng nhập từ NCC công ty chưa có hóa đơn — đang tính VAT mặc định; tự đúng lại khi lập hóa đơn">
+                              Tạm tính (chưa có hóa đơn)
+                            </StatusBadge>
+                          )}
                           {!r.hasHistory && <StatusBadge tone="neutral">Chưa có lịch sử</StatusBadge>}
                           {r.needsRebuild && (
                             <StatusBadge tone="danger" title={r.lastError ?? ""}>
                               Cần tính lại
                             </StatusBadge>
                           )}
-                          {!r.negativeQuantity && !r.missingCost && r.hasHistory && !r.needsRebuild && <span className="text-xs text-muted-foreground">—</span>}
+                          {!r.negativeQuantity && !r.missingCost && !r.costProvisional && r.hasHistory && !r.needsRebuild && <span className="text-xs text-muted-foreground">—</span>}
                         </div>
                       </TableCell>
                     </TableRow>

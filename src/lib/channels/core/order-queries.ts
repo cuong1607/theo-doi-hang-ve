@@ -63,6 +63,8 @@ export interface ChannelOrderListRow {
   /** Shopee "Doanh thu đơn hàng ước tính" (escrow_amount), NULL = not fetched yet. */
   estimatedOrderRevenue: string | null;
   estimatedRevenueSource: EstimatedRevenueSource | null;
+  /** At least one costed line uses a provisional (default-VAT) cost — "Tạm tính" (00054). */
+  cogsProvisional: boolean;
 }
 
 export type EstimatedProfitState = "profit" | "loss" | "insufficient";
@@ -139,6 +141,7 @@ type SummaryRow = {
   estimated_profit_state: EstimatedProfitState;
   estimated_order_revenue: string | null;
   estimated_revenue_source: EstimatedRevenueSource | null;
+  cogs_provisional: boolean;
 };
 
 const COLUMNS =
@@ -146,7 +149,7 @@ const COLUMNS =
   "created_at_channel, updated_at_channel, last_synced_at, line_count, mapped_lines, total_item_quantity, item_gross_value, " +
   "original_item_value, mapping_readiness, cogs_readiness, financial_sync_eligible, costed_lines, total_cogs, partial_cogs_sum, reversed_lines, " +
   "shopee_net_income, internal_cogs, profit_after_cogs, reconciliation_status, settlement_state, profit_state, " +
-  "estimated_profit, estimated_margin_pct, estimated_profit_state, estimated_order_revenue, estimated_revenue_source";
+  "estimated_profit, estimated_margin_pct, estimated_profit_state, estimated_order_revenue, estimated_revenue_source, cogs_provisional";
 
 function toRow(r: SummaryRow): ChannelOrderListRow {
   return {
@@ -185,6 +188,7 @@ function toRow(r: SummaryRow): ChannelOrderListRow {
     estimatedProfitState: r.estimated_profit_state,
     estimatedOrderRevenue: r.estimated_order_revenue,
     estimatedRevenueSource: r.estimated_revenue_source,
+    cogsProvisional: r.cogs_provisional === true,
   };
 }
 
@@ -381,6 +385,8 @@ export interface ChannelOrderLine {
   negativeInventory: boolean;
   /** Sale posted while VAT-pending purchases were in stock: COGS waits for the supplier invoice. */
   costPending: boolean;
+  /** COGS taken at a provisional (default-VAT) cost; trued up automatically when the invoice is linked. */
+  costProvisional: boolean;
   /** Costing version of the snapshot (NULL = before moving-average-v2-vat). */
   costVersion: string | null;
   /** Current state of the sellable unit (for the mapping CTA); null = listing not in catalog. */
@@ -414,7 +420,7 @@ export async function getChannelOrderDetail(orderId: string): Promise<ChannelOrd
       .select(
         "id, provider_line_key, external_order_item_id, external_item_id, external_model_id, item_name, model_name, item_sku, model_sku, " +
           "quantity::text, original_unit_price::text, discounted_unit_price::text, promotion_type, channel_model_id, internal_product_id, " +
-          "total_cogs::text, cost_method, cost_per_unit_snapshot::text, cogs_reversed_at, cost_version, products(sku, name)",
+          "total_cogs::text, cost_method, cost_per_unit_snapshot::text, cogs_reversed_at, cost_version, cost_provisional, products(sku, name)",
       )
       .eq("order_id", orderId)
       .order("provider_line_key"),
@@ -443,6 +449,7 @@ export async function getChannelOrderDetail(orderId: string): Promise<ChannelOrd
     cost_per_unit_snapshot: string | null;
     cogs_reversed_at: string | null;
     cost_version: string | null;
+    cost_provisional: boolean;
     products: { sku: string; name: string } | null;
   };
   const rows = (items ?? []) as unknown as ItemRow[];
@@ -500,6 +507,7 @@ export async function getChannelOrderDetail(orderId: string): Promise<ChannelOrd
       cogsReversedAt: r.cogs_reversed_at,
       negativeInventory: negative.has(r.id),
       costPending: r.total_cogs === null && pending.has(r.id),
+      costProvisional: r.cost_provisional === true && r.total_cogs !== null,
       costVersion: r.cost_version,
       unit: r.channel_model_id ? units.get(r.channel_model_id) ?? null : null,
     })),

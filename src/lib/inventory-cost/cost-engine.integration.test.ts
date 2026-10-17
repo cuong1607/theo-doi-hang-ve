@@ -435,7 +435,85 @@ test("PATCH 10–12: company + invoice VAT 8 % → 108.000; other VAT rate from 
   assert.deepEqual([row.base_unit_cost, row.vat_rate, row.cost_basis, row.unit_cost], ["100000.0000", null, "raw", "100000.0000"], "household: no VAT added");
 });
 
-test("PATCH 13 + 22: company receipt without an invoice → no fabricated cost (no silent 8 %); sale waits; linking the invoice fills COGS; cancelled pending sale is withdrawn", async () => {
+/** cost_settings.default_vat_rate (00054). Changing it rebuilds every provisional product (trigger). */
+async function setDefaultVat(rate: number | null) {
+  const { error } = await db.from("cost_settings").update({ default_vat_rate: rate }).eq("id", true);
+  if (error) throw error;
+}
+const provisionalOf = async (itemId: string) =>
+  (await db.from("channel_order_items").select("cost_provisional").eq("id", itemId).single()).data!.cost_provisional as boolean;
+
+test("PATCH provisional VAT: company receipt without invoice → default VAT 8 % 'Tạm tính'; provisional COGS; invoice VAT 10 % trues it up (audited); final snapshot then locked", async () => {
+  const p = await product();
+  await receipt([{ productId: p, qty: 10, price: 100000 }], "2032-07-01", companyId);
+  const [row] = await purchases(p);
+  assert.deepEqual([row.base_unit_cost, row.unit_cost, row.cost_basis, row.vat_rate, row.invoice_id], ["100000.0000", "108000.0000", "provisional_vat", "8.00", null]);
+  const ov = async () => (await db.from("v_product_cost_overview").select("moving_average_cost, cost_provisional, vat_pending").eq("product_id", p).single()).data!;
+  assert.deepEqual(await ov(), { moving_average_cost: "108000.0000", cost_provisional: true, vat_pending: false });
+
+  // sale at the provisional cost: COGS known now, flagged provisional
+  const o = await order([{ productId: p, qty: 2 }], { paidAt: "2032-07-02T00:00:00Z", total: "400000" });
+  assert.deepEqual(await engine.processOrder(o.orderId), { calculated: 1 });
+  assert.deepEqual([(await item(o.itemIds[0])).total_cogs, await provisionalOf(o.itemIds[0])], ["216000.00", true]);
+  assert.equal((await db.from("order_financials").select("internal_cogs::text").eq("order_id", o.orderId).single()).data!.internal_cogs, "216000.00");
+  assert.equal((await db.from("v_channel_order_summary").select("cogs_provisional").eq("order_id", o.orderId).single()).data!.cogs_provisional, true);
+  // provisional lines are not restatement candidates (they true up by themselves)
+  assert.equal((await engine.restatementCandidates(5000)).filter((c) => c.productId === p).length, 0);
+
+  // a household purchase on top keeps the average provisional (provisional units still in stock)
+  await receipt([{ productId: p, qty: 2, price: 90000 }], "2032-07-03", supplierId);
+  assert.equal((await ov()).cost_provisional, true);
+
+  // the invoice arrives with a DIFFERENT VAT (10 %) → rebuild → provisional COGS corrected, now final
+  await invoiceFor(["2032-07-01"], 10);
+  const [fixed] = await purchases(p);
+  assert.deepEqual([fixed.unit_cost, fixed.cost_basis, fixed.vat_rate], ["110000.0000", "invoice_vat", "10.00"]);
+  assert.equal((await ov()).cost_provisional, false);
+  assert.deepEqual([(await item(o.itemIds[0])).cost_per_unit_snapshot, (await item(o.itemIds[0])).total_cogs, await provisionalOf(o.itemIds[0])], ["110000.0000", "220000.00", false]);
+  assert.equal((await db.from("order_financials").select("internal_cogs::text").eq("order_id", o.orderId).single()).data!.internal_cogs, "220000.00");
+  const { data: audit } = await db.from("cogs_restatements").select("old_total_cogs::text, new_total_cogs::text, source, reason, adjusted_by").eq("order_item_id", o.itemIds[0]);
+  assert.deepEqual(audit, [{ old_total_cogs: "216000.00", new_total_cogs: "220000.00", source: "provisional_true_up", reason: "Tự động: giá vốn tạm tính → VAT hóa đơn", adjusted_by: null }]);
+
+  // final now: a later VAT edit rebuilds the ledger but never touches this snapshot
+  await db.from("invoices").update({ vat_rate: 8 }).eq("invoice_no", (await db.from("invoice_receipt_days").select("invoices(invoice_no)").eq("supplier_id", companyId).eq("receipt_date", "2032-07-01").single()).data!.invoices!.invoice_no);
+  assert.equal((await item(o.itemIds[0])).total_cogs, "220000.00", "a final snapshot is history — only explicit restatement changes it");
+  assert.equal((await engine.restatementCandidates(5000)).filter((c) => c.productId === p).length, 1);
+});
+
+test("PATCH provisional VAT: same VAT on the invoice clears the flag without an audit row; default VAT change re-costs provisional purchases", async () => {
+  const p = await product();
+  await receipt([{ productId: p, qty: 4, price: 50000 }], "2032-08-01", companyId);
+  const o = await order([{ productId: p, qty: 1 }], { paidAt: "2032-08-02T00:00:00Z" });
+  await engine.processOrder(o.orderId);
+  assert.deepEqual([(await item(o.itemIds[0])).total_cogs, await provisionalOf(o.itemIds[0])], ["54000.00", true]);
+  try {
+    await setDefaultVat(10);
+    assert.equal((await purchases(p))[0].unit_cost, "55000.0000", "default VAT edit re-costs provisional purchases (trigger)");
+    assert.deepEqual([(await item(o.itemIds[0])).total_cogs, await provisionalOf(o.itemIds[0])], ["55000.00", true], "still provisional, follows the default");
+  } finally {
+    await setDefaultVat(8);
+  }
+  assert.equal((await item(o.itemIds[0])).total_cogs, "54000.00");
+  await invoiceFor(["2032-08-01"], 8);
+  assert.deepEqual([(await item(o.itemIds[0])).total_cogs, await provisionalOf(o.itemIds[0])], ["54000.00", false]);
+  const { data: audit } = await db.from("cogs_restatements").select("new_total_cogs::text, reason").eq("order_item_id", o.itemIds[0]).order("adjusted_at");
+  assert.deepEqual(
+    audit!.map((a) => a.new_total_cogs),
+    ["55000.00", "54000.00"],
+    "audit rows only for value changes (default 8→10→8); the invoice at the same 8 % only finalises",
+  );
+});
+
+test("PATCH 13 + 22 (no default VAT configured): company receipt without an invoice → no fabricated cost; sale waits; linking the invoice fills COGS; cancelled pending sale is withdrawn", async () => {
+  await setDefaultVat(null);
+  try {
+    await vatPendingScenario();
+  } finally {
+    await setDefaultVat(8);
+  }
+});
+
+async function vatPendingScenario() {
   const p = await product();
   await receipt([{ productId: p, qty: 10, price: 100000 }], "2032-02-01", companyId);
   const [row] = await purchases(p);
@@ -467,8 +545,9 @@ test("PATCH 13 + 22: company receipt without an invoice → no fabricated cost (
   assert.deepEqual([it.cost_per_unit_snapshot, it.total_cogs], ["108000.0000", "216000.00"]);
   assert.equal((await db.from("channel_order_items").select("cost_version").eq("id", o.itemIds[0]).single()).data!.cost_version, COSTING_VERSION);
   assert.equal((await db.from("order_financials").select("internal_cogs::text").eq("order_id", o.orderId).single()).data!.internal_cogs, "216000.00");
+  assert.equal(await provisionalOf(o.itemIds[0]), false, "invoice VAT = final cost");
   assert.deepEqual(await engine.processOrder(o.orderId), { already: 1 });
-});
+}
 
 test("PATCH §23 / 15–18: moving average over VAT-adjusted costs; sale of 2 → 230.400; a later purchase never changes the old snapshot", async () => {
   const p = await product();
@@ -581,14 +660,21 @@ test("PATCH restatement safety: pending (unknown) new cost is not restatable; di
   const o = await order([{ productId: p, qty: 1 }], { paidAt: "2032-06-02T00:00:00Z" });
   await engine.processOrder(o.orderId);
   assert.equal((await item(o.itemIds[0])).total_cogs, "1080.00");
-  // invoice deleted → the day is no longer linked → new cost unknown
-  await db.from("invoices").delete().eq("id", inv);
-  const [c] = (await engine.restatementCandidates(5000)).filter((x) => x.productId === p);
-  assert.deepEqual([c.newCostPerUnit, c.restatable], [null, false]);
-  const [pl] = (await engine.previewHistoricalCogsRestatement(p)).lines;
-  assert.deepEqual([pl.newCostPerUnit, pl.restatable, pl.newOrderEstimatedProfit], [null, false, null], "unknown new cost → unknown new profit, never zero");
-  assert.equal((await engine.restateOrderCogs([o.itemIds[0]], "thử")).restated, 0, "never restated to an unknown cost");
-  assert.equal((await item(o.itemIds[0])).total_cogs, "1080.00");
+  // invoice deleted with no default VAT configured → the day is no longer linked → new cost unknown
+  await setDefaultVat(null);
+  try {
+    await db.from("invoices").delete().eq("id", inv);
+    const [c] = (await engine.restatementCandidates(5000)).filter((x) => x.productId === p);
+    assert.deepEqual([c.newCostPerUnit, c.restatable], [null, false]);
+    const [pl] = (await engine.previewHistoricalCogsRestatement(p)).lines;
+    assert.deepEqual([pl.newCostPerUnit, pl.restatable, pl.newOrderEstimatedProfit], [null, false, null], "unknown new cost → unknown new profit, never zero");
+    assert.equal((await engine.restateOrderCogs([o.itemIds[0]], "thử")).restated, 0, "never restated to an unknown cost");
+    assert.equal((await item(o.itemIds[0])).total_cogs, "1080.00");
+  } finally {
+    await setDefaultVat(8);
+  }
+  // with the default back, the purchase is provisional at 1.080 again; the FINAL snapshot was never touched
+  assert.deepEqual([(await item(o.itemIds[0])).total_cogs, await provisionalOf(o.itemIds[0])], ["1080.00", false]);
 
   const upd = await db.from("channel_order_items").update({ total_cogs: 1 }).eq("id", o.itemIds[0]);
   assert.equal(upd.error?.code, "CG001", "only the restatement function may change a locked snapshot");

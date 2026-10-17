@@ -99,6 +99,7 @@ function EstimatedStatement({ s }: { s: ChannelOrderListRow }) {
         <li>Lợi nhuận dự kiến = Doanh thu đơn hàng ước tính do Shopee cung cấp - Giá vốn.</li>
         <li>Biên lợi nhuận dự kiến = Lợi nhuận dự kiến / Tổng giá trị đơn hàng ({s.channelTotalAmount === null ? "chưa có" : formatCurrency(s.channelTotalAmount)}).</li>
         <li>COGS có bao gồm VAT đầu vào theo hóa đơn NCC khi áp dụng.</li>
+        {s.cogsProvisional && <li>COGS đang tạm tính theo VAT mặc định (hàng NCC công ty chưa có hóa đơn) — lợi nhuận dự kiến sẽ tự cập nhật khi lập hóa đơn.</li>}
         {s.estimatedRevenueSource === "escrow_settlement" && <li>Đơn chưa được lấy số ước tính trước khi hoàn thành — dùng số escrow của Shopee lúc quyết toán.</li>}
       </ul>
     </section>
@@ -132,7 +133,13 @@ export function OrderFinancialSection({ detail, summary }: { detail: OrderFinanc
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
           <MetricCard label="Giá trị đơn (người mua trả)" icon={ReceiptText} value={<Money value={orderTotal} />} />
           <MetricCard label="DT ước tính (Shopee)" icon={Wallet} value={<Money value={summary.estimatedOrderRevenue} />} hint="doanh thu đơn hàng ước tính" />
-          <MetricCard label="Giá vốn nội bộ (COGS)" icon={Coins} value={<Money value={cogs} missing="Chưa tính" />} hint="gồm VAT đầu vào khi áp dụng" />
+          <MetricCard
+            label="Giá vốn nội bộ (COGS)"
+            icon={Coins}
+            value={<Money value={cogs} missing="Chưa tính" />}
+            tone={summary.cogsProvisional && cogs !== null ? "warning" : undefined}
+            hint={summary.cogsProvisional && cogs !== null ? "Tạm tính — có hàng chưa có hóa đơn (VAT mặc định)" : "gồm VAT đầu vào khi áp dụng"}
+          />
           <MetricCard
             label="LN dự kiến"
             icon={TrendingUp}

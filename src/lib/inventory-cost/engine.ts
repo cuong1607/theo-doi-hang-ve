@@ -215,7 +215,7 @@ export class CostEngine {
     const { data: bases } = await this.db.from("inventory_cost_ledger").select("cost_basis").eq("product_id", productId).eq("event_type", "purchase_in");
     const counts: Record<string, number> = {};
     for (const b of (bases ?? []) as Array<{ cost_basis: string | null }>) counts[b.cost_basis ?? "none"] = (counts[b.cost_basis ?? "none"] ?? 0) + 1;
-    if (counts.invoice_vat || counts.vat_pending) {
+    if (counts.invoice_vat || counts.provisional_vat || counts.vat_pending) {
       this.log({ event: "purchase_cost_adjusted_vat", productId, result: Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(" ") });
     }
     return state;

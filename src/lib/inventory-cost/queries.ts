@@ -28,9 +28,11 @@ export interface ProductCostOverviewRow {
   missingCost: boolean;
   /** The current position holds purchases waiting for their VAT invoice (average unknown). */
   vatPending: boolean;
+  /** The moving average includes company purchases costed at the default VAT ("Tạm tính", 00054). */
+  costProvisional: boolean;
 }
 
-export type CostWarningFilter = "negative" | "missing_cost" | "no_history" | "needs_rebuild" | "vat_pending";
+export type CostWarningFilter = "negative" | "missing_cost" | "no_history" | "needs_rebuild" | "vat_pending" | "provisional";
 
 type OverviewRow = {
   product_id: string;
@@ -48,6 +50,7 @@ type OverviewRow = {
   negative_quantity: boolean;
   missing_cost: boolean;
   vat_pending: boolean;
+  cost_provisional: boolean;
 };
 
 const toOverview = (r: OverviewRow): ProductCostOverviewRow => ({
@@ -66,6 +69,7 @@ const toOverview = (r: OverviewRow): ProductCostOverviewRow => ({
   negativeQuantity: r.negative_quantity,
   missingCost: r.missing_cost,
   vatPending: r.vat_pending,
+  costProvisional: r.cost_provisional,
 });
 
 export async function getProductCostOverview(filters: { search?: string; warning?: CostWarningFilter }, page: number, pageSize: number) {
@@ -80,6 +84,7 @@ export async function getProductCostOverview(filters: { search?: string; warning
   if (filters.warning === "no_history") query = query.eq("has_history", false);
   if (filters.warning === "needs_rebuild") query = query.eq("needs_rebuild", true);
   if (filters.warning === "vat_pending") query = query.eq("vat_pending", true);
+  if (filters.warning === "provisional") query = query.eq("cost_provisional", true);
   const { data, error, count } = await query.returns<OverviewRow[]>();
   if (error) throw new Error(error.message);
   return { rows: (data ?? []).map(toOverview), total: count ?? 0 };
@@ -133,7 +138,7 @@ export async function getProductCostLedger(productId: string, filters: { eventTy
     avg_cost_before: string | null;
     avg_cost_after: string | null;
     note: string | null;
-    metadata: { negative_inventory?: boolean; cost_pending?: boolean } | null;
+    metadata: { negative_inventory?: boolean; cost_pending?: boolean; cost_provisional?: boolean } | null;
     base_unit_cost: string | null;
     vat_rate: string | null;
     cost_basis: PurchaseCostBasis | null;
@@ -161,6 +166,7 @@ export async function getProductCostLedger(productId: string, filters: { eventTy
     costBasis: r.cost_basis,
     invoiceId: r.invoice_id,
     costPending: r.metadata?.cost_pending === true,
+    costProvisional: r.metadata?.cost_provisional === true,
   }));
   return { rows, total: count ?? 0 };
 }
