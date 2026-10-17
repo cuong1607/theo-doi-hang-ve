@@ -108,10 +108,12 @@ export class OrderSyncJobRunner implements SyncJobRunner {
           stats: { detailsFetched: 0, ordersCompleted: 0, ordersCancelled: 0, linesUnresolved: 0, cogs: {} },
           mapping: { complete: 0, partial: 0, unmapped: 0 },
           storedOrders: 0,
+          deferredSns: new Set(),
         };
         // Job-level provider errors (rate limit, auth, …) propagate: pending stays in the checkpoint.
+        // Storing stops when the slice's time is up — what was fetched but not stored stays pending.
         await mapWithConcurrency(batches, config.orderDetailConcurrency, (batch) =>
-          this.sync.processDetailBatch({ shopId: shop.id, ctx, currency: shop.currency }, batch, acc, { rethrowProviderErrors: true }),
+          this.sync.processDetailBatch({ shopId: shop.id, ctx, currency: shop.currency }, batch, acc, { rethrowProviderErrors: true, shouldStop: () => budget.expired }),
         );
         progress.counters.created += acc.counts.created;
         progress.counters.updated += acc.counts.updated;
@@ -126,7 +128,9 @@ export class OrderSyncJobRunner implements SyncJobRunner {
         progress.incrIn("mapping", "unmapped", acc.mapping.unmapped);
         for (const [k, v] of Object.entries(acc.stats.cogs)) progress.incrIn("cogs", k, v);
         for (const f of acc.failures) progress.addFailure(f);
-        cp.pendingSns = cp.pendingSns.slice(take.length);
+        const deferred = take.filter((sn) => acc.deferredSns!.has(sn));
+        if (deferred.length > 0) progress.incr("detailsDeferred", deferred.length);
+        cp.pendingSns = [...deferred, ...cp.pendingSns.slice(take.length)];
         if (cp.pendingSns.length === 0 && cp.phase === "details") cp.phase = "done";
         if (await save()) return { kind: "cancelled" };
         continue;

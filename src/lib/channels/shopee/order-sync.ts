@@ -108,6 +108,11 @@ export interface OrderBatchAccumulator {
   stats: OrderBatchStats;
   mapping: { complete: number; partial: number; unmapped: number };
   storedOrders: number;
+  /**
+   * Fetched but NOT stored because the slice ran out of time (shouldStop) —
+   * the job runner keeps them pending for the next slice. Never "failed".
+   */
+  deferredSns?: Set<string>;
 }
 
 const toSeconds = (d: Date) => Math.floor(d.getTime() / 1000);
@@ -303,12 +308,18 @@ export class ShopeeOrderSyncService {
    * that is job-level — retryable (rate limit / transient) or auth/signature —
    * is thrown so the job is retried / stopped with its checkpoint intact,
    * instead of marking every order of the batch failed.
+   *
+   * shouldStop (job runner): checked before storing each order after the
+   * first — storing is several DB round trips per order, and from a far
+   * region a 50-order batch can outlive the function (killed before the
+   * checkpoint → the same orders replay forever). The rest of the batch goes
+   * to acc.deferredSns and stays pending.
    */
   async processDetailBatch(
     target: { shopId: string; ctx: OrderProviderContext; currency: string | null },
     batch: readonly string[],
     acc: OrderBatchAccumulator,
-    options: { rethrowProviderErrors?: boolean } = {},
+    options: { rethrowProviderErrors?: boolean; shouldStop?: () => boolean } = {},
   ): Promise<void> {
     const { shopId, ctx } = target;
     const { counts, failures, failedSns, stats, mapping } = acc;
@@ -352,7 +363,12 @@ export class ShopeeOrderSyncService {
       }
     }
 
-    for (const order of parsed.orders) {
+    for (const [index, order] of parsed.orders.entries()) {
+      if (index > 0 && options.shouldStop?.()) {
+        acc.deferredSns ??= new Set();
+        for (const rest of parsed.orders.slice(index)) acc.deferredSns.add(rest.externalOrderSn);
+        break;
+      }
       try {
         const saved = await upsertChannelOrder(this.db, shopId, order, syncedIso);
         const items = await upsertChannelOrderItems(this.db, saved.orderId, order, units);

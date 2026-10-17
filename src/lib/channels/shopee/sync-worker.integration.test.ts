@@ -718,6 +718,55 @@ test("PERF-2 12. soft deadline: a slice stops on its time budget → pending wit
   assert.equal(stored, 8, "success only after every page and every detail");
 });
 
+test("LOCAL-LIVE-1: slow order storing (far DB) stops on the slice budget INSIDE a detail batch — stored orders checkpointed, the rest deferred, nothing failed, all stored eventually", async () => {
+  const s = await shop();
+  await catalog(s, [1]);
+  let t = 0;
+  const h = harness([s], { config: { sliceTimeBudgetMs: 25_000, maxSliceApiCalls: 100 } });
+  // every clock read "takes" 2 s — per-order budget checks make storing slow, like iad1 → Sydney
+  const worker = new SyncWorker({
+    db,
+    config: h.config,
+    workerId: `slowdb-${Math.random().toString(16).slice(2, 8)}`,
+    createRunner: createShopeeRunnerFactory({
+      db,
+      config: h.config,
+      providers: () => ({
+        mode: "fixture",
+        order: new FixtureShopeeOrderProvider(h.state.orders, { onCall: (c) => void h.calls.push(c) }),
+        product: new FixtureShopeeProductProvider(h.state.products),
+        payment: new FixtureShopeePaymentProvider(h.state.escrow),
+      }),
+    }),
+    classifyError: toJobFailure,
+    logger: () => {},
+    clock: () => (t += 2_000),
+  });
+  h.state.orders = orderFixtures(Array.from({ length: 50 }, (_, i) => ({ sn: `${TAG}-SLOW-${String(i).padStart(2, "0")}` })));
+  const q = await requestShopeeSync(db, { shopId: s, syncType: "order", mode: "incremental" });
+  const storedCount = async () => (await db.from("channel_orders").select("id", { count: "exact", head: true }).eq("shop_id", s)).count ?? 0;
+
+  const first = await worker.runOne(25_000);
+  assert.equal(first!.status, "pending");
+  assert.equal(first!.continuationReason, "time_budget");
+  const afterFirst = await storedCount();
+  assert.ok(afterFirst > 0 && afterFirst < 50, `first slice stored part of the batch (${afterFirst}/50), then checkpointed`);
+  const mid = await job(q.jobId);
+  const cp = mid.metadata!.checkpoint as { pendingSns: string[] };
+  assert.equal(cp.pendingSns.length, 50 - afterFirst, "deferred orders stay pending (not dropped, not failed)");
+  assert.equal((mid.metadata!.stats as Record<string, number>).detailsDeferred, 50 - afterFirst);
+
+  for (let i = 0; i < 60; i++) {
+    const r = await worker.runOne(25_000);
+    if (!r || r.status !== "pending") break;
+  }
+  const done = await job(q.jobId);
+  assert.equal(done.status, "success");
+  assert.equal(await storedCount(), 50);
+  assert.equal(done.records_failed, 0, "deferred ≠ failed");
+  assert.ok(count(h.calls, "v2.order.get_order_detail") > 1, "deferred orders are fetched again in a later slice");
+});
+
 test("PERF-2 26 + 28. one shop's failure does not block the others; the global cap still holds", async () => {
   const [bad, good] = [await shop(), await shop()];
   await catalog(good, [1]);
