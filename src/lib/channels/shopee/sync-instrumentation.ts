@@ -20,6 +20,7 @@ import { ShopeeApiError } from "./errors.ts";
 import type { ListOrdersInput, OrderProviderContext, ShopeeOrderProvider } from "./order-provider.ts";
 import type { PaymentProviderContext, ShopeePaymentProvider } from "./payment-provider.ts";
 import type { ListItemsInput, ProductProviderContext, ProviderPayload, ShopeeProductProvider } from "./product-provider.ts";
+import type { ListReturnsInput, ReturnProviderContext, ShopeeReturnProvider } from "./return-provider.ts";
 import type { ShopeeTokenSource } from "./token.ts";
 
 export class ApiCallMeter {
@@ -75,6 +76,14 @@ export function meterPaymentProvider(provider: ShopeePaymentProvider, meter: Api
   return {
     mode: provider.mode,
     getEscrowDetail: (ctx: PaymentProviderContext, input: { orderSn: string }) => meter.track("get_escrow_detail", () => provider.getEscrowDetail(ctx, input)),
+  };
+}
+
+export function meterReturnProvider(provider: ShopeeReturnProvider, meter: ApiCallMeter): ShopeeReturnProvider {
+  return {
+    mode: provider.mode,
+    listReturns: (ctx: ReturnProviderContext, input: ListReturnsInput) => meter.track("get_return_list", () => provider.listReturns(ctx, input)),
+    getReturnDetail: (ctx: ReturnProviderContext, input: { returnSn: string }) => meter.track("get_return_detail", () => provider.getReturnDetail(ctx, input)),
   };
 }
 

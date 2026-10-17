@@ -156,6 +156,17 @@ async function main() {
     console.log(JSON.stringify({ error: r.error, message: r.message, item_id: r.response?.item_id, item_name: r.response?.item_name }));
     return;
   }
+  if (cmd === "returns") {
+    const now = Math.floor(Date.now() / 1000);
+    const r = await call("/api/v2/returns/get_return_list", "GET", { page_no: 0, page_size: 20, create_time_from: now - 14 * 86400, create_time_to: now });
+    console.log(JSON.stringify(r, null, 2).slice(0, 6000));
+    return;
+  }
+  if (cmd === "return") {
+    const r = await call("/api/v2/returns/get_return_detail", "GET", { return_sn: args[0] });
+    console.log(JSON.stringify(r, null, 2).slice(0, 8000));
+    return;
+  }
   if (cmd === "list") {
     const r = await call("/api/v2/product/get_item_list", "GET", { offset: 0, page_size: 50, item_status: "NORMAL" });
     console.log(JSON.stringify(r.response ?? r, null, 2));

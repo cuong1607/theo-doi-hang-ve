@@ -26,6 +26,7 @@ import { ShopeeConnectionService } from "./token.ts";
 import { FixtureShopeeProductProvider, loadProductFixtures, RealShopeeProductProvider } from "./product-provider.ts";
 import { FixtureShopeeOrderProvider, loadOrderFixtures, RealShopeeOrderProvider } from "./order-provider.ts";
 import { FixtureShopeePaymentProvider, loadEscrowFixtures, RealShopeePaymentProvider } from "./payment-provider.ts";
+import { FixtureShopeeReturnProvider, loadReturnFixtures, RealShopeeReturnProvider } from "./return-provider.ts";
 import { getShopeeProviderMode } from "./provider-mode.ts";
 
 let cached: { config: ShopeeConfig; client: ShopeeClient; service: ShopeeConnectionService } | null = null;
@@ -74,6 +75,7 @@ export function getShopeeSyncWorker(): SyncWorker {
         order: new FixtureShopeeOrderProvider(loadOrderFixtures()),
         product: new FixtureShopeeProductProvider(loadProductFixtures()),
         payment: new FixtureShopeePaymentProvider(loadEscrowFixtures()),
+        return: new FixtureShopeeReturnProvider(loadReturnFixtures()),
       };
     }
     const { config: shopeeConfig, service } = getShopee();
@@ -84,6 +86,7 @@ export function getShopeeSyncWorker(): SyncWorker {
       order: new RealShopeeOrderProvider({ client, connections: tokens }),
       product: new RealShopeeProductProvider({ client, connections: tokens }),
       payment: new RealShopeePaymentProvider({ client, connections: tokens }),
+      return: new RealShopeeReturnProvider({ client, connections: tokens }),
     };
   };
   const region = process.env.VERCEL_REGION ?? "local";

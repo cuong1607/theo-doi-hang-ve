@@ -19,6 +19,7 @@ import {
   ReceiptText,
   Calculator,
   RefreshCw,
+  Undo2,
 } from "lucide-react";
 
 import {
@@ -133,6 +134,12 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
         title: "Đơn hàng Shopee",
         href: "/shopee/orders",
         icon: ReceiptText,
+        permission: "channel:view",
+      },
+      {
+        title: "Trả hàng Shopee",
+        href: "/shopee/returns",
+        icon: Undo2,
         permission: "channel:view",
       },
       {

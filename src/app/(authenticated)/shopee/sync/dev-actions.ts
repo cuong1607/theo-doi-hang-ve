@@ -21,7 +21,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export type DevActionResult = { ok: boolean; message: string; detail?: unknown };
 
 const uuid = z.string().uuid();
-const SYNC_TYPE = z.enum(["order", "product", "escrow"]);
+const SYNC_TYPE = z.enum(["order", "product", "escrow", "return"]);
 
 async function guard(): Promise<DevActionResult | null> {
   if (!devToolsEnabled()) return { ok: false, message: "Công cụ dev chỉ dùng được trên môi trường local." };

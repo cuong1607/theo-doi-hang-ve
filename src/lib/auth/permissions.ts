@@ -52,6 +52,7 @@ export const PERMISSIONS = {
   "integration:manage": ADMIN, // Zalo OA connect / test message
   "channel:manage": ADMIN, // shops, connections/tokens, sync config, backfill / repair / retry / cancel sync jobs
   "cost:manage": ADMIN, // rebuild cost ledger, backfill order COGS
+  "return:disposition": ADMIN, // SHOPEE-6: return disposition (restock moves stock + reverses COGS → profit)
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

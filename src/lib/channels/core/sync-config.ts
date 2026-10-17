@@ -64,6 +64,12 @@ export interface SyncConfig {
   escrowErrorBackoffHours: number;
   /** Open orders: Shopee estimated revenue (escrow, estimate-only) is re-fetched at most this often. */
   escrowEstimateRefreshHours: number;
+  /** SHOPEE-6: scheduler cadence for return jobs. */
+  returnIntervalMinutes: number;
+  /** SHOPEE-6: get_return_detail calls in flight inside one return job. */
+  returnDetailConcurrency: number;
+  /** SHOPEE-6: an OPEN (non-terminal) return is re-fetched when its copy is older than this. */
+  returnOpenTtlHours: number;
   /**
    * Staged rollout (pilot shop first): when set, the scheduler and worker
    * only touch these shop ids (SHOPEE_SYNC_SHOP_IDS, comma-separated).
@@ -100,6 +106,9 @@ export const SYNC_CONFIG_DEFAULTS: SyncConfig = {
   escrowRefreshIntervalHours: 24,
   escrowErrorBackoffHours: 6,
   escrowEstimateRefreshHours: 12,
+  returnIntervalMinutes: 15,
+  returnDetailConcurrency: 2,
+  returnOpenTtlHours: 6,
   shopAllowlist: null,
 };
 
@@ -128,6 +137,9 @@ const ENV_KEYS: Record<NumericKey, { key: string; min: number; max: number }> = 
   escrowRefreshIntervalHours: { key: "SHOPEE_SYNC_ESCROW_REFRESH_INTERVAL_HOURS", min: 1, max: 24 * 30 },
   escrowErrorBackoffHours: { key: "SHOPEE_SYNC_ESCROW_ERROR_BACKOFF_HOURS", min: 1, max: 24 * 7 },
   escrowEstimateRefreshHours: { key: "SHOPEE_SYNC_ESCROW_ESTIMATE_REFRESH_HOURS", min: 1, max: 24 * 7 },
+  returnIntervalMinutes: { key: "SHOPEE_SYNC_RETURN_INTERVAL_MINUTES", min: 5, max: 24 * 60 },
+  returnDetailConcurrency: { key: "SHOPEE_SYNC_RETURN_CONCURRENCY", min: 1, max: 5 },
+  returnOpenTtlHours: { key: "SHOPEE_SYNC_RETURN_OPEN_TTL_HOURS", min: 1, max: 24 * 7 },
 };
 
 export function getSyncConfig(env: Env = process.env): SyncConfig & { warnings: string[] } {
@@ -173,9 +185,10 @@ export function getSyncConfig(env: Env = process.env): SyncConfig & { warnings: 
  * or a repair jumps the queue; a historical backfill never blocks anything.
  */
 export const SYNC_PRIORITY = {
-  manual: { order: 1, escrow: 2, product: 3 },
+  manual: { order: 1, return: 2, escrow: 2, product: 3 },
   repair: 5,
-  incremental: { order: 10, escrow: 20, product: 30 },
+  // SHOPEE-6: returns after orders (a return needs its order), before financials
+  incremental: { order: 10, return: 15, escrow: 20, product: 30 },
   backfill: 100,
 } as const;
 

@@ -21,6 +21,7 @@ import { ModelRowActions } from "../../products/model-row-actions";
 import { MAPPING_LABELS, toModelView } from "../../shared";
 import { COGS_LABELS, COST_METHOD_LABELS, READINESS_LABELS } from "../labels";
 import { OrderFinancialSectionAsync } from "./financial-section";
+import { OrderReturnsSectionAsync } from "./returns-section";
 
 export const dynamic = "force-dynamic";
 
@@ -211,6 +212,9 @@ export default async function ShopeeOrderDetailPage({ params }: { params: Promis
 
       <Suspense fallback={<CardSkeleton lines={6} />}>
         <OrderFinancialSectionAsync orderId={id} summary={o} />
+      </Suspense>
+      <Suspense fallback={null}>
+        <OrderReturnsSectionAsync orderId={id} />
       </Suspense>
 
       <p className="text-xs text-muted-foreground">Đồng bộ lần cuối: {formatDateTime(o.lastSyncedAt)}</p>

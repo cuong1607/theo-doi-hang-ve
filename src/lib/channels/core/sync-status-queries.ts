@@ -136,7 +136,7 @@ export async function getSyncHealth(now: Date = new Date()): Promise<SyncHealthV
   };
 }
 
-export async function getSyncStatuses(shopIds: string[], syncTypes: readonly string[] = ["order", "product", "escrow"]): Promise<Map<string, SyncStatusView>> {
+export async function getSyncStatuses(shopIds: string[], syncTypes: readonly string[] = ["order", "product", "escrow", "return"]): Promise<Map<string, SyncStatusView>> {
   const result = new Map<string, SyncStatusView>();
   if (shopIds.length === 0) return result;
   const db = createAdminClient();

@@ -20,7 +20,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export type SyncActionResult = { ok: boolean; message: string };
 
 const uuid = z.string().uuid();
-const SYNC_TYPE = z.enum(["order", "product", "escrow"]);
+const SYNC_TYPE = z.enum(["order", "product", "escrow", "return"]);
 
 async function requestOrigin(): Promise<string | null> {
   const h = await headers();

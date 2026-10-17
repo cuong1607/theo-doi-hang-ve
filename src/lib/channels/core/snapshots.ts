@@ -44,8 +44,8 @@ export async function saveMeaningfulOrderSnapshot(
   input: {
     shopId: string;
     orderSn: string;
-    /** "escrow" (SHOPEE-5): every financially different payload is kept as history. */
-    entityType?: "order" | "escrow";
+    /** "escrow" (SHOPEE-5): every financially different payload is kept as history. "return" (SHOPEE-6): keyed by return_sn. */
+    entityType?: "order" | "escrow" | "return";
     apiName: string;
     payload: unknown;
     fingerprint: string;

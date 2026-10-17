@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { AlertTriangle, CircleHelp, Coins, FlaskConical, PackageCheck, ReceiptText, Scale, TrendingUp, Wallet } from "lucide-react";
+import { AlertTriangle, CircleHelp, Coins, FlaskConical, PackageCheck, ReceiptText, Scale, TrendingUp, Undo2, Wallet } from "lucide-react";
+import { getOrdersWithReturns } from "@/lib/channels/core/returns";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 import { requirePermission } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
@@ -158,6 +160,8 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
     getOrderFinancialSummary(filters),
     getSyncHealth(),
   ]);
+  // SHOPEE-6 §50: subtle "Có trả hàng" indicator (one query for the visible page)
+  const withReturns = await getOrdersWithReturns(createAdminClient(), rows.map((o) => o.orderId));
   const query: Record<string, string | undefined> = Object.fromEntries(ORDER_FILTER_KEYS.map((k) => [k, params[k]?.trim() || undefined]));
   const hasFilter = activeFilterCount(query, ORDER_FILTER_KEYS) > 0;
   const syncing = hasActiveSync(syncStatuses);
@@ -333,6 +337,12 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                           <Link href={`/shopee/orders/${o.orderId}`} className="rounded text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
                             {o.externalOrderSn}
                           </Link>
+                          {withReturns.has(o.orderId) && (
+                            <span className="ml-1.5 inline-flex items-center gap-0.5 text-[11px] text-warning-text" title="Đơn có yêu cầu trả hàng / hoàn tiền">
+                              <Undo2 aria-hidden="true" className="size-3" />
+                              Có trả hàng
+                            </span>
+                          )}
                           {o.dataSource === "fixture" && (
                             <StatusBadge tone="info" icon={false} className="ml-1.5">
                               FIXTURE
