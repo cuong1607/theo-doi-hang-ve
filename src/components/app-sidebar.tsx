@@ -20,6 +20,7 @@ import {
   Calculator,
   RefreshCw,
   Undo2,
+  Landmark,
 } from "lucide-react";
 
 import {
@@ -140,6 +141,12 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
         title: "Trả hàng Shopee",
         href: "/shopee/returns",
         icon: Undo2,
+        permission: "channel:view",
+      },
+      {
+        title: "Giải ngân & payout",
+        href: "/shopee/payouts",
+        icon: Landmark,
         permission: "channel:view",
       },
       {

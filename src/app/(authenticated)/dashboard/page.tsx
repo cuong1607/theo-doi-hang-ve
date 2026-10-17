@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/table";
 
 import { DashboardFilters } from "./dashboard-filters";
+import { ShopeeCashflow } from "./shopee-cashflow";
 import { ShopeeKpis } from "./shopee-kpis";
 
 const SHIFT_LABELS: Record<string, string> = {
@@ -180,6 +181,11 @@ export default async function DashboardPage({
       {canSeeShopee && (
         <Suspense fallback={<MetricSkeleton count={6} />}>
           <ShopeeKpis fromDate={fromDate} toDate={toDate} />
+        </Suspense>
+      )}
+      {canSeeShopee && (
+        <Suspense fallback={<MetricSkeleton count={5} />}>
+          <ShopeeCashflow fromDate={fromDate} toDate={toDate} />
         </Suspense>
       )}
 

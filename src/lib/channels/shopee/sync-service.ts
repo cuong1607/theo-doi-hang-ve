@@ -26,7 +26,10 @@ import { ShopeeOrderSyncService } from "./order-sync.ts";
 import { ProductSyncJobRunner, MAX_REPAIR_ITEM_IDS } from "./product-sync-job.ts";
 import type { ProviderMode, ShopeeProductProvider } from "./product-provider.ts";
 import { ShopeeProductSyncService } from "./product-sync.ts";
-import { ApiCallMeter, meterOrderProvider, meterPaymentProvider, meterProductProvider, meterReturnProvider } from "./sync-instrumentation.ts";
+import { ApiCallMeter, meterIncomeProvider, meterOrderProvider, meterPaymentProvider, meterProductProvider, meterReturnProvider } from "./sync-instrumentation.ts";
+import type { ShopeeIncomeProvider } from "./income-provider.ts";
+import { IncomeSyncJobRunner, ShopeeIncomeSyncService } from "./income-sync.ts";
+import { PayoutSyncJobRunner, ShopeePayoutSyncService } from "./payout-sync.ts";
 import type { ShopeeReturnProvider } from "./return-provider.ts";
 import { MAX_REPAIR_RETURN_SNS, ReturnSyncJobRunner, ShopeeReturnSyncService } from "./return-sync.ts";
 import { EscrowSyncJobRunner, MAX_REPAIR_ESCROW_ORDERS, ShopeeEscrowSyncService } from "./escrow-sync.ts";
@@ -48,11 +51,34 @@ export interface ShopeeSyncRequest {
   now?: Date;
 }
 
+/** SHOPEE-7: controlled release / payout backfill (bounded windows, checkpointed). */
+export const MAX_INCOME_BACKFILL_DAYS = 90;
+
 export async function requestShopeeSync(db: SupabaseClient, req: ShopeeSyncRequest): Promise<EnqueueResult> {
   const now = req.now ?? new Date();
   let windowFrom: Date | null = null;
   let windowTo: Date | null = null;
   let scope: Record<string, unknown> | null = null;
+
+  if (req.syncType === "income" || req.syncType === "payout") {
+    if (req.mode === "repair") throw new SyncJobError("bad_mode", "Giải ngân / payout không sửa lỗi theo mã — dùng Đồng bộ ngay hoặc backfill theo số ngày.");
+    if (req.mode === "backfill") {
+      const days = req.backfillDays ?? 30;
+      if (!Number.isInteger(days) || days < 1 || days > MAX_INCOME_BACKFILL_DAYS) throw new SyncJobError("bad_range", `Số ngày backfill giải ngân / payout phải từ 1 đến ${MAX_INCOME_BACKFILL_DAYS}.`);
+      windowTo = now;
+      windowFrom = new Date(now.getTime() - days * 86_400_000);
+    }
+    return enqueueSyncJob(db, {
+      shopId: req.shopId,
+      syncType: req.syncType,
+      mode: req.mode,
+      priority: syncJobPriority(req.mode, req.syncType),
+      windowFrom,
+      windowTo,
+      metadata: { trigger: req.createdBy ? "user" : "scheduler" },
+      createdBy: req.createdBy ?? null,
+    });
+  }
 
   if (req.mode === "repair" && req.syncType === "return") {
     const clean = [...new Set((req.returnSns ?? []).map((s) => s.trim()).filter(Boolean))];
@@ -109,6 +135,8 @@ export type ShopeeProviderSource = (job: SyncJobRow) => {
   payment: ShopeePaymentProvider;
   /** SHOPEE-6 (optional so older harnesses keep compiling; a return job without it is refused). */
   return?: ShopeeReturnProvider;
+  /** SHOPEE-7 income / payout APIs (optional for the same reason). */
+  income?: ShopeeIncomeProvider;
 };
 
 export function createShopeeRunnerFactory(deps: { db: SupabaseClient; config: SyncConfig; providers: ShopeeProviderSource }): RunnerFactory {
@@ -148,6 +176,23 @@ export function createShopeeRunnerFactory(deps: { db: SupabaseClient; config: Sy
       const returns = new ShopeeReturnSyncService({ db: deps.db, provider: meterReturnProvider(raw.return, meter), orders: orderSync });
       return { meter, runner: new ReturnSyncJobRunner({ db: deps.db, sync: returns, providerMode: raw.mode }) };
     }
+    if (job.sync_type === "income") {
+      if (!raw.income) throw new JobRefusedError("unsupported_sync_type", "Chưa cấu hình provider giải ngân.");
+      const income = new ShopeeIncomeSyncService({ db: deps.db, provider: meterIncomeProvider(raw.income, meter) });
+      return { meter, runner: new IncomeSyncJobRunner({ db: deps.db, sync: income, providerMode: raw.mode }) };
+    }
+    if (job.sync_type === "payout") {
+      if (!raw.income) throw new JobRefusedError("unsupported_sync_type", "Chưa cấu hình provider payout.");
+      // a payout order missing locally is fetched through the same metered order sync
+      const orderSync = new ShopeeOrderSyncService({
+        db: deps.db,
+        provider: meterOrderProvider(raw.order, meter),
+        products: productSync,
+        detailConcurrency: deps.config.orderDetailConcurrency,
+      });
+      const payouts = new ShopeePayoutSyncService({ db: deps.db, provider: meterIncomeProvider(raw.income, meter), orders: orderSync });
+      return { meter, runner: new PayoutSyncJobRunner({ db: deps.db, sync: payouts, providerMode: raw.mode }) };
+    }
     throw new JobRefusedError("unsupported_sync_type", `Chưa hỗ trợ đồng bộ loại "${job.sync_type}".`);
   };
 }
@@ -160,16 +205,17 @@ export interface SchedulerResult {
   skippedShops: Array<{ shopId: string; reason: string }>;
 }
 
-const SCHEDULED_TYPES: readonly RunnableSyncType[] = ["order", "product", "escrow", "return"];
+const SCHEDULED_TYPES: readonly RunnableSyncType[] = ["order", "product", "escrow", "return", "income", "payout"];
 
-const intervalMinutes = (config: SyncConfig, syncType: RunnableSyncType) =>
-  syncType === "order"
-    ? config.orderIntervalMinutes
-    : syncType === "escrow"
-      ? config.escrowIntervalMinutes
-      : syncType === "return"
-        ? config.returnIntervalMinutes
-        : config.productIntervalMinutes;
+const INTERVAL_KEY: Record<RunnableSyncType, keyof SyncConfig> = {
+  order: "orderIntervalMinutes",
+  escrow: "escrowIntervalMinutes",
+  return: "returnIntervalMinutes",
+  income: "incomeIntervalMinutes",
+  payout: "payoutIntervalMinutes",
+  product: "productIntervalMinutes",
+};
+const intervalMinutes = (config: SyncConfig, syncType: RunnableSyncType) => config[INTERVAL_KEY[syncType]] as number;
 /** Connection states the provider cannot work with → don't queue jobs that would only fail. */
 const UNUSABLE_CONNECTIONS = new Set(["disconnected", "expired", "revoked"]);
 

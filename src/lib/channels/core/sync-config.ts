@@ -70,6 +70,18 @@ export interface SyncConfig {
   returnDetailConcurrency: number;
   /** SHOPEE-6: an OPEN (non-terminal) return is re-fetched when its copy is older than this. */
   returnOpenTtlHours: number;
+  /** SHOPEE-7: scheduler cadence of income (release) jobs. */
+  incomeIntervalMinutes: number;
+  /** SHOPEE-7: incremental release window starts this long before the last success. */
+  incomeOverlapMinutes: number;
+  /** SHOPEE-7: first income job looks back this many days (still clamped to the orders-sync cutoff). */
+  incomeLookbackDays: number;
+  /** SHOPEE-7: scheduler cadence of payout jobs. */
+  payoutIntervalMinutes: number;
+  /** SHOPEE-7: incremental payout / wallet window overlap. */
+  payoutOverlapMinutes: number;
+  /** SHOPEE-7: first payout job looks back this many days. */
+  payoutLookbackDays: number;
   /**
    * Staged rollout (pilot shop first): when set, the scheduler and worker
    * only touch these shop ids (SHOPEE_SYNC_SHOP_IDS, comma-separated).
@@ -109,6 +121,12 @@ export const SYNC_CONFIG_DEFAULTS: SyncConfig = {
   returnIntervalMinutes: 15,
   returnDetailConcurrency: 2,
   returnOpenTtlHours: 6,
+  incomeIntervalMinutes: 20,
+  incomeOverlapMinutes: 24 * 60,
+  incomeLookbackDays: 14,
+  payoutIntervalMinutes: 60,
+  payoutOverlapMinutes: 60,
+  payoutLookbackDays: 30,
   shopAllowlist: null,
 };
 
@@ -140,6 +158,12 @@ const ENV_KEYS: Record<NumericKey, { key: string; min: number; max: number }> = 
   returnIntervalMinutes: { key: "SHOPEE_SYNC_RETURN_INTERVAL_MINUTES", min: 5, max: 24 * 60 },
   returnDetailConcurrency: { key: "SHOPEE_SYNC_RETURN_CONCURRENCY", min: 1, max: 5 },
   returnOpenTtlHours: { key: "SHOPEE_SYNC_RETURN_OPEN_TTL_HOURS", min: 1, max: 24 * 7 },
+  incomeIntervalMinutes: { key: "SHOPEE_SYNC_INCOME_INTERVAL_MINUTES", min: 5, max: 24 * 60 },
+  incomeOverlapMinutes: { key: "SHOPEE_SYNC_INCOME_OVERLAP_MINUTES", min: 0, max: 7 * 24 * 60 },
+  incomeLookbackDays: { key: "SHOPEE_SYNC_INCOME_LOOKBACK_DAYS", min: 1, max: 90 },
+  payoutIntervalMinutes: { key: "SHOPEE_SYNC_PAYOUT_INTERVAL_MINUTES", min: 10, max: 24 * 60 },
+  payoutOverlapMinutes: { key: "SHOPEE_SYNC_PAYOUT_OVERLAP_MINUTES", min: 0, max: 7 * 24 * 60 },
+  payoutLookbackDays: { key: "SHOPEE_SYNC_PAYOUT_LOOKBACK_DAYS", min: 1, max: 180 },
 };
 
 export function getSyncConfig(env: Env = process.env): SyncConfig & { warnings: string[] } {
@@ -185,10 +209,11 @@ export function getSyncConfig(env: Env = process.env): SyncConfig & { warnings: 
  * or a repair jumps the queue; a historical backfill never blocks anything.
  */
 export const SYNC_PRIORITY = {
-  manual: { order: 1, return: 2, escrow: 2, product: 3 },
+  manual: { order: 1, return: 2, escrow: 2, income: 3, payout: 3, product: 3 },
   repair: 5,
   // SHOPEE-6: returns after orders (a return needs its order), before financials
-  incremental: { order: 10, return: 15, escrow: 20, product: 30 },
+  // SHOPEE-7: release + payout after financials, before catalog maintenance
+  incremental: { order: 10, return: 15, escrow: 20, income: 22, payout: 25, product: 30 },
   backfill: 100,
 } as const;
 

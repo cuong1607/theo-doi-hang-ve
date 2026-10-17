@@ -21,6 +21,7 @@ import type { ListOrdersInput, OrderProviderContext, ShopeeOrderProvider } from 
 import type { PaymentProviderContext, ShopeePaymentProvider } from "./payment-provider.ts";
 import type { ListItemsInput, ProductProviderContext, ProviderPayload, ShopeeProductProvider } from "./product-provider.ts";
 import type { ListReturnsInput, ReturnProviderContext, ShopeeReturnProvider } from "./return-provider.ts";
+import type { IncomeProviderContext, ShopeeIncomeProvider, TimeWindowPage } from "./income-provider.ts";
 import type { ShopeeTokenSource } from "./token.ts";
 
 export class ApiCallMeter {
@@ -76,6 +77,16 @@ export function meterPaymentProvider(provider: ShopeePaymentProvider, meter: Api
   return {
     mode: provider.mode,
     getEscrowDetail: (ctx: PaymentProviderContext, input: { orderSn: string }) => meter.track("get_escrow_detail", () => provider.getEscrowDetail(ctx, input)),
+  };
+}
+
+export function meterIncomeProvider(provider: ShopeeIncomeProvider, meter: ApiCallMeter): ShopeeIncomeProvider {
+  return {
+    mode: provider.mode,
+    listReleasedEscrows: (ctx: IncomeProviderContext, input: TimeWindowPage) => meter.track("get_escrow_list", () => provider.listReleasedEscrows(ctx, input)),
+    getIncomeOverview: (ctx: IncomeProviderContext) => meter.track("get_income_overview", () => provider.getIncomeOverview(ctx)),
+    getPayoutDetail: (ctx: IncomeProviderContext, input: TimeWindowPage) => meter.track("get_payout_detail", () => provider.getPayoutDetail(ctx, input)),
+    listWalletTransactions: (ctx: IncomeProviderContext, input: TimeWindowPage) => meter.track("get_wallet_transaction_list", () => provider.listWalletTransactions(ctx, input)),
   };
 }
 

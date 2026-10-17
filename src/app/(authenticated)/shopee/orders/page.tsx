@@ -1,6 +1,26 @@
 import Link from "next/link";
 import { AlertTriangle, CircleHelp, Coins, FlaskConical, PackageCheck, ReceiptText, Scale, TrendingUp, Undo2, Wallet } from "lucide-react";
 import { getOrdersWithReturns } from "@/lib/channels/core/returns";
+import { getOrdersIncomeStatus, type IncomeStatus } from "@/lib/channels/core/payouts";
+
+/** SHOPEE-7: one short word per release state; details live on the order page. */
+const RELEASE_BADGE: Partial<Record<IncomeStatus, { label: string; className: string }>> = {
+  pending: { label: "Chờ giải ngân", className: "text-muted-foreground" },
+  released: { label: "Đã giải ngân", className: "text-info-text" },
+  reconciled: { label: "Đã giải ngân", className: "text-success-text" },
+  mismatch: { label: "Lệch đối soát", className: "text-danger-text" },
+};
+
+function ReleaseBadge({ release }: { release: { incomeStatus: IncomeStatus; releaseStale: boolean } | undefined }) {
+  const b = release ? RELEASE_BADGE[release.incomeStatus] : undefined;
+  if (!b || !release) return null;
+  return (
+    <span className={`ml-1.5 text-[11px] ${release.releaseStale ? "text-warning-text" : b.className}`} title={release.releaseStale ? "Hoàn thành quá lâu mà chưa giải ngân" : undefined}>
+      · {b.label}
+      {release.releaseStale ? " (quá lâu)" : ""}
+    </span>
+  );
+}
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { requirePermission } from "@/lib/auth/session";
@@ -161,7 +181,11 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
     getSyncHealth(),
   ]);
   // SHOPEE-6 §50: subtle "Có trả hàng" indicator (one query for the visible page)
-  const withReturns = await getOrdersWithReturns(createAdminClient(), rows.map((o) => o.orderId));
+  // SHOPEE-7 §26: compact release badge (same visible-page query pattern)
+  const [withReturns, releases] = await Promise.all([
+    getOrdersWithReturns(createAdminClient(), rows.map((o) => o.orderId)),
+    getOrdersIncomeStatus(createAdminClient(), rows.map((o) => o.orderId)),
+  ]);
   const query: Record<string, string | undefined> = Object.fromEntries(ORDER_FILTER_KEYS.map((k) => [k, params[k]?.trim() || undefined]));
   const hasFilter = activeFilterCount(query, ORDER_FILTER_KEYS) > 0;
   const syncing = hasActiveSync(syncStatuses);
@@ -343,6 +367,7 @@ export default async function ShopeeOrdersPage({ searchParams }: { searchParams:
                               Có trả hàng
                             </span>
                           )}
+                          <ReleaseBadge release={releases.get(o.orderId)} />
                           {o.dataSource === "fixture" && (
                             <StatusBadge tone="info" icon={false} className="ml-1.5">
                               FIXTURE

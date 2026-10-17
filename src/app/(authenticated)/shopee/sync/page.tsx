@@ -30,10 +30,12 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /** Matrix columns, in queue priority order (orders first). */
-const MATRIX: Array<{ type: "order" | "escrow" | "product" | "return"; label: string; button: string }> = [
+const MATRIX: Array<{ type: "order" | "escrow" | "product" | "return" | "income" | "payout"; label: string; button: string }> = [
   { type: "order", label: "Đơn hàng", button: "Đồng bộ đơn" },
   { type: "return", label: "Trả hàng", button: "Đồng bộ trả hàng" },
   { type: "escrow", label: "Tài chính", button: "Đồng bộ tài chính" },
+  { type: "income", label: "Giải ngân", button: "Đồng bộ giải ngân" },
+  { type: "payout", label: "Payout", button: "Đồng bộ payout" },
   { type: "product", label: "Sản phẩm", button: "Đồng bộ sản phẩm" },
 ];
 

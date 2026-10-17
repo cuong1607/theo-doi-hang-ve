@@ -16,6 +16,8 @@ const SYNC_TYPES = [
   { type: "product", label: "sản phẩm" },
   { type: "escrow", label: "tài chính" },
   { type: "return", label: "trả hàng" },
+  { type: "income", label: "giải ngân" },
+  { type: "payout", label: "payout" },
 ] as const;
 
 export function DevToolsPanel({ shops }: { shops: Array<{ id: string; name: string }> }) {

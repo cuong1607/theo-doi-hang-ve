@@ -44,4 +44,7 @@ export const FRESHNESS_SUBJECT: Record<string, string> = {
   order: "Đơn hàng",
   product: "Sản phẩm",
   escrow: "Tài chính",
+  return: "Trả hàng",
+  income: "Giải ngân",
+  payout: "Payout",
 };

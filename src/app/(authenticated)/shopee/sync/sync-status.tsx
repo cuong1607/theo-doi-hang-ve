@@ -32,9 +32,11 @@ export const SYNC_TYPE_LABELS: Record<string, string> = {
   product: "Sản phẩm",
   escrow: "Tài chính",
   return: "Trả hàng",
+  income: "Giải ngân",
+  payout: "Payout",
 };
 
-const PROGRESS_UNIT: Record<string, string> = { order: "đơn", product: "sản phẩm", escrow: "đơn", return: "yêu cầu" };
+const PROGRESS_UNIT: Record<string, string> = { order: "đơn", product: "sản phẩm", escrow: "đơn", return: "yêu cầu", income: "đơn", payout: "giao dịch" };
 
 export function JobStatusBadge({ job }: { job: Pick<SyncJobView, "status" | "cancelRequested"> }) {
   return (
@@ -64,7 +66,7 @@ export function FreshnessSummary({
 }: {
   shops: Array<{ id: string; shopName: string }>;
   statuses: Map<string, SyncStatusView>;
-  syncType: "order" | "product" | "escrow" | "return";
+  syncType: "order" | "product" | "escrow" | "return" | "income" | "payout";
   schedulerStale?: boolean;
 }) {
   if (shops.length === 0) return null;

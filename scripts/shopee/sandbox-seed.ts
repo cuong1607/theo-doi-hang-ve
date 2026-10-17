@@ -8,6 +8,8 @@
 //                                                      the incremental product sync does not see stock-only changes)
 //   npm run shopee:sandbox -- rename <itemId> <name>   change the item name (bumps update_time → incremental sync refreshes it)
 //   npm run shopee:sandbox -- list                    items of the sandbox shop
+//   npm run shopee:sandbox -- get /api/v2/payment/get_income_overview '{"k":"v"}'
+//                                                     read-only probe of any get_* API (Git Bash: MSYS_NO_PATHCONV=1)
 //
 // Safety (refuses to run otherwise):
 //   * SHOPEE_API_BASE_URL must be a Shopee SANDBOX host (test-stable / sandbox)
@@ -154,6 +156,18 @@ async function main() {
     if (!itemId || !name) fail("Lệnh: rename <itemId> <tên mới>");
     const r = await call("/api/v2/product/update_item", "POST", { item_id: itemId, item_name: name });
     console.log(JSON.stringify({ error: r.error, message: r.message, item_id: r.response?.item_id, item_name: r.response?.item_name }));
+    return;
+  }
+  if (cmd === "get") {
+    // Read-only probe: npm run shopee:sandbox -- get /api/v2/payment/get_income_overview '{"k":1}'
+    if (!args[0]?.startsWith("/api/v2/") || !/\/get_/.test(args[0])) fail("chỉ cho phép GET /api/v2/.../get_*");
+    const params = args[1] ? (JSON.parse(args[1]) as Record<string, unknown>) : {};
+    try {
+      const r = await call(args[0], args[2] === "POST" ? "POST" : "GET", params);
+      console.log(JSON.stringify(r, null, 2).slice(0, 8000));
+    } catch (err) {
+      console.log(String(err), JSON.stringify((err as { details?: unknown }).details ?? null));
+    }
     return;
   }
   if (cmd === "returns") {

@@ -20,7 +20,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export type SyncActionResult = { ok: boolean; message: string };
 
 const uuid = z.string().uuid();
-const SYNC_TYPE = z.enum(["order", "product", "escrow", "return"]);
+const SYNC_TYPE = z.enum(["order", "product", "escrow", "return", "income", "payout"]);
 
 async function requestOrigin(): Promise<string | null> {
   const h = await headers();
@@ -66,6 +66,7 @@ export async function requestBackfillAction(shopId: string, syncType: RunnableSy
     await kickAfterResponse();
     revalidatePath("/shopee", "layout");
     if (!job.created) return { ok: true, message: "Shop này đang có một job backfill — không tạo thêm." };
+    if (syncType === "income" || syncType === "payout") return { ok: true, message: `Đã thêm job backfill ${syncType === "income" ? "giải ngân" : "payout"} ${days} ngày (ưu tiên thấp, chạy dần theo từng cửa sổ 14 ngày).` };
     return { ok: true, message: syncType === "order" ? `Đã thêm job backfill ${days} ngày (ưu tiên thấp, chạy dần theo từng cửa sổ 15 ngày).` : "Đã thêm job quét toàn bộ sản phẩm (ưu tiên thấp)." };
   } catch (err) {
     return { ok: false, message: failMessage(err, "Không tạo được job backfill.") };
