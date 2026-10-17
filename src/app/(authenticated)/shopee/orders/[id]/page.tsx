@@ -159,9 +159,20 @@ export default async function ShopeeOrderDetailPage({ params }: { params: Promis
                     <TableCell className="text-right">{formatQuantity(line.quantity)}</TableCell>
                     <TableCell className="text-right text-muted-foreground">{formatCurrency(line.originalUnitPrice)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(line.discountedUnitPrice)}</TableCell>
-                    <TableCell className="text-xs">
+                    <TableCell className="text-xs whitespace-normal">
                       {line.costMethod ? COST_METHOD_LABELS[line.costMethod] ?? line.costMethod : <span className="text-muted-foreground">Chưa tính</span>}
                       {line.cogsReversedAt && <p className="text-xs text-muted-foreground">đã hoàn kho (huỷ)</p>}
+                      {line.comboComponents.length > 0 && (
+                        <ul className="mt-1 min-w-48 space-y-0.5 text-muted-foreground" aria-label="Thành phần combo đã chụp">
+                          {line.comboComponents.map((c) => (
+                            <li key={c.componentProductId}>
+                              <span className="font-mono">{c.componentSku}</span> × {formatQuantity(c.totalComponentQuantity)}
+                              <span className="text-[11px]"> ({formatQuantity(c.quantityPerCombo)}/combo)</span>
+                              {c.costPerUnitSnapshot !== null && <> · {formatCurrency(c.costPerUnitSnapshot)} = {formatCurrency(c.componentTotalCogs)}</>}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </TableCell>
                     <TableCell className="text-right">{line.costPerUnitSnapshot === null ? <span className="text-muted-foreground">Chưa tính</span> : formatCurrency(line.costPerUnitSnapshot)}</TableCell>
                     <TableCell className="text-right">

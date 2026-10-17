@@ -1267,6 +1267,36 @@ estimated_profit_state  = profit (≥ 0) | loss (< 0) | insufficient
   BQ trước/sau. Danh sách: badge + bộ lọc "Tạm tính (chưa có hóa đơn)" / "Chờ hóa đơn VAT".
   Đơn Shopee: nhãn "Tạm tính" dưới COGS và LN dự kiến (`v_channel_order_summary.cogs_provisional`).
 
+### Combo SKU (PRODUCT-COMBO-1, migration 00056)
+
+- `products.product_type` = `atomic` (SKU thật — nguồn sự thật duy nhất cho tồn kho,
+  bình quân, COGS, sổ giá vốn) | `combo` (SKU bán hàng gồm SKU thật). Bất biến; combo
+  không có NCC. BOM ở `product_combo_components` (combo → atomic × SL > 0; không lồng
+  combo, không tự chứa). Không suy BOM từ chuỗi SKU. Tạo/sửa qua RPC
+  `save_combo_product` (thay BOM nguyên khối, gộp dòng trùng).
+- Chốt chặn DB: combo không thể có `product_cost_state`, dòng `inventory_cost_ledger`,
+  `receipt_items`, `invoice_items` (trigger `guard_atomic_only`, PC020).
+- Bán combo (`cost_apply_combo_order_item`, một giao dịch): lần tính đầu **chụp BOM
+  hiện tại** vào `channel_order_item_cogs_components`; mỗi thành phần một `sale_out`
+  trên SKU thật (SL = SL BOM × SL đơn, `source_type = 'channel_order_item_component'`,
+  `source_id` = dòng snapshot → khóa unique sẵn có ⇒ chạy lại không trùng); giá =
+  bình quân của SKU thật tại thời điểm bán. `total_cogs` dòng đơn = Σ thành phần, chỉ
+  khi **mọi** thành phần có giá (thiếu → NULL, không cộng dở; thành phần không có giá
+  nào → rút toàn bộ, `no_cost`). `cost_method = 'combo_bom'`,
+  `cost_per_unit_snapshot` = Σ SL/combo × giá (hiển thị). Tạm tính nếu có thành phần
+  tạm tính.
+- Sửa BOM chỉ áp dụng cho đơn tính giá vốn sau đó; snapshot cũ bất biến (CG001/CG005).
+  Huỷ đơn: `sale_reversal_in` từng thành phần theo snapshot (không đọc BOM hiện tại).
+  Rebuild: `cost_fill_pending_combo_sales` / `cost_true_up_provisional_combo_sales`.
+- Hiển thị (không lưu): `v_combo_overview` — giá vốn hiện tại = Σ bình quân × SL
+  (NULL nếu thiếu → "Chưa đủ giá vốn"), có thể bán = min(⌊max(tồn, 0) / SL⌋).
+- Ghép SKU Shopee: auto-map trùng SKU áp dụng cho cả combo (DB-only); ghép tay hiện badge
+  "Combo". Lợi nhuận dự kiến dùng `total_cogs` như mọi dòng — không có code tài chính
+  riêng cho combo.
+- Giới hạn v1: không combo lồng, không nhập kho combo / đóng gói; điều chỉnh giá vốn
+  lịch sử thủ công chưa áp dụng cho dòng combo; trả hàng (SHOPEE-6) sẽ dùng snapshot
+  thành phần để `return_in`.
+
 ### Historical COGS Restatement
 
 - **Dựng lại sổ giá vốn** (`cost_rebuild_product` / `_all`) chỉ tính lại ledger +

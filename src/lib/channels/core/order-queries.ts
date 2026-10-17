@@ -8,6 +8,7 @@
 // ============================================================
 import "server-only";
 
+import { getOrderItemComponentSnapshots, type OrderItemComponentSnapshot } from "@/lib/products/combo";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { escapeIlikeTerm } from "@/lib/supabase/search";
 
@@ -387,6 +388,8 @@ export interface ChannelOrderLine {
   costPending: boolean;
   /** COGS taken at a provisional (default-VAT) cost; trued up automatically when the invoice is linked. */
   costProvisional: boolean;
+  /** PRODUCT-COMBO-1: combo line → the BOM + component costs used (snapshot); empty for atomic lines. */
+  comboComponents: OrderItemComponentSnapshot[];
   /** Costing version of the snapshot (NULL = before moving-average-v2-vat). */
   costVersion: string | null;
   /** Current state of the sellable unit (for the mapping CTA); null = listing not in catalog. */
@@ -453,7 +456,7 @@ export async function getChannelOrderDetail(orderId: string): Promise<ChannelOrd
     products: { sku: string; name: string } | null;
   };
   const rows = (items ?? []) as unknown as ItemRow[];
-  const [units, { data: sales }] = await Promise.all([
+  const [units, { data: sales }, comboSnapshots] = await Promise.all([
     getChannelModelsByIds(rows.map((r) => r.channel_model_id).filter((id): id is string => !!id)),
     db
       .from("inventory_cost_ledger")
@@ -461,6 +464,7 @@ export async function getChannelOrderDetail(orderId: string): Promise<ChannelOrd
       .eq("source_type", "channel_order_item")
       .eq("event_type", "sale_out")
       .in("source_id", rows.length ? rows.map((r) => r.id) : ["00000000-0000-0000-0000-000000000000"]),
+    getOrderItemComponentSnapshots(db, rows.map((r) => r.id)),
   ]);
   const saleRows = (sales ?? []) as Array<{ source_id: string; qty_after: string; metadata: { cost_pending?: boolean } | null }>;
   const negative = new Set(saleRows.filter((s) => s.qty_after.startsWith("-")).map((s) => s.source_id));
@@ -508,6 +512,7 @@ export async function getChannelOrderDetail(orderId: string): Promise<ChannelOrd
       negativeInventory: negative.has(r.id),
       costPending: r.total_cogs === null && pending.has(r.id),
       costProvisional: r.cost_provisional === true && r.total_cogs !== null,
+      comboComponents: comboSnapshots.get(r.id) ?? [],
       costVersion: r.cost_version,
       unit: r.channel_model_id ? units.get(r.channel_model_id) ?? null : null,
     })),

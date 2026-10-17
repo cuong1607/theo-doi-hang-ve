@@ -24,6 +24,7 @@ export const COST_METHOD_LABELS: Record<string, string> = {
   fifo: "FIFO",
   manual: "Thủ công",
   unknown: "Không rõ",
+  combo_bom: "Combo (theo thành phần)",
 };
 
 export const FINANCIAL_STATUS_LABELS: Record<string, string> = {

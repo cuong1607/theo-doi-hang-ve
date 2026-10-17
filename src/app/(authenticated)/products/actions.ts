@@ -203,7 +203,9 @@ export async function updateProduct(
       current_price: parsed.data.currentPrice,
       supplier_id: parsed.data.supplierId,
     })
-    .eq("id", id);
+    .eq("id", id)
+    // combos are edited on /products/combos (no supplier, BOM instead)
+    .eq("product_type", "atomic");
 
   if (error) {
     if (error.code === "23505") {

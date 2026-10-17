@@ -19,7 +19,7 @@ import { consoleCostLogger, type CostLogger } from "./log.ts";
  * cost_pending     posted while VAT-pending purchases are in the position (no COGS yet)
  * calculated_late  a pending sale got its FIRST snapshot once the VAT invoice was linked
  */
-export type SaleResult = "calculated" | "calculated_negative" | "calculated_late" | "cost_pending" | "no_cost" | "unmapped" | "ineligible" | "already" | "not_found";
+export type SaleResult = "calculated" | "calculated_negative" | "calculated_late" | "cost_pending" | "no_cost" | "no_bom" | "unmapped" | "ineligible" | "already" | "not_found";
 /** withdrawn_pending: a cancelled sale that never had a COGS (VAT pending) — its sale event is removed, nothing reversed. */
 export type ReversalResult = "reversed" | "withdrawn_pending" | "already" | "nothing_posted" | "not_found";
 
@@ -122,6 +122,7 @@ const SALE_KEYS: Record<string, keyof BackfillCogsResult> = {
   calculated_late: "calculated",
   no_cost: "skippedNoCost",
   cost_pending: "skippedNoCost",
+  no_bom: "skippedNoCost",
   withdrawn_pending: "reversed",
   unmapped: "skippedUnmapped",
   ineligible: "skippedIneligible",

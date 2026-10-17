@@ -215,19 +215,31 @@ export interface InternalProductOption {
   sku: string;
   name: string;
   isActive: boolean;
+  /** PRODUCT-COMBO-1: a Shopee model may map to an atomic product OR a combo. */
+  productType: "atomic" | "combo";
 }
 
-export async function searchInternalProducts(term: string, limit = 20): Promise<InternalProductOption[]> {
+/** Product search for pickers. `onlyType: "atomic"` for combo components (no nested combos). */
+export async function searchInternalProducts(term: string, limit = 20, options: { onlyType?: "atomic" | "combo"; activeOnly?: boolean } = {}): Promise<InternalProductOption[]> {
   const q = term.trim();
   if (!q) return [];
   const escaped = escapeIlikeTerm(q).replace(/[,()]/g, " ");
-  const { data, error } = await createAdminClient()
+  let query = createAdminClient()
     .from("products")
-    .select("id, sku, name, is_active")
+    .select("id, sku, name, is_active, product_type")
     .or(`sku.ilike.%${escaped}%,name.ilike.%${escaped}%`)
     .order("is_active", { ascending: false })
     .order("sku")
     .limit(limit);
+  if (options.onlyType) query = query.eq("product_type", options.onlyType);
+  if (options.activeOnly) query = query.eq("is_active", true);
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
-  return ((data ?? []) as Array<{ id: string; sku: string; name: string; is_active: boolean }>).map((p) => ({ id: p.id, sku: p.sku, name: p.name, isActive: p.is_active }));
+  return ((data ?? []) as Array<{ id: string; sku: string; name: string; is_active: boolean; product_type: "atomic" | "combo" }>).map((p) => ({
+    id: p.id,
+    sku: p.sku,
+    name: p.name,
+    isActive: p.is_active,
+    productType: p.product_type,
+  }));
 }

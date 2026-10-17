@@ -41,7 +41,7 @@ export type ModelRowView = {
   orderItemCount: number;
 };
 
-type ProductOption = { id: string; sku: string; name: string; isActive: boolean };
+type ProductOption = { id: string; sku: string; name: string; isActive: boolean; productType: "atomic" | "combo" };
 
 function MapDialog({ row, open, onOpenChange }: { row: ModelRowView; open: boolean; onOpenChange: (v: boolean) => void }) {
   const [term, setTerm] = useState(row.modelSku ?? row.itemSku ?? "");
@@ -102,7 +102,14 @@ function MapDialog({ row, open, onOpenChange }: { row: ModelRowView; open: boole
                 <span>
                   <span className="font-medium">{p.sku}</span> — {p.name}
                 </span>
-                {!p.isActive && <Badge variant="secondary">Ngừng HĐ</Badge>}
+                <span className="flex shrink-0 gap-1">
+                  {p.productType === "combo" && (
+                    <Badge variant="outline" title="SKU combo — giá vốn và tồn kho tính theo các SKU thành phần">
+                      Combo
+                    </Badge>
+                  )}
+                  {!p.isActive && <Badge variant="secondary">Ngừng HĐ</Badge>}
+                </span>
               </button>
             ))
           )}

@@ -13,6 +13,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+const TYPE_OPTIONS = [
+  { label: "Tất cả", value: "all" },
+  { label: "Sản phẩm", value: "atomic" },
+  { label: "Combo", value: "combo" },
+];
+
 const STATUS_OPTIONS = [
   { label: "Tất cả trạng thái", value: "all" },
   { label: "Đang hoạt động", value: "active" },
@@ -24,12 +30,14 @@ export function ProductFilters({
   name,
   supplierId,
   status,
+  type,
   suppliers,
 }: {
   sku: string;
   name: string;
   supplierId: string;
   status: string;
+  type: string;
   suppliers: { id: string; code: string; name: string }[];
 }) {
   const router = useRouter();
@@ -94,6 +102,22 @@ export function ProductFilters({
           {suppliers.map((s) => (
             <SelectItem key={s.id} value={s.id}>
               {s.code} — {s.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        value={type || "all"}
+        onValueChange={(value) => updateParam("type", value === "all" ? "" : String(value))}
+        items={TYPE_OPTIONS}
+      >
+        <SelectTrigger className="w-full max-w-[150px]" aria-label="Lọc theo loại sản phẩm">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {TYPE_OPTIONS.map((opt) => (
+            <SelectItem key={opt.value} value={opt.value}>
+              {opt.label}
             </SelectItem>
           ))}
         </SelectContent>
