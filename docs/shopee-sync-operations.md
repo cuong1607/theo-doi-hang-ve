@@ -449,6 +449,20 @@ trước đó là `SYNC_JOB_SLICE` / `SYNC_SCHEDULER_RUN`):
 | `purchase_cost_adjusted_vat`, `cost_rebuild_preview` | dựng lại giá vốn có VAT / xem trước điều chỉnh lịch sử |
 | `SYNC_SCHEDULER_FAILED`, `SYNC_KICK_FAILED`, `SYNC_WORKER_FAILED` | lỗi |
 
+## 14b2. Chỉ đồng bộ đơn từ một mốc (00055)
+
+`channel_sync_settings.orders_from` (mặc định 17/10/2026 00:00 giờ VN; NULL = tất cả).
+Job đơn: cửa sổ bắt đầu từ mốc; đơn trước mốc không lấy chi tiết (ngày trong mã đơn
+YYMMDD, hoặc `created_at_channel` đã lưu) và không lưu (kiểm tra `create_time` của chi
+tiết) — đếm vào `stats.skippedBeforeCutoff`, không phải lỗi. Job tài chính:
+`get_orders_needing_escrow_sync` / `_estimate` bỏ đơn tạo trước mốc. Đơn cũ đã lưu vẫn
+hiển thị, chỉ không còn cập nhật. Đổi mốc không cần deploy:
+`update public.channel_sync_settings set orders_from = '2026-11-01 00:00+07';`
+
+Job đơn cũng dừng lưu khi hết ngân sách thời gian của lượt (kể cả giữa một lô 50
+đơn); đơn đã lấy nhưng chưa lưu nằm lại `pendingSns` cho lượt sau
+(`stats.detailsDeferred`) — tránh function bị kill trước checkpoint khi DB ở xa.
+
 ## 14c. Job "Đang chờ" mà không chạy — lý do
 
 Trang Đồng bộ Shopee (cột Trạng thái của "Job gần đây"), response của

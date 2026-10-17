@@ -767,6 +767,32 @@ test("LOCAL-LIVE-1: slow order storing (far DB) stops on the slice budget INSIDE
   assert.ok(count(h.calls, "v2.order.get_order_detail") > 1, "deferred orders are fetched again in a later slice");
 });
 
+test("PATCH cutoff (00055): the order job stores only orders created on/after channel_sync_settings.orders_from; older ones are not stored and not failed", async () => {
+  const s = await shop();
+  await catalog(s, [1]);
+  const saved = (await db.from("channel_sync_settings").select("orders_from").eq("id", true).single()).data!.orders_from as string | null;
+  await db.from("channel_sync_settings").update({ orders_from: new Date((NOW - 86400) * 1000).toISOString() }).eq("id", true);
+  try {
+    const h = harness([s]);
+    // old order (created 5 days ago, updated now — Shopee still lists it by update_time) + a new one
+    h.state.orders = orderFixtures([
+      { sn: `${TAG}-CUT-OLD`, update: NOW - 600 },
+      { sn: `${TAG}-CUT-NEW`, update: NOW - 600 },
+    ]);
+    (h.state.orders.ordersBySn.get(`${TAG}-CUT-OLD`) as { create_time: number }).create_time = NOW - 5 * 86400;
+    await requestShopeeSync(db, { shopId: s, syncType: "order", mode: "incremental" });
+    const [r] = await h.drain();
+    assert.equal(r.status, "success");
+    const { data: stored } = await db.from("channel_orders").select("external_order_sn").eq("shop_id", s);
+    assert.deepEqual(stored!.map((o) => o.external_order_sn), [`${TAG}-CUT-NEW`]);
+    const j = await job(r.jobId);
+    assert.equal((j.metadata!.stats as Record<string, number>).skippedBeforeCutoff, 1);
+    assert.equal(j.records_failed, 0, "skipped ≠ failed");
+  } finally {
+    await db.from("channel_sync_settings").update({ orders_from: saved }).eq("id", true);
+  }
+});
+
 test("PERF-2 26 + 28. one shop's failure does not block the others; the global cap still holds", async () => {
   const [bad, good] = [await shop(), await shop()];
   await catalog(good, [1]);

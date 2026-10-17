@@ -6,7 +6,9 @@ import { listShops } from "@/lib/channels/core/queries";
 import { getSyncConfig } from "@/lib/channels/core/sync-config";
 import type { PendingDiagnosis } from "@/lib/channels/core/sync-diagnostics";
 import { diagnoseJobView, getPendingDiagnosticsContext, getQueueCounts, getSyncHealth, getSyncStatuses, listRecentSyncJobs } from "@/lib/channels/core/sync-status-queries";
+import { getOrdersSyncFrom } from "@/lib/channels/core/sync-settings";
 import { devToolsEnabled } from "@/lib/dev-tools";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getShopeeConfig } from "@/lib/channels/shopee/config";
 import { getShopeeProviderMode } from "@/lib/channels/shopee/provider-mode";
 import { formatDateTime, formatDuration } from "@/lib/ui/format";
@@ -51,12 +53,13 @@ export default async function ShopeeSyncPage() {
   }
 
   const shops = (await listShops()).filter((s) => s.channel === "shopee");
-  const [statuses, jobs, queue, health, diagCtx] = await Promise.all([
+  const [statuses, jobs, queue, health, diagCtx, ordersFrom] = await Promise.all([
     getSyncStatuses(shops.map((s) => s.id)),
     listRecentSyncJobs({}, 30),
     getQueueCounts(),
     getSyncHealth(),
     getPendingDiagnosticsContext(),
+    getOrdersSyncFrom(createAdminClient()),
   ]);
   const showDevTools = canManage && devToolsEnabled();
   const shopName = new Map(shops.map((s) => [s.id, s.shopName]));
@@ -265,6 +268,10 @@ export default async function ShopeeSyncPage() {
             <CardTitle>Cấu hình đồng bộ</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
+            <p>
+              Chỉ đồng bộ đơn tạo từ: <b className="text-foreground">{ordersFrom ? formatDateTime(ordersFrom.toISOString()) : "mọi thời điểm"}</b>
+              {ordersFrom ? " — đơn cũ hơn vẫn hiển thị nhưng không còn được cập nhật (đơn hàng và tài chính)." : ""}
+            </p>
             <p>
               Nhịp tự động: đơn mỗi <b className="text-foreground">{config.orderIntervalMinutes}</b> phút · tài chính mỗi <b className="text-foreground">{config.escrowIntervalMinutes}</b> phút
               · sản phẩm mỗi <b className="text-foreground">{config.productIntervalMinutes}</b> phút · chồng lấn cửa sổ đơn <b className="text-foreground">{config.orderOverlapMinutes}</b> phút.

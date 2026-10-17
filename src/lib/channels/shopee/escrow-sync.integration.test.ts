@@ -8,7 +8,7 @@
 // Each test seeds its own fixture shop + orders. Everything is deleted in
 // `after` (shop cascade → orders → order_financials / components / snapshots).
 // ============================================================
-import { test, after } from "node:test";
+import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -37,7 +37,20 @@ const shopIds: string[] = [];
 let n = 0;
 const FIXTURE_DIR = path.join(process.cwd(), "tests", "fixtures", "shopee", "escrow");
 
+/** 00055 orders-sync cutoff: these tests build orders days in the past — run without it, restore after. */
+let savedCutoff: string | null = null;
+const setCutoff = async (value: string | null) => {
+  const { error } = await db.from("channel_sync_settings").update({ orders_from: value }).eq("id", true);
+  if (error) throw error;
+};
+
+before(async () => {
+  savedCutoff = ((await db.from("channel_sync_settings").select("orders_from").eq("id", true).single()).data?.orders_from as string | null) ?? null;
+  await setCutoff(null);
+});
+
 after(async () => {
+  await setCutoff(savedCutoff);
   if (shopIds.length) await db.from("shops").delete().in("id", shopIds);
 });
 
@@ -325,6 +338,28 @@ test("13. candidate query: never synced → yes; fresh → no; provider changed 
   assert.equal(c.has(old.id), false, "outside the refresh window → stable, not refetched");
   await db.from("channel_orders").update({ updated_at_channel: new Date(Date.now() + 60_000).toISOString() }).eq("id", old.id);
   assert.ok((await ids(new Date(Date.now() + 120_000))).has(old.id), "provider changed the order → refetch");
+});
+
+test("PATCH cutoff (00055): orders created before channel_sync_settings.orders_from are no settlement / estimate candidates", async () => {
+  const s = await shop();
+  const oldDone = await order(s, { updatedAt: new Date(Date.now() - 5 * 86400_000).toISOString() });
+  const newDone = await order(s);
+  const oldOpen = await order(s, { status: "SHIPPED", updatedAt: new Date(Date.now() - 5 * 86400_000).toISOString() });
+  const newOpen = await order(s, { status: "SHIPPED" });
+  const settle = async () =>
+    new Set(((await db.rpc("get_orders_needing_escrow_sync", { p_shop_id: s, p_limit: 50 })).data as Array<{ order_id: string }>).map((r) => r.order_id));
+  const estimate = async () =>
+    new Set(((await db.rpc("get_orders_needing_escrow_estimate", { p_shop_id: s, p_limit: 50 })).data as Array<{ order_id: string }>).map((r) => r.order_id));
+  assert.deepEqual([(await settle()).has(oldDone.id), (await estimate()).has(oldOpen.id)], [true, true], "no cutoff → everything");
+  await setCutoff(new Date(Date.now() - 86400_000).toISOString());
+  try {
+    const [st, es] = [await settle(), await estimate()];
+    assert.deepEqual([st.has(oldDone.id), st.has(newDone.id)], [false, true]);
+    assert.deepEqual([es.has(oldOpen.id), es.has(newOpen.id)], [false, true]);
+    assert.equal(Number((await db.rpc("count_orders_needing_escrow_estimate", { p_shop_id: s })).data), 1, "the count follows the same rule");
+  } finally {
+    await setCutoff(null);
+  }
 });
 
 test("14. escrow job through the queue: bounded batches, checkpointed stats, repair scope", async () => {

@@ -25,7 +25,15 @@ import { mapWithConcurrency } from "../core/time-windows.ts";
 import { ShopeeConfigError } from "./config.ts";
 import { ShopeeApiError } from "./errors.ts";
 import { ShopeePayloadError } from "./product-adapter.ts";
-import { ORDER_DETAIL_TTL_MINUTES, orderDetailTtlMinutes, shouldRefreshOrderDetail, shouldRefreshProductDetail, type LocalOrderState } from "./sync-decisions.ts";
+import {
+  isCreatedBeforeCutoff,
+  isOrderBeforeSyncCutoff,
+  ORDER_DETAIL_TTL_MINUTES,
+  orderDetailTtlMinutes,
+  shouldRefreshOrderDetail,
+  shouldRefreshProductDetail,
+  type LocalOrderState,
+} from "./sync-decisions.ts";
 import { JobRefusedError, toJobFailure } from "./sync-errors.ts";
 import { ApiCallMeter, JobTokenCache } from "./sync-instrumentation.ts";
 
@@ -425,6 +433,20 @@ test("LOCAL-LIVE-1 §14: every pending reason is named, in claim order", () => {
   assert.equal(reason(job(), ctx({ scheduler: { last_run_at: "2030-01-01T09:00:00Z" } })), "scheduler_not_running");
   assert.equal(reason(job(), ctx({ worker: null })), "worker_not_running");
   for (const label of Object.values(PENDING_REASON_LABELS)) assert.ok(label.length > 0);
+});
+
+test("PATCH cutoff (00055): order_sn day pre-filter (with margin) and create_time final check", () => {
+  const cutoff = new Date("2026-10-17T00:00:00+07:00");
+  assert.equal(isOrderBeforeSyncCutoff("261015ABCDEFGH", null, cutoff), true, "two days before → skipped without a detail call");
+  assert.equal(isOrderBeforeSyncCutoff("261016ABCDEFGH", null, cutoff), false, "the day before is unsure (time zones) → fetched, create_time decides");
+  assert.equal(isOrderBeforeSyncCutoff("261017ABCDEFGH", null, cutoff), false);
+  assert.equal(isOrderBeforeSyncCutoff("XYZ-NOT-A-DATE", null, cutoff), false, "unknown format → fetched");
+  assert.equal(isOrderBeforeSyncCutoff("261015ABCDEFGH", null, null), false, "no cutoff → everything");
+  assert.equal(isOrderBeforeSyncCutoff("261020ABCDEFGH", { createdAtChannel: "2026-10-16T10:00:00Z" }, cutoff), true, "a stored order's create time wins");
+  assert.equal(isOrderBeforeSyncCutoff("261015ABCDEFGH", { createdAtChannel: "2026-10-17T01:00:00Z" }, cutoff), false);
+  assert.equal(isCreatedBeforeCutoff("2026-10-16T16:59:59Z", cutoff), true);
+  assert.equal(isCreatedBeforeCutoff("2026-10-16T17:00:00Z", cutoff), false, "exactly the cutoff is kept");
+  assert.equal(isCreatedBeforeCutoff(null, cutoff), false, "unknown create time → kept");
 });
 
 test("LOCAL-LIVE-1 §9: dev tools only on local", () => {

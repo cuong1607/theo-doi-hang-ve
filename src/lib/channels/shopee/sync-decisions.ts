@@ -33,6 +33,37 @@ export interface LocalOrderState {
   updatedAtChannel: string | null;
   lastSyncedAt: string | null;
   lineCount: number;
+  /** ISO create time of the stored order (orders-sync cutoff check). */
+  createdAtChannel?: string | null;
+}
+
+/** Shopee order_sn starts with the order's creation day as YYMMDD (e.g. 261017… = 17/10/2026). */
+const ORDER_SN_DAY = /^(\d{2})(\d{2})(\d{2})/;
+/** The SN day ends at most 36 h after its UTC midnight (UTC−12) — the safe "whole day is over" point. */
+const SN_DAY_END_MS = 36 * 3_600_000;
+
+/**
+ * PATCH orders-sync cutoff (00055): is this listed order created BEFORE the
+ * cutoff, so it must not be fetched? Known locally → its created_at decides.
+ * Unknown → the order_sn day, only when that whole day (in ANY time zone)
+ * lies before the cutoff; anything unsure is fetched and the
+ * detail's create_time decides (isCreatedBeforeCutoff).
+ */
+export function isOrderBeforeSyncCutoff(orderSn: string, local: Pick<LocalOrderState, "createdAtChannel"> | null, cutoff: Date | null): boolean {
+  if (!cutoff) return false;
+  if (local?.createdAtChannel) return isCreatedBeforeCutoff(local.createdAtChannel, cutoff);
+  const m = ORDER_SN_DAY.exec(orderSn);
+  if (!m) return false;
+  const [y, mo, d] = [2000 + Number(m[1]), Number(m[2]), Number(m[3])];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
+  return Date.UTC(y, mo - 1, d) + SN_DAY_END_MS <= cutoff.getTime();
+}
+
+/** Final check on the detail: created strictly before the cutoff (unknown create time → keep). */
+export function isCreatedBeforeCutoff(createdAt: string | null | undefined, cutoff: Date | null): boolean {
+  if (!cutoff || !createdAt) return false;
+  const t = new Date(createdAt).getTime();
+  return Number.isFinite(t) && t < cutoff.getTime();
 }
 
 export interface OrderListEntry {

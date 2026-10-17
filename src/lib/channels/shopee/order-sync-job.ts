@@ -28,7 +28,8 @@ import { mapWithConcurrency, splitTimeWindows } from "../core/time-windows.ts";
 import { errorInfo, JobRefusedError } from "./sync-errors.ts";
 import { MAX_ORDER_WINDOW_SECONDS, ORDER_DETAIL_BATCH_SIZE, type OrderProviderContext } from "./order-provider.ts";
 import { ORDER_INITIAL_LOOKBACK_SECONDS, ORDER_SYNC_TYPE, type OrderBatchAccumulator, type ShopeeOrderSyncService } from "./order-sync.ts";
-import { shouldRefreshOrderDetail, type LocalOrderState } from "./sync-decisions.ts";
+import { getOrdersSyncFrom } from "../core/sync-settings.ts";
+import { isOrderBeforeSyncCutoff, shouldRefreshOrderDetail, type LocalOrderState } from "./sync-decisions.ts";
 
 /** Pages per sub-window before the walk is declared anomalous. */
 const MAX_PAGES_PER_WINDOW = 500;
@@ -65,6 +66,8 @@ export class OrderSyncJobRunner implements SyncJobRunner {
     const repairSns = Array.isArray((progress.meta.scope as { orderSns?: unknown } | undefined)?.orderSns)
       ? ((progress.meta.scope as { orderSns: string[] }).orderSns).slice(0, MAX_REPAIR_ORDER_SNS)
       : null;
+    // 00055: orders created before the cutoff are not synced (an explicit repair list still is).
+    const cutoff = repairSns ? null : await getOrdersSyncFrom(this.db);
 
     // ---- window + checkpoint (first slice)
     let windowFrom = job.window_from ? new Date(job.window_from) : null;
@@ -87,8 +90,13 @@ export class OrderSyncJobRunner implements SyncJobRunner {
       if (first.cancelRequested) return { kind: "cancelled" };
     }
     const cp = progress.checkpoint!;
+    // The walk never starts before the cutoff (time_range_field = update_time: older orders
+    // that change later are still listed — filtered per entry below).
+    const walkFrom = windowFrom && cutoff && cutoff > windowFrom ? cutoff : windowFrom;
     const windows =
-      windowFrom && windowTo ? splitTimeWindows(Math.floor(windowFrom.getTime() / 1000), Math.floor(windowTo.getTime() / 1000), MAX_ORDER_WINDOW_SECONDS) : [];
+      walkFrom && windowTo && walkFrom < windowTo
+        ? splitTimeWindows(Math.floor(walkFrom.getTime() / 1000), Math.floor(windowTo.getTime() / 1000), MAX_ORDER_WINDOW_SECONDS)
+        : [];
     progress.meta.windows = windows.length;
 
     const save = async () => (await lease.checkpoint(progress.toPatch({ cursor: cp.cursor || null }))).cancelRequested;
@@ -113,8 +121,13 @@ export class OrderSyncJobRunner implements SyncJobRunner {
         // Job-level provider errors (rate limit, auth, …) propagate: pending stays in the checkpoint.
         // Storing stops when the slice's time is up — what was fetched but not stored stays pending.
         await mapWithConcurrency(batches, config.orderDetailConcurrency, (batch) =>
-          this.sync.processDetailBatch({ shopId: shop.id, ctx, currency: shop.currency }, batch, acc, { rethrowProviderErrors: true, shouldStop: () => budget.expired }),
+          this.sync.processDetailBatch({ shopId: shop.id, ctx, currency: shop.currency }, batch, acc, {
+            rethrowProviderErrors: true,
+            shouldStop: () => budget.expired,
+            createdFrom: cutoff,
+          }),
         );
+        if (acc.stats.skippedBeforeCutoff) progress.incr("skippedBeforeCutoff", acc.stats.skippedBeforeCutoff);
         progress.counters.created += acc.counts.created;
         progress.counters.updated += acc.counts.updated;
         console.info(JSON.stringify({ source: "shopee-order-sync", event: "order_synced", jobId: job.id, shopId: shop.id, detailsFetched: acc.stats.detailsFetched, created: acc.counts.created, updated: acc.counts.updated, failed: acc.counts.failed }));
@@ -159,6 +172,10 @@ export class OrderSyncJobRunner implements SyncJobRunner {
       const locals = await this.loadLocalOrders(shop.id, page.orders.map((o) => o.orderSn));
       const nowDate = now();
       for (const entry of page.orders) {
+        if (isOrderBeforeSyncCutoff(entry.orderSn, locals.get(entry.orderSn) ?? null, cutoff)) {
+          progress.incr("skippedBeforeCutoff");
+          continue;
+        }
         const decision = shouldRefreshOrderDetail(locals.get(entry.orderSn) ?? null, { orderSn: entry.orderSn, orderStatus: entry.orderStatus }, {
           windowFrom: new Date(window.from * 1000),
           windowTo: new Date(window.to * 1000),
@@ -237,19 +254,21 @@ export class OrderSyncJobRunner implements SyncJobRunner {
     if (sns.length === 0) return result;
     const { data, error } = await this.db
       .from("channel_orders")
-      .select("external_order_sn, order_status, updated_at_channel, last_synced_at, channel_order_items(count)")
+      .select("external_order_sn, order_status, created_at_channel, updated_at_channel, last_synced_at, channel_order_items(count)")
       .eq("shop_id", shopId)
       .in("external_order_sn", sns);
     if (error) throw new Error(`Không đọc được đơn đã lưu: ${error.message}`);
     for (const r of (data ?? []) as Array<{
       external_order_sn: string;
       order_status: string;
+      created_at_channel: string | null;
       updated_at_channel: string | null;
       last_synced_at: string | null;
       channel_order_items: Array<{ count: number }>;
     }>) {
       result.set(r.external_order_sn, {
         orderStatus: r.order_status,
+        createdAtChannel: r.created_at_channel,
         updatedAtChannel: r.updated_at_channel,
         lastSyncedAt: r.last_synced_at,
         lineCount: r.channel_order_items?.[0]?.count ?? 0,

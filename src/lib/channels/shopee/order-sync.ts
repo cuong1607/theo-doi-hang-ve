@@ -39,6 +39,7 @@ import { orderFingerprint, parseOrderDetails, parseOrderListPage } from "./order
 import { MAX_ORDER_WINDOW_SECONDS, ORDER_DETAIL_BATCH_SIZE, ORDER_LIST_PAGE_SIZE, type OrderProviderContext, type ShopeeOrderProvider } from "./order-provider.ts";
 import { isOrderCancelled, isOrderCompleted } from "./order-status.ts";
 import { ShopeePayloadError } from "./product-adapter.ts";
+import { isCreatedBeforeCutoff } from "./sync-decisions.ts";
 
 export const ORDER_SYNC_TYPE = "order";
 /** Incremental runs re-read this much before the last successful run (boundary safety). */
@@ -98,6 +99,8 @@ export interface OrderBatchStats {
   ordersCancelled: number;
   linesUnresolved: number;
   cogs: Record<string, number>;
+  /** Fetched but created before the orders-sync cutoff (00055) → not stored, not failed. */
+  skippedBeforeCutoff?: number;
 }
 
 /** Mutable totals a detail batch adds to (shared by sync() and the job runner). */
@@ -319,7 +322,7 @@ export class ShopeeOrderSyncService {
     target: { shopId: string; ctx: OrderProviderContext; currency: string | null },
     batch: readonly string[],
     acc: OrderBatchAccumulator,
-    options: { rethrowProviderErrors?: boolean; shouldStop?: () => boolean } = {},
+    options: { rethrowProviderErrors?: boolean; shouldStop?: () => boolean; createdFrom?: Date | null } = {},
   ): Promise<void> {
     const { shopId, ctx } = target;
     const { counts, failures, failedSns, stats, mapping } = acc;
@@ -368,6 +371,10 @@ export class ShopeeOrderSyncService {
         acc.deferredSns ??= new Set();
         for (const rest of parsed.orders.slice(index)) acc.deferredSns.add(rest.externalOrderSn);
         break;
+      }
+      if (isCreatedBeforeCutoff(order.createdAtChannel, options.createdFrom ?? null)) {
+        stats.skippedBeforeCutoff = (stats.skippedBeforeCutoff ?? 0) + 1;
+        continue;
       }
       try {
         const saved = await upsertChannelOrder(this.db, shopId, order, syncedIso);
