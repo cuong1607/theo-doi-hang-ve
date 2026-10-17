@@ -16,6 +16,7 @@ import { after, NextResponse } from "next/server";
 
 import { isAuthorizedInternalRequest } from "@/lib/cron/auth";
 import { getSyncConfig } from "@/lib/channels/core/sync-config";
+import { diagnosePendingQueue } from "@/lib/channels/core/sync-diagnostics";
 import { getShopeeProviderMode } from "@/lib/channels/shopee/provider-mode";
 import { runShopeeWorkerBursts } from "@/lib/channels/shopee/server";
 import { runShopeeSchedulerTick } from "@/lib/channels/shopee/sync-service";
@@ -35,11 +36,12 @@ async function handle(request: Request) {
   const config = getSyncConfig();
 
   try {
-    const tick = await runShopeeSchedulerTick(createAdminClient(), { config, providerMode: mode });
+    const db = createAdminClient();
+    const tick = await runShopeeSchedulerTick(db, { config, providerMode: mode });
     console.info(
       JSON.stringify({
         source: "sync-scheduler",
-        event: "SYNC_SCHEDULER_RUN",
+        event: "scheduler_tick",
         region: process.env.VERCEL_REGION ?? "local",
         recovered: tick.recovered,
         enqueued: tick.enqueued.map((e) => e.syncType),
@@ -52,13 +54,23 @@ async function handle(request: Request) {
         configWarnings: config.warnings,
       }),
     );
+    for (const e of tick.enqueued) console.info(JSON.stringify({ source: "sync-scheduler", event: "job_enqueued", jobId: e.jobId, shopId: e.shopId, syncType: e.syncType }));
+    // §14: say WHY queued jobs are held back (logged only when something is blocked).
+    const pending = await diagnosePendingQueue(db, config).catch(() => []);
+    const blocked = pending.filter((p) => p.reason !== "ready" && p.reason !== "scheduler_not_running" && p.reason !== "worker_not_running");
+    if (blocked.length > 0) {
+      console.info(JSON.stringify({ source: "sync-scheduler", event: "pending_diagnostics", blocked: blocked.slice(0, 20).map((p) => ({ jobId: p.jobId, syncType: p.syncType, reason: p.reason, detail: p.detail })) }));
+    }
+    let workerTriggered = false;
     if (tick.workDue) {
       const timeBudgetMs = config.workerTimeBudgetMs - (Date.now() - started);
       if (timeBudgetMs >= config.sliceTimeBudgetMs) {
+        workerTriggered = true;
+        console.info(JSON.stringify({ source: "sync-scheduler", event: "worker_triggered", bursts: config.schedulerWorkerTriggers, timeBudgetMs }));
         after(() => runShopeeWorkerBursts({ bursts: config.schedulerWorkerTriggers, timeBudgetMs, source: "scheduler" }).then(() => undefined));
       }
     }
-    return NextResponse.json({ ok: true, ...tick, configWarnings: config.warnings });
+    return NextResponse.json({ ok: true, ...tick, workerTriggered, pending: pending.map(({ jobId, syncType, status, reason, detail }) => ({ jobId, syncType, status, reason, detail })), configWarnings: config.warnings });
   } catch (err) {
     console.error(JSON.stringify({ source: "sync-scheduler", event: "SYNC_SCHEDULER_FAILED", message: err instanceof Error ? err.message.slice(0, 300) : String(err) }));
     return NextResponse.json({ ok: false, error: "scheduler_failed" }, { status: 500 });

@@ -63,6 +63,35 @@ export interface RestatementResult {
   newTotal: Decimal;
 }
 
+/** One line of a per-product restatement dry-run, with its order's estimated profit before / after (§41/§43). */
+export interface RestatementPreviewLine {
+  orderItemId: string;
+  orderId: string;
+  externalOrderSn: string;
+  orderStatus: string;
+  createdAtChannel: string | null;
+  quantity: Decimal;
+  oldCostPerUnit: Decimal;
+  newCostPerUnit: Decimal | null;
+  oldTotalCogs: Decimal;
+  newTotalCogs: Decimal | null;
+  difference: Decimal | null;
+  restatable: boolean;
+  estimatedOrderRevenue: Decimal | null;
+  oldOrderInternalCogs: Decimal | null;
+  oldOrderEstimatedProfit: Decimal | null;
+  /** NULL = unknown (VAT pending line in the order, or no estimate / internal COGS yet). */
+  newOrderInternalCogs: Decimal | null;
+  newOrderEstimatedProfit: Decimal | null;
+}
+
+export interface RestatementPreview {
+  productId: string;
+  /** Distinct orders with at least one differing line. */
+  ordersAffected: number;
+  lines: RestatementPreviewLine[];
+}
+
 export interface ProductCostState {
   productId: string;
   quantityOnHand: Decimal;
@@ -182,6 +211,13 @@ export class CostEngine {
       p_triggered_by: options.triggeredBy ?? null,
     });
     this.log({ event: "COST_REBUILD", productId, result: "ok" });
+    // §47: how the purchases of this product were costed (raw / invoice_vat / vat_pending).
+    const { data: bases } = await this.db.from("inventory_cost_ledger").select("cost_basis").eq("product_id", productId).eq("event_type", "purchase_in");
+    const counts: Record<string, number> = {};
+    for (const b of (bases ?? []) as Array<{ cost_basis: string | null }>) counts[b.cost_basis ?? "none"] = (counts[b.cost_basis ?? "none"] ?? 0) + 1;
+    if (counts.invoice_vat || counts.vat_pending) {
+      this.log({ event: "purchase_cost_adjusted_vat", productId, result: Object.entries(counts).map(([k, v]) => `${k}=${v}`).join(" ") });
+    }
     return state;
   }
 
@@ -236,6 +272,56 @@ export class CostEngine {
       oldCostVersion: r.old_cost_version,
       restatable: r.restatable,
     }));
+  }
+
+  /**
+   * Dry-run for ONE product (migration 00053): which historical lines would
+   * change if restated to the current (VAT-adjusted) reconstruction, and the
+   * old vs new estimated profit of their orders. Never writes.
+   */
+  async previewHistoricalCogsRestatement(productId: string): Promise<RestatementPreview> {
+    type Row = {
+      order_item_id: string;
+      order_id: string;
+      external_order_sn: string;
+      order_status: string;
+      created_at_channel: string | null;
+      quantity: string;
+      old_cost_per_unit: string;
+      new_cost_per_unit: string | null;
+      old_total_cogs: string;
+      new_total_cogs: string | null;
+      difference: string | null;
+      restatable: boolean;
+      estimated_order_revenue: string | null;
+      order_internal_cogs: string | null;
+      order_estimated_profit: string | null;
+      new_order_internal_cogs: string | null;
+      new_order_estimated_profit: string | null;
+    };
+    const rows = (await this.rpc<Row[]>("cost_restatement_preview_product", { p_product_id: productId })) ?? [];
+    const lines = rows.map((r) => ({
+      orderItemId: r.order_item_id,
+      orderId: r.order_id,
+      externalOrderSn: r.external_order_sn,
+      orderStatus: r.order_status,
+      createdAtChannel: r.created_at_channel,
+      quantity: r.quantity,
+      oldCostPerUnit: r.old_cost_per_unit,
+      newCostPerUnit: r.new_cost_per_unit,
+      oldTotalCogs: r.old_total_cogs,
+      newTotalCogs: r.new_total_cogs,
+      difference: r.difference,
+      restatable: r.restatable,
+      estimatedOrderRevenue: r.estimated_order_revenue,
+      oldOrderInternalCogs: r.order_internal_cogs,
+      oldOrderEstimatedProfit: r.order_estimated_profit,
+      newOrderInternalCogs: r.new_order_internal_cogs,
+      newOrderEstimatedProfit: r.new_order_estimated_profit,
+    }));
+    const ordersAffected = new Set(lines.map((l) => l.orderId)).size;
+    this.log({ event: "cost_rebuild_preview", productId, result: `lines=${lines.length} orders=${ordersAffected} pending=${lines.filter((l) => !l.restatable).length}` });
+    return { productId, ordersAffected, lines };
   }
 
   async restatementSummary(): Promise<RestatementSummary> {

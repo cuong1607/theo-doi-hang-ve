@@ -110,6 +110,7 @@ export class ProductSyncJobRunner implements SyncJobRunner {
         await this.sync.storeItems(shop.id, ctx, shop.currency, chunk, kit, acc, { rethrowProviderErrors: true });
         progress.counters.created += acc.counts.created;
         progress.counters.updated += acc.counts.updated;
+        console.info(JSON.stringify({ source: "shopee-product-sync", event: "product_synced", jobId: job.id, shopId: shop.id, items: chunk.length, created: acc.counts.created, updated: acc.counts.updated, failed: acc.failedItemIds.size }));
         progress.incr("detailsFetched", chunk.length - acc.failedItemIds.size);
         for (const f of acc.failures) progress.addFailure(f);
         for (const id of acc.failedItemIds) if (!acc.failures.some((f) => f.externalId === id)) progress.addFailure({ externalId: id, reason: "chi tiết sản phẩm lỗi" });

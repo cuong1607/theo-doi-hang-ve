@@ -167,7 +167,7 @@ cũ hơn `SHOPEE_SYNC_STALE_JOB_MINUTES` (mặc định **3** — một lượt 
 mỗi trang/lô đều heartbeat, function bị kill ở 60 s, nên lease cũ hơn 3 phút
 chắc chắn đã chết) được scheduler (mỗi phút) / worker đưa về `retry` (chạy
 lại ngay, xóa `lock_owner`/`locked_at`, giữ checkpoint, `metadata.recoveries`
-+ 1, đếm vào `recovered` của log `SYNC_SCHEDULER_RUN` — tương đương
++ 1, đếm vào `recovered` của log `scheduler_tick` — tương đương
 `STALE_JOB_RECOVERED`);
 đã quá `max_attempts` → `failed` (log đóng lại). Worker cũ "sống lại" không
 ghi đè được vì mọi lệnh ghi đều yêu cầu `lock_owner` = chính nó.
@@ -433,10 +433,50 @@ Quy trình đo:
 | `source_mismatch` | shop fixture chạy ở live mode (hoặc ngược lại) — đúng thiết kế, không fallback |
 | Worker / scheduler 401 | `SHOPEE_SYNC_INTERNAL_SECRET` trên Vercel ≠ `shopee_sync_internal_secret` trong Vault, hoặc chưa redeploy sau khi đặt biến |
 
-Log Vercel (JSON, không có token/payload/secret): `SYNC_JOB_SLICE` (mỗi lượt:
-job, shop, trạng thái, `continuationReason`, số lệnh API, thời gian),
-`SYNC_SCHEDULER_RUN` (region, recovered, enqueued, notDue, pruned, workDue),
-`SYNC_SCHEDULER_FAILED`, `SYNC_KICK_FAILED`, `SYNC_WORKER_FAILED`.
+Log Vercel (JSON, không có token/payload/secret; đổi tên ở LOCAL-LIVE-1 —
+trước đó là `SYNC_JOB_SLICE` / `SYNC_SCHEDULER_RUN`):
+
+| Event | Khi nào |
+|---|---|
+| `scheduler_tick` | mỗi lần scheduler chạy (region, recovered, enqueued, notDue, pruned, workDue) |
+| `job_enqueued` | scheduler tạo job đến hạn |
+| `pending_diagnostics` | có job chờ bị chặn — kèm lý do (xem §14c) |
+| `worker_triggered` | scheduler bắt đầu worker burst trong `after()` |
+| `job_claimed` | worker nhận 1 job |
+| `job_continued` / `job_success` / `job_retry` / `job_failed` / `job_cancelled` / `job_lease_lost` | kết thúc 1 lượt (job, shop, `continuationReason`, số lệnh API, thời gian) |
+| `order_synced` / `product_synced` / `escrow_synced` | mỗi lô đơn / sản phẩm / mỗi đơn tài chính được lưu |
+| `estimated_revenue_mapped` | lưu doanh thu ước tính (nguồn `order_income.escrow_amount`) |
+| `purchase_cost_adjusted_vat`, `cost_rebuild_preview` | dựng lại giá vốn có VAT / xem trước điều chỉnh lịch sử |
+| `SYNC_SCHEDULER_FAILED`, `SYNC_KICK_FAILED`, `SYNC_WORKER_FAILED` | lỗi |
+
+## 14c. Job "Đang chờ" mà không chạy — lý do
+
+Trang Đồng bộ Shopee (cột Trạng thái của "Job gần đây"), response của
+scheduler (`pending`) và log `pending_diagnostics` ghi rõ lý do
+(`src/lib/channels/core/sync-diagnostics.ts`, cùng thứ tự điều kiện với
+`claim_next_sync_job`):
+
+| Lý do | Ý nghĩa / xử lý |
+|---|---|
+| `invalid_job` | loại đồng bộ worker không chạy được / cửa sổ ngược — hủy job |
+| `shop_inactive` / `shop_not_allowed` | shop tạm ngưng / không có trong `SHOPEE_SYNC_SHOP_IDS` |
+| `max_attempts` | đã hết lần thử nhưng chưa `failed` (bất thường) — hủy rồi tạo lại |
+| `waiting_next_attempt` | đang backoff, chạy lại lúc `next_attempt_at` |
+| `same_lane_running` | shop đang chạy job cùng loại (lock) — chờ job đó xong |
+| `global_capacity` | đã đủ `SHOPEE_SYNC_GLOBAL_WORKERS` job chạy |
+| `claim_failed` | lần chạy worker gần nhất lỗi (claim RPC / DB) — xem `last_error` |
+| `scheduler_not_running` | heartbeat scheduler cũ → pg_cron / Vault chưa cấu hình |
+| `worker_not_running` | scheduler chạy nhưng worker chưa chạy gần đây |
+| `ready` | nhận được ngay — lần worker kế tiếp sẽ chạy |
+
+## 14d. Công cụ dev (chỉ local)
+
+`next dev` (hoặc `next start` với `APP_ENV=local`; không bao giờ khi
+`VERCEL_ENV=production`) hiện thẻ "Công cụ dev" cuối trang Đồng bộ Shopee
+cho admin: chạy scheduler 1 lần (chỉ tick), chạy worker 1 lượt (`runOne`),
+1 chu kỳ đầy đủ, chẩn đoán hàng đợi, tạo job không kick worker. Server
+action kiểm tra lại `devToolsEnabled()` + `channel:manage`. **Không đặt
+`APP_ENV=local` trên Vercel.**
 
 ## 14b. "Đồng bộ sản phẩm" ≠ "Tự động ghép SKU"
 

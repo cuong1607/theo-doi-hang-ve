@@ -115,6 +115,7 @@ export class OrderSyncJobRunner implements SyncJobRunner {
         );
         progress.counters.created += acc.counts.created;
         progress.counters.updated += acc.counts.updated;
+        console.info(JSON.stringify({ source: "shopee-order-sync", event: "order_synced", jobId: job.id, shopId: shop.id, detailsFetched: acc.stats.detailsFetched, created: acc.counts.created, updated: acc.counts.updated, failed: acc.counts.failed }));
         progress.incr("detailsFetched", acc.stats.detailsFetched);
         progress.incr("ordersStored", acc.storedOrders);
         progress.incr("ordersCompleted", acc.stats.ordersCompleted);

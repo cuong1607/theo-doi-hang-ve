@@ -4,7 +4,9 @@ import { requirePermission } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { listShops } from "@/lib/channels/core/queries";
 import { getSyncConfig } from "@/lib/channels/core/sync-config";
-import { getQueueCounts, getSyncHealth, getSyncStatuses, listRecentSyncJobs } from "@/lib/channels/core/sync-status-queries";
+import type { PendingDiagnosis } from "@/lib/channels/core/sync-diagnostics";
+import { diagnoseJobView, getPendingDiagnosticsContext, getQueueCounts, getSyncHealth, getSyncStatuses, listRecentSyncJobs } from "@/lib/channels/core/sync-status-queries";
+import { devToolsEnabled } from "@/lib/dev-tools";
 import { getShopeeConfig } from "@/lib/channels/shopee/config";
 import { getShopeeProviderMode } from "@/lib/channels/shopee/provider-mode";
 import { formatDateTime, formatDuration } from "@/lib/ui/format";
@@ -17,6 +19,7 @@ import { StatusBadge } from "@/components/patterns/status-badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
+import { DevToolsPanel } from "./dev-tools-panel";
 import { BackfillButton, JobActionButtons, SyncNowButton } from "./sync-buttons";
 import { hasActiveSync, JobStatusBadge, SchedulerWarning, SYNC_MODE_LABELS, SYNC_TYPE_LABELS, SyncStatusCell } from "./sync-status";
 
@@ -48,7 +51,14 @@ export default async function ShopeeSyncPage() {
   }
 
   const shops = (await listShops()).filter((s) => s.channel === "shopee");
-  const [statuses, jobs, queue, health] = await Promise.all([getSyncStatuses(shops.map((s) => s.id)), listRecentSyncJobs({}, 30), getQueueCounts(), getSyncHealth()]);
+  const [statuses, jobs, queue, health, diagCtx] = await Promise.all([
+    getSyncStatuses(shops.map((s) => s.id)),
+    listRecentSyncJobs({}, 30),
+    getQueueCounts(),
+    getSyncHealth(),
+    getPendingDiagnosticsContext(),
+  ]);
+  const showDevTools = canManage && devToolsEnabled();
   const shopName = new Map(shops.map((s) => [s.id, s.shopName]));
   const config = getSyncConfig();
   const now = new Date();
@@ -200,6 +210,7 @@ export default async function ShopeeSyncPage() {
                         {job.status === "retry" && job.nextAttemptAt ? ` · lúc ${formatDateTime(job.nextAttemptAt)}` : ""}
                         {job.continuationReason && job.status === "pending" ? ` · chạy tiếp (${job.continuationReason === "time_budget" ? "hết thời gian lượt" : "hết lượt gọi API"})` : ""}
                       </p>
+                      <PendingReason diagnosis={diagnoseJobView(job, diagCtx)} />
                     </TableCell>
                     <TableCell className="text-right text-xs">
                       quét {job.recordsFetched} · mới {job.recordsCreated} · cập nhật {job.recordsUpdated}
@@ -246,6 +257,8 @@ export default async function ShopeeSyncPage() {
         </CardContent>
       </Card>
 
+      {showDevTools && <DevToolsPanel shops={shops.map((s) => ({ id: s.id, name: s.shopName }))} />}
+
       {canManage && (
         <Card>
           <CardHeader>
@@ -275,5 +288,17 @@ export default async function ShopeeSyncPage() {
         </Card>
       )}
     </PageContainer>
+  );
+}
+
+/** §14: why a pending / retry job has not run yet ("ready" = the next worker run takes it). */
+function PendingReason({ diagnosis }: { diagnosis: PendingDiagnosis | null }) {
+  if (!diagnosis) return null;
+  const tone = diagnosis.reason === "ready" ? "text-muted-foreground" : diagnosis.reason === "waiting_next_attempt" || diagnosis.reason === "same_lane_running" || diagnosis.reason === "global_capacity" ? "text-info-text" : "text-warning-text";
+  return (
+    <p className={`mt-1 ${tone}`} title={diagnosis.reason}>
+      {diagnosis.label}
+      {diagnosis.detail && diagnosis.reason === "waiting_next_attempt" ? ` (${formatDateTime(diagnosis.detail)})` : diagnosis.detail ? ` — ${diagnosis.detail}` : ""}
+    </p>
   );
 }

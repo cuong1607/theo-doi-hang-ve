@@ -13,6 +13,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { getSyncConfig } from "./sync-config.ts";
+import { diagnosePendingJob, loadPendingDiagnosticsContext, type PendingDiagnosis, type PendingDiagnosticsContext } from "./sync-diagnostics.ts";
 import { getHeartbeats, isHeartbeatStale, SCHEDULER_HEARTBEAT, WORKER_HEARTBEAT, type HeartbeatRow } from "./sync-heartbeat.ts";
 import type { SyncJobRow, SyncJobStatus } from "./sync-jobs.ts";
 
@@ -176,6 +177,28 @@ export async function listRecentSyncJobs(filters: { shopId?: string; status?: st
   const { data, error } = await query;
   if (error) throw new Error(error.message);
   return ((data ?? []) as unknown as SyncJobRow[]).map(toJobView);
+}
+
+/** LOCAL-LIVE-1 §14: context for "why is this job still pending?" (3 bounded queries). */
+export function getPendingDiagnosticsContext(now: Date = new Date()): Promise<PendingDiagnosticsContext> {
+  return loadPendingDiagnosticsContext(createAdminClient(), getSyncConfig(), now);
+}
+
+/** Diagnosis of a job VIEW (camelCase) — null unless pending / retry. */
+export function diagnoseJobView(job: SyncJobView, ctx: PendingDiagnosticsContext): PendingDiagnosis | null {
+  return diagnosePendingJob(
+    {
+      shop_id: job.shopId,
+      sync_type: job.syncType as SyncJobRow["sync_type"],
+      status: job.status,
+      attempt_count: job.attemptCount,
+      max_attempts: job.maxAttempts,
+      next_attempt_at: job.nextAttemptAt,
+      window_from: job.windowFrom,
+      window_to: job.windowTo,
+    },
+    ctx,
+  );
 }
 
 /** Active queue size by status (all shops). */

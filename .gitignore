@@ -46,3 +46,6 @@ src/THEO DOI HANG VE.xlsx
 
 .vercel
 .env*
+
+# read-only Shopee live payloads (scripts/shopee/live-readonly.ts)
+/.shopee-live/

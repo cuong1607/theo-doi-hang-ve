@@ -537,7 +537,16 @@ test("PATCH 20–25 + §24: rebuild never restates history; dry-run diff; explic
   );
   const summary = await engine.restatementSummary();
   assert.ok(summary.affectedLines >= 1 && summary.restatableLines >= 1);
+  // LOCAL-LIVE-1 §41/§43: per-product preview with old vs new estimated profit
+  const preview = await engine.previewHistoricalCogsRestatement(p);
+  assert.equal(preview.ordersAffected, 1);
+  assert.deepEqual(
+    [preview.lines[0].oldTotalCogs, preview.lines[0].newTotalCogs, preview.lines[0].difference, preview.lines[0].oldOrderEstimatedProfit, preview.lines[0].newOrderInternalCogs, preview.lines[0].newOrderEstimatedProfit],
+    ["200000.00", "216000.00", "16000.00", "100000.00", "216000.00", "84000.00"],
+  );
+  assert.equal((await engine.previewHistoricalCogsRestatement((await product()))).lines.length, 0, "other products are not included");
   assert.equal((await item(o.itemIds[0])).total_cogs, "200000.00", "dry-run changes nothing");
+  assert.equal((await view()).estimated_profit, "100000.00", "preview does not touch estimated profit");
 
   // explicit restatement (23–25); reason required
   await assert.rejects(engine.restateOrderCogs([o.itemIds[0]], "  "), /lý do/);
@@ -576,6 +585,8 @@ test("PATCH restatement safety: pending (unknown) new cost is not restatable; di
   await db.from("invoices").delete().eq("id", inv);
   const [c] = (await engine.restatementCandidates(5000)).filter((x) => x.productId === p);
   assert.deepEqual([c.newCostPerUnit, c.restatable], [null, false]);
+  const [pl] = (await engine.previewHistoricalCogsRestatement(p)).lines;
+  assert.deepEqual([pl.newCostPerUnit, pl.restatable, pl.newOrderEstimatedProfit], [null, false, null], "unknown new cost → unknown new profit, never zero");
   assert.equal((await engine.restateOrderCogs([o.itemIds[0]], "thử")).restated, 0, "never restated to an unknown cost");
   assert.equal((await item(o.itemIds[0])).total_cogs, "1080.00");
 
@@ -584,6 +595,7 @@ test("PATCH restatement safety: pending (unknown) new cost is not restatable; di
   for (const [fn, args] of [
     ["cost_restate_order_cogs", { p_item_ids: [o.itemIds[0]], p_reason: "x", p_by: null }],
     ["cost_restatement_candidates", { p_limit: 1 }],
+    ["cost_restatement_preview_product", { p_product_id: p }],
     ["apply_order_estimated_revenue", { p_order_id: o.orderId, p_amount: 1, p_synced_at: new Date().toISOString() }],
   ] as const) {
     const { error } = await anon.rpc(fn, args);

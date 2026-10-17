@@ -32,6 +32,9 @@ import { FINANCIAL_CALCULATION_VERSION } from "./financial-dictionary.ts";
 import type { ShopeePaymentProvider } from "./payment-provider.ts";
 import { errorInfo, isJobLevelProviderError, JobRefusedError } from "./sync-errors.ts";
 
+/** One JSON line per applied order (LOCAL-LIVE-1 §47) — order numbers and amounts only, never payloads. */
+const logEscrow = (event: Record<string, unknown>) => console.info(JSON.stringify({ source: "shopee-escrow", ...event }));
+
 /** Statuses escrow is fetched for automatically (others only via repair). */
 export const ESCROW_ELIGIBLE_STATUSES: readonly string[] = ["COMPLETED"];
 
@@ -153,6 +156,7 @@ export class ShopeeEscrowSyncService {
       })
       .single<{ changed: boolean; reconciliation_status: string | null; financial_status: string | null }>();
     if (applyError || !applied) throw new Error(`Không lưu được tài chính đơn ${order.external_order_sn}: ${applyError?.message ?? "unknown"} [${applyError?.code ?? ""}]`);
+    logEscrow({ event: "escrow_synced", orderSn: order.external_order_sn, changed: applied.changed, financialStatus: applied.financial_status, reconciliationStatus: applied.reconciliation_status });
 
     const { data: fin } = await this.db.from("order_financials").select("internal_cogs").eq("order_id", order.id).maybeSingle<{ internal_cogs: string | null }>();
     return {
@@ -216,6 +220,7 @@ export class ShopeeEscrowSyncService {
     });
     const { data: result, error: applyError } = await this.db.rpc("apply_order_estimated_revenue", { p_order_id: order.id, p_amount: amount, p_synced_at: syncedAt });
     if (applyError) throw new Error(`Không lưu được doanh thu ước tính đơn ${order.external_order_sn}: ${applyError.message} [${applyError.code ?? ""}]`);
+    logEscrow({ event: "estimated_revenue_mapped", orderSn: order.external_order_sn, sourceField: "order_income.escrow_amount", estimatedOrderRevenue: amount, result });
     return { ...base, status: result as EscrowEstimateOutcome["status"], estimatedRevenue: amount };
   }
 

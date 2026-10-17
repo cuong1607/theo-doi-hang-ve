@@ -19,13 +19,16 @@ Preview nếu cần). **Không** đặt tiền tố `NEXT_PUBLIC_`, **không** c
 |---|---|
 | `SHOPEE_PARTNER_ID` | Partner ID |
 | `SHOPEE_PARTNER_KEY` | Partner Key |
-| `SHOPEE_API_BASE_URL` | Bỏ trống cho Live; sandbox: `https://partner.test-stable.shopeemobile.com` |
+| `SHOPEE_API_BASE_URL` | Bỏ trống cho Live; sandbox: `https://openplatform.sandbox.test-stable.shopee.sg` (host cũ `partner.test-stable.shopeemobile.com` trả `error_sign` với key Test) |
 | `SHOPEE_REDIRECT_URL` | Bỏ trống (tự suy ra từ `APP_URL`) hoặc URL callback đầy đủ |
 | `APP_ENCRYPTION_KEY` | Kết quả của `openssl rand -base64 32` — **lưu vào trình quản lý mật khẩu**; mất/đổi key = phải kết nối lại mọi shop |
 | `APP_URL` | `https://theo-doi-hang-ve.vercel.app` (đã có) |
 
-Local (`.env.local`, chỉ khi test sandbox): như trên, `APP_URL=http://localhost:3000`
-— chỉ chạy được nếu `localhost` được Shopee chấp nhận làm redirect domain của app test.
+Local (`.env.local`, chỉ khi test sandbox): Shopee KHÔNG nhận `localhost` làm redirect.
+Chạy `npx cloudflared tunnel --url http://localhost:3000`, đặt `APP_URL=https://<domain-tunnel>`,
+khai báo cùng domain ở ô **Test Redirect URL Domain** trong console (ô Live giữ nguyên),
+restart `npm run dev`, rồi mở app qua domain tunnel để bấm Kết nối shop
+(`next.config.ts` đã cho phép `*.trycloudflare.com`). Domain tunnel đổi mỗi lần chạy lại.
 
 ## 2. Deploy
 

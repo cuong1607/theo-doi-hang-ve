@@ -13,6 +13,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 
 import { internalSecret, isAuthorizedInternalRequest } from "../../cron/auth.ts";
+import { devToolsEnabled } from "../../dev-tools.ts";
+import { diagnosePendingJob, PENDING_REASON_LABELS, type PendingDiagnosticsContext } from "../core/sync-diagnostics.ts";
 import { decideFailure, ExecutionBudget, retryDelaySeconds } from "../core/retry-policy.ts";
 import { getSyncConfig, SYNC_CONFIG_DEFAULTS, SYNC_PRIORITY, syncJobPriority } from "../core/sync-config.ts";
 import { syncDisplayState, SYNC_DISPLAY_LABELS } from "../core/sync-display.ts";
@@ -378,4 +380,59 @@ test("PERF-2 22 + 29 (static). scheduler / worker never call Shopee from the aut
 test("32 (static). no Promise.all in the Shopee sync / provider code — fan-out goes through mapWithConcurrency", () => {
   const files = filesUnder(new URL("src/lib/channels/shopee/", ROOT), (p) => p.endsWith(".ts") && !p.endsWith(".test.ts") && !p.includes("test-util"));
   for (const file of files) assert.doesNotMatch(readFileSync(file, "utf8"), /Promise\.all\(/, file);
+});
+
+// ------------------------------------------------------------------
+// LOCAL-LIVE-1 §14: pending-job diagnostics + §9 dev-tools gate
+// ------------------------------------------------------------------
+test("LOCAL-LIVE-1 §14: every pending reason is named, in claim order", () => {
+  const now = new Date("2030-01-01T10:00:00Z");
+  const fresh = "2030-01-01T09:59:30Z";
+  const ctx = (o: Partial<PendingDiagnosticsContext> = {}): PendingDiagnosticsContext => ({
+    now,
+    runnableTypes: ["order", "product", "escrow"],
+    shopAllowlist: null,
+    activeShopIds: new Set(["s1"]),
+    runningLanes: new Set(),
+    runningCount: 0,
+    maxRunning: 1,
+    scheduler: { last_run_at: fresh },
+    worker: { last_run_at: null, last_success_at: fresh, last_error_at: null, last_error: null },
+    staleAfterMinutes: 5,
+    ...o,
+  });
+  const job = (o: Record<string, unknown> = {}) =>
+    ({ shop_id: "s1", sync_type: "order", status: "pending", attempt_count: 0, max_attempts: 3, next_attempt_at: null, window_from: null, window_to: null, ...o }) as Parameters<typeof diagnosePendingJob>[0];
+  const reason = (j = job(), c = ctx()) => diagnosePendingJob(j, c)?.reason;
+
+  assert.equal(diagnosePendingJob(job({ status: "running" }), ctx()), null);
+  assert.equal(diagnosePendingJob(job({ status: "success" }), ctx()), null);
+  assert.equal(reason(), "ready");
+  assert.equal(reason(job({ sync_type: "income" })), "invalid_job");
+  assert.equal(reason(job({ window_from: "2030-01-02T00:00:00Z", window_to: "2030-01-01T00:00:00Z" })), "invalid_job");
+  assert.equal(reason(job(), ctx({ activeShopIds: new Set() })), "shop_inactive");
+  assert.equal(reason(job(), ctx({ shopAllowlist: ["other"] })), "shop_not_allowed");
+  assert.equal(reason(job({ status: "retry", attempt_count: 3 })), "max_attempts");
+  const wait = diagnosePendingJob(job({ status: "retry", attempt_count: 1, next_attempt_at: "2030-01-01T10:05:00Z" }), ctx());
+  assert.deepEqual([wait?.reason, wait?.detail], ["waiting_next_attempt", "2030-01-01T10:05:00Z"]);
+  assert.equal(reason(job({ status: "retry", attempt_count: 1, next_attempt_at: "2030-01-01T09:00:00Z" })), "ready", "due retry is claimable");
+  assert.equal(reason(job(), ctx({ runningLanes: new Set(["s1|order"]), runningCount: 1 })), "same_lane_running");
+  assert.equal(reason(job(), ctx({ runningLanes: new Set(["s1|product"]), runningCount: 1 })), "global_capacity");
+  assert.equal(reason(job(), ctx({ runningLanes: new Set(["s1|product"]), runningCount: 1, maxRunning: 2 })), "ready");
+  const failed = diagnosePendingJob(job(), ctx({ worker: { last_run_at: null, last_success_at: "2030-01-01T09:00:00Z", last_error_at: fresh, last_error: "claim_next_sync_job: boom" } }));
+  assert.deepEqual([failed?.reason, failed?.detail], ["claim_failed", "claim_next_sync_job: boom"]);
+  assert.equal(reason(job(), ctx({ scheduler: null })), "scheduler_not_running");
+  assert.equal(reason(job(), ctx({ scheduler: { last_run_at: "2030-01-01T09:00:00Z" } })), "scheduler_not_running");
+  assert.equal(reason(job(), ctx({ worker: null })), "worker_not_running");
+  for (const label of Object.values(PENDING_REASON_LABELS)) assert.ok(label.length > 0);
+});
+
+test("LOCAL-LIVE-1 §9: dev tools only on local", () => {
+  assert.equal(devToolsEnabled({ NODE_ENV: "development" }), true);
+  assert.equal(devToolsEnabled({ NODE_ENV: "test" }), true);
+  assert.equal(devToolsEnabled({ NODE_ENV: "production" }), false);
+  assert.equal(devToolsEnabled({ NODE_ENV: "production", APP_ENV: "local" }), true, "local next start");
+  assert.equal(devToolsEnabled({ NODE_ENV: "production", APP_ENV: "production" }), false);
+  assert.equal(devToolsEnabled({ NODE_ENV: "production", APP_ENV: "local", VERCEL_ENV: "production" }), false, "never on Vercel production");
+  assert.equal(devToolsEnabled({ NODE_ENV: "development", VERCEL_ENV: "production" }), false);
 });

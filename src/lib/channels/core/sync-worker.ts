@@ -54,6 +54,16 @@ export interface BurstReport {
 
 export type WorkerLogger = (event: Record<string, unknown>) => void;
 
+/** One structured log line per slice, named after the job's lifecycle step (LOCAL-LIVE-1 §47). */
+const SLICE_EVENTS: Record<SliceReport["status"], string> = {
+  pending: "job_continued",
+  success: "job_success",
+  retry: "job_retry",
+  failed: "job_failed",
+  cancelled: "job_cancelled",
+  lease_lost: "job_lease_lost",
+};
+
 const defaultLogger: WorkerLogger = (event) => console.info(JSON.stringify({ source: "sync-worker", ...event }));
 
 export class SyncWorker {
@@ -127,9 +137,10 @@ export class SyncWorker {
     const base = { jobId: job.id, shopId: job.shop_id, syncType: job.sync_type, mode: job.mode };
     const report = (status: SliceReport["status"], extra: Partial<SliceReport> = {}): SliceReport => {
       const r: SliceReport = { ...base, status, apiCalls: Object.values(progress.apiCalls()).reduce((a, b) => a + b, 0) - this.baseCalls(job), durationMs: this.clock() - started, ...extra };
-      this.log({ event: "SYNC_JOB_SLICE", ...r, attempt: job.attempt_count });
+      this.log({ event: SLICE_EVENTS[status], ...r, attempt: job.attempt_count });
       return r;
     };
+    this.log({ event: "job_claimed", ...base, attempt: job.attempt_count, priority: job.priority, workerId: this.workerId });
 
     let outcome: SliceOutcome;
     try {
