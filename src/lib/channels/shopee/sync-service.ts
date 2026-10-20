@@ -52,6 +52,8 @@ export interface ShopeeSyncRequest {
   returnSns?: string[];
   /** SHOPEE-6B manual return-logistics refresh: also re-poll this business date's operations. */
   focusDate?: string;
+  /** SHOPEE-9A: first run of this type for the shop (onboarding): catch-up priority, not realtime. */
+  initial?: boolean;
   now?: Date;
 }
 
@@ -76,7 +78,7 @@ export async function requestShopeeSync(db: SupabaseClient, req: ShopeeSyncReque
       shopId: req.shopId,
       syncType: req.syncType,
       mode: req.mode,
-      priority: syncJobPriority(req.mode, req.syncType),
+      priority: syncJobPriority(req.mode, req.syncType, { initial: req.initial }),
       windowFrom,
       windowTo,
       metadata: { trigger: req.createdBy ? "user" : "scheduler" },
@@ -91,7 +93,7 @@ export async function requestShopeeSync(db: SupabaseClient, req: ShopeeSyncReque
       shopId: req.shopId,
       syncType: req.syncType,
       mode: req.mode,
-      priority: syncJobPriority(req.mode, req.syncType),
+      priority: syncJobPriority(req.mode, req.syncType, { initial: req.initial }),
       metadata: { trigger: req.createdBy ? "user" : "scheduler", ...(focus ? { scope: { focusDate: focus } } : {}) },
       createdBy: req.createdBy ?? null,
     });
@@ -136,7 +138,7 @@ export async function requestShopeeSync(db: SupabaseClient, req: ShopeeSyncReque
     shopId: req.shopId,
     syncType: req.syncType,
     mode: req.mode,
-    priority: syncJobPriority(req.mode, req.syncType),
+    priority: syncJobPriority(req.mode, req.syncType, { initial: req.initial }),
     windowFrom,
     windowTo,
     metadata: { trigger: req.createdBy ? "user" : "scheduler", ...(scope ? { scope } : {}) },
@@ -228,6 +230,8 @@ export interface SchedulerResult {
   alreadyQueued: Array<{ shopId: string; syncType: RunnableSyncType; jobId: string }>;
   notDue: number;
   skippedShops: Array<{ shopId: string; reason: string }>;
+  /** SHOPEE-9A: SHOPEE_AUTO_SYNC_ENABLED=false — nothing enqueued automatically. */
+  autoSyncDisabled?: boolean;
 }
 
 const SCHEDULED_TYPES: readonly RunnableSyncType[] = ["order", "product", "escrow", "return", "return_logistics", "failed_delivery", "income", "payout"];
@@ -286,6 +290,23 @@ export async function runShopeeSyncScheduler(db: SupabaseClient, options: { conf
   }
   if (eligible.length === 0) return result;
 
+  // SHOPEE-9A feature flag: stop ENQUEUEING automatically (queued + manual jobs still run).
+  if (!options.config.autoSyncEnabled) {
+    result.autoSyncDisabled = true;
+    return result;
+  }
+
+  // SHOPEE-9A per-shop switch + circuit breaker: a disabled / cooling-down shop gets no automatic jobs.
+  const { data: controls, error: controlError } = await db.from("channel_shop_sync_controls").select("shop_id, sync_enabled, paused_until").in("shop_id", eligible);
+  if (controlError) throw new Error(`Không đọc được trạng thái bật/tắt đồng bộ shop: ${controlError.message}`);
+  for (const c of (controls ?? []) as Array<{ shop_id: string; sync_enabled: boolean; paused_until: string | null }>) {
+    const reason = !c.sync_enabled ? "sync_disabled" : c.paused_until && new Date(c.paused_until) > now ? "circuit_breaker_cooldown" : null;
+    if (!reason) continue;
+    result.skippedShops.push({ shopId: c.shop_id, reason });
+    eligible.splice(eligible.indexOf(c.shop_id), 1);
+  }
+  if (eligible.length === 0) return result;
+
   const { data: states, error: stateError } = await db
     .from("channel_sync_states")
     .select("shop_id, sync_type, last_success_at, metadata")
@@ -298,6 +319,7 @@ export async function runShopeeSyncScheduler(db: SupabaseClient, options: { conf
 
   for (const shopId of eligible) {
     for (const syncType of SCHEDULED_TYPES) {
+      if (options.config.disabledSyncTypes.includes(syncType)) continue;
       const intervalMs = intervalMinutes(options.config, syncType) * 60_000;
       const state = stateByKey.get(`${shopId}|${syncType}`);
       const last = Math.max(
@@ -309,7 +331,9 @@ export async function runShopeeSyncScheduler(db: SupabaseClient, options: { conf
         continue;
       }
       try {
-        const queued = await requestShopeeSync(db, { shopId, syncType, mode: "incremental", now });
+        // never succeeded yet (new shop / new type) → onboarding catch-up priority
+        const initial = !state?.last_success_at && state?.metadata?.lastJobStatus !== "partial";
+        const queued = await requestShopeeSync(db, { shopId, syncType, mode: "incremental", now, initial });
         (queued.created ? result.enqueued : result.alreadyQueued).push({ shopId, syncType, jobId: queued.jobId });
       } catch (err) {
         // One shop's problem never stops the others.
@@ -324,6 +348,8 @@ export interface SchedulerTickResult extends SchedulerResult {
   /** Finished jobs older than config.jobRetentionDays deleted this run. */
   pruned: number;
   pruneError: string | null;
+  /** SHOPEE-9A: rows removed by the retention policy this run. */
+  retention: { snapshots: number; logs: number; error: string | null };
   /** At least one job is claimable now → the caller starts worker burst(s). */
   workDue: boolean;
   durationMs: number;
@@ -350,8 +376,10 @@ export async function runShopeeSchedulerTick(db: SupabaseClient, options: { conf
     const { data: prunedRows, error: pruneErr } = await db.rpc("prune_channel_sync_jobs", { p_older_than_days: options.config.jobRetentionDays, p_limit: PRUNE_BATCH });
     if (pruneErr) pruneError = pruneErr.message.slice(0, 200);
     else pruned = Number(prunedRows ?? 0);
+    // SHOPEE-9A retention: raw snapshot history + operational logs only (canonical data never)
+    const retention = await pruneRetention(db, options.config);
     const workDue = await hasDueSyncJobs(db);
-    const tick: SchedulerTickResult = { ...result, pruned, pruneError, workDue, durationMs: Date.now() - started };
+    const tick: SchedulerTickResult = { ...result, pruned, pruneError, retention, workDue, durationMs: Date.now() - started };
     await markHeartbeatSuccess(db, SCHEDULER_HEARTBEAT, {
       recovered: tick.recovered,
       enqueued: tick.enqueued.length,
@@ -368,6 +396,23 @@ export async function runShopeeSchedulerTick(db: SupabaseClient, options: { conf
     await markHeartbeatError(db, SCHEDULER_HEARTBEAT, err instanceof Error ? err.message : String(err)).catch(() => undefined);
     throw err;
   }
+}
+
+/** Rows removed per scheduler run by the retention policy (bounded; a backlog clears over several runs). */
+const RETENTION_BATCH = 1000;
+
+/**
+ * SHOPEE-9A retention. Raw snapshots: only history rows (never the latest
+ * row of an entity) older than the retention of their type — financial /
+ * return history kept longer. Sync logs: success shorter than failures.
+ * Canonical tables (orders, financials, returns, payouts, COGS) are never
+ * touched. Never throws: housekeeping must not fail the tick.
+ */
+export async function pruneRetention(db: SupabaseClient, config: SyncConfig): Promise<{ snapshots: number; logs: number; error: string | null }> {
+  const snap = await db.rpc("prune_channel_api_snapshots", { p_default_days: config.snapshotRetentionDays, p_financial_days: config.financialSnapshotRetentionDays, p_limit: RETENTION_BATCH });
+  const logs = await db.rpc("prune_channel_sync_logs", { p_success_days: config.logSuccessRetentionDays, p_failure_days: config.logFailureRetentionDays, p_limit: RETENTION_BATCH });
+  const error = snap.error?.message ?? logs.error?.message ?? null;
+  return { snapshots: Number(snap.data ?? 0), logs: Number(logs.data ?? 0), error: error ? error.slice(0, 200) : null };
 }
 
 /** True when at least one job is claimable now (used to decide whether to chain another worker run). */

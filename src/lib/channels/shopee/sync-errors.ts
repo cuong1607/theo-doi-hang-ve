@@ -6,7 +6,7 @@
 //                            (retry later / stop), not one record
 //   toJobFailure             → retry-policy JobFailure (retryable | fatal)
 // ============================================================
-import type { JobFailure } from "../core/retry-policy.ts";
+import type { ErrorCategory, JobFailure } from "../core/retry-policy.ts";
 import { ShopeeConfigError } from "./config.ts";
 import { ShopeeApiError } from "./errors.ts";
 import { ShopeePayloadError } from "./product-adapter.ts";
@@ -42,12 +42,47 @@ export function isJobLevelProviderError(err: unknown): err is ShopeeApiError {
  */
 export function toJobFailure(err: unknown): JobFailure {
   const { code, message } = errorInfo(err);
+  const category = errorCategoryOf(err);
   if (err instanceof ShopeeApiError) {
-    if (err.retryable) return { kind: "retryable", code, message, retryAfterSeconds: err.retryAfterSeconds, rateLimited: err.category === "rate_limit" };
-    return { kind: "fatal", code, message };
+    if (err.retryable) return { kind: "retryable", code, message, retryAfterSeconds: err.retryAfterSeconds, rateLimited: err.category === "rate_limit", category };
+    return { kind: "fatal", code, message, category };
   }
-  if (err instanceof JobRefusedError) return { kind: "fatal", code: err.code, message: err.message };
-  if (err instanceof ShopeeConfigError) return { kind: "fatal", code: "config_error", message: err.message };
-  if (err instanceof ShopeePayloadError) return { kind: "fatal", code, message };
-  return { kind: "retryable", code, message };
+  if (err instanceof JobRefusedError) return { kind: "fatal", code: err.code, message: err.message, category };
+  if (err instanceof ShopeeConfigError) return { kind: "fatal", code: "config_error", message: err.message, category };
+  if (err instanceof ShopeePayloadError) return { kind: "fatal", code, message, category };
+  return { kind: "retryable", code, message, category };
 }
+
+const DB_PATTERN = /không (đọc|ghi|lưu|cập nhật|tạo)|database|postgres|PGRST|relation |permission denied|connection|fetch failed/i;
+
+/** SHOPEE-9A: the operational category of any sync error (health page / logs). */
+export function errorCategoryOf(err: unknown): ErrorCategory {
+  if (err instanceof ShopeeApiError) {
+    if (err.errorCode === "timeout") return "TIMEOUT";
+    if (err.errorCode === "network_error") return "NETWORK";
+    switch (err.category) {
+      case "auth":
+        return "AUTH";
+      case "signature":
+        return "CONFIG";
+      case "rate_limit":
+        return "RATE_LIMIT";
+      case "transient":
+        return "PROVIDER_TEMPORARY";
+      case "invalid_request":
+        return "PROVIDER_INVALID_REQUEST";
+      case "invalid_response":
+        return "DATA_MAPPING";
+      default:
+        return "UNKNOWN";
+    }
+  }
+  if (err instanceof ShopeePayloadError) return "DATA_MAPPING";
+  if (err instanceof ShopeeConfigError) return "CONFIG";
+  if (err instanceof JobRefusedError) return "CONFIG";
+  if (err instanceof Error && DB_PATTERN.test(err.message)) return "DATABASE";
+  return "UNKNOWN";
+}
+
+/** Categories that say the SHOP / provider is in trouble (count toward the circuit breaker). */
+export const PROVIDER_FAILURE_CATEGORIES: readonly ErrorCategory[] = ["AUTH", "RATE_LIMIT", "PROVIDER_TEMPORARY", "PROVIDER_INVALID_REQUEST", "NETWORK", "TIMEOUT"];

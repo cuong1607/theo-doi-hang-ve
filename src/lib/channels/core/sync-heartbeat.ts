@@ -15,6 +15,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const SCHEDULER_HEARTBEAT = "shopee_sync_scheduler";
 export const WORKER_HEARTBEAT = "shopee_sync_worker";
+/** SHOPEE-9A: last_error_at = the last Shopee rate-limit answer (drives the global cooldown). */
+export const RATE_LIMIT_HEARTBEAT = "shopee_rate_limit";
 
 export interface HeartbeatRow {
   name: string;

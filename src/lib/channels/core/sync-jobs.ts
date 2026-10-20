@@ -123,7 +123,7 @@ export async function enqueueSyncJob(db: SupabaseClient, input: EnqueueInput): P
       p_window_to: input.windowTo?.toISOString() ?? null,
       p_metadata: input.metadata ?? null,
       p_created_by: input.createdBy ?? null,
-      p_max_attempts: input.maxAttempts ?? 3,
+      p_max_attempts: input.maxAttempts ?? 5,
     })
     .single<{ job_id: string; created: boolean; status: SyncJobStatus }>();
   if (error || !data) throw new Error(`Không tạo được job đồng bộ: ${error?.message ?? "unknown"}`);
@@ -133,13 +133,15 @@ export async function enqueueSyncJob(db: SupabaseClient, input: EnqueueInput): P
 export async function claimNextSyncJob(
   db: SupabaseClient,
   workerId: string,
-  options: { maxRunning: number; syncTypes?: readonly string[]; shopIds?: readonly string[] | null },
+  options: { maxRunning: number; syncTypes?: readonly string[]; shopIds?: readonly string[] | null; maxPerShop?: number },
 ): Promise<SyncJobRow | null> {
   const { data, error } = await db.rpc("claim_next_sync_job", {
     p_worker_id: workerId,
     p_max_running: options.maxRunning,
     p_sync_types: options.syncTypes ? [...options.syncTypes] : null,
     p_shop_ids: options.shopIds ? [...options.shopIds] : null,
+    // null = no per-shop cap (the worker always passes config.maxRunningPerShop)
+    p_max_per_shop: options.maxPerShop ?? null,
   });
   if (error) throw new Error(`Không nhận được job: ${error.message}`);
   const rows = (data ?? []) as SyncJobRow[];

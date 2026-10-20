@@ -35,6 +35,9 @@ const NOW = Math.floor(Date.now() / 1000);
 
 after(async () => {
   if (shopIds.length) await db.from("shops").delete().in("id", shopIds);
+  // SHOPEE-9A: simulated 429s of this file's shops mark the shared rate-limit heartbeat — remove that trace
+  const { data: rl } = await db.from("channel_sync_heartbeats").select("last_error").eq("name", "shopee_rate_limit").maybeSingle<{ last_error: string | null }>();
+  if (rl?.last_error && shopIds.some((id) => rl.last_error!.startsWith(id))) await db.from("channel_sync_heartbeats").delete().eq("name", "shopee_rate_limit");
 });
 
 async function shop(): Promise<string> {
@@ -261,7 +264,7 @@ test("7 + 22. transient failures retry with backoff, then dead-letter as failed 
   });
   const q = await requestShopeeSync(db, { shopId: s, syncType: "order", mode: "incremental" });
   const statuses: string[] = [];
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 5; i++) {
     const r = await h.worker.runOne();
     statuses.push(r!.status);
     const j = await job(q.jobId);
@@ -271,7 +274,8 @@ test("7 + 22. transient failures retry with backoff, then dead-letter as failed 
       await db.from("channel_sync_jobs").update({ next_attempt_at: new Date(Date.now() - 1000).toISOString() }).eq("id", q.jobId);
     }
   }
-  assert.deepEqual(statuses, ["retry", "retry", "failed"]);
+  // SHOPEE-9A: max_attempts 5 (backoff 1 / 5 / 15 / 30 min, then dead letter)
+  assert.deepEqual(statuses, ["retry", "retry", "retry", "retry", "failed"]);
   const j = await job(q.jobId);
   assert.equal(j.status, "failed");
   assert.equal(j.error_code, "error_server");
@@ -521,7 +525,7 @@ test("26. stale running job: lease expired → retry (resumable); past max_attem
   const { data: late } = await db.from("channel_sync_jobs").update({ cursor: "zombie" }).eq("id", q.jobId).eq("status", "running").eq("lock_owner", "dead-worker").select("id");
   assert.equal(late!.length, 0);
 
-  await db.from("channel_sync_jobs").update({ status: "running", lock_owner: "dead-again", attempt_count: 3, locked_at: new Date(Date.now() - 3600_000).toISOString() }).eq("id", q.jobId);
+  await db.from("channel_sync_jobs").update({ status: "running", lock_owner: "dead-again", attempt_count: 5, locked_at: new Date(Date.now() - 3600_000).toISOString() }).eq("id", q.jobId);
   await recoverStaleSyncJobs(db, 10);
   j = await job(q.jobId);
   assert.equal(j.status, "failed");

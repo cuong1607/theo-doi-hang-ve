@@ -95,12 +95,13 @@ test("priority convention: lower = first; manual/repair (1–5) < order 10 < esc
 
 // ------------------------------------------------------- retry policy
 
-test("22. backoff ≈ 1 → 5 → 15 min (+ ≤ 20 % jitter); Retry-After wins when longer", () => {
+test("22. backoff ≈ 1 → 5 → 15 → 30 → 60 min (SHOPEE-9A) (+ ≤ 20 % jitter); Retry-After wins when longer", () => {
   const noJitter = () => 0;
   assert.equal(retryDelaySeconds(1, { random: noJitter }), 60);
   assert.equal(retryDelaySeconds(2, { random: noJitter }), 300);
   assert.equal(retryDelaySeconds(3, { random: noJitter }), 900);
-  assert.equal(retryDelaySeconds(9, { random: noJitter }), 900);
+  assert.equal(retryDelaySeconds(4, { random: noJitter }), 1800);
+  assert.equal(retryDelaySeconds(9, { random: noJitter }), 3600);
   assert.equal(retryDelaySeconds(1, { random: () => 1 }), 72);
   assert.equal(retryDelaySeconds(1, { random: noJitter, retryAfterSeconds: 120 }), 120);
   assert.equal(retryDelaySeconds(2, { random: noJitter, retryAfterSeconds: 10 }), 300);

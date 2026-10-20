@@ -90,15 +90,52 @@ export interface SyncConfig {
   payoutOverlapMinutes: number;
   /** SHOPEE-7: first payout job looks back this many days. */
   payoutLookbackDays: number;
+  /** SHOPEE-9A: RUNNING jobs of one shop at once (1 = a shop never hits Shopee with several syncs together). */
+  maxRunningPerShop: number;
+  /** SHOPEE-9A circuit breaker: consecutive failed job slices of a shop before it cools down. */
+  circuitBreakerThreshold: number;
+  circuitBreakerCooldownMinutes: number;
+  /** SHOPEE-9A: after a Shopee rate-limit answer, run one worker burst only for this long. */
+  rateLimitCooldownMinutes: number;
+  /** SHOPEE-9A retention (history rows only; the latest snapshot of every entity is always kept). */
+  snapshotRetentionDays: number;
+  financialSnapshotRetentionDays: number;
+  logSuccessRetentionDays: number;
+  logFailureRetentionDays: number;
+  /** SHOPEE-9A alert thresholds. */
+  workerWarnAfterMinutes: number;
+  oldestPendingWarnMinutes: number;
   /**
    * Staged rollout (pilot shop first): when set, the scheduler and worker
    * only touch these shop ids (SHOPEE_SYNC_SHOP_IDS, comma-separated).
    * null = every active shop.
    */
   shopAllowlist: string[] | null;
+  /** SHOPEE-9A feature flag (SHOPEE_AUTO_SYNC_ENABLED=false): the scheduler stops ENQUEUEING; queued / manual jobs still run. */
+  autoSyncEnabled: boolean;
+  /** SHOPEE-9A (SHOPEE_SYNC_DISABLED_TYPES=payout,return…): types the scheduler never enqueues automatically. */
+  disabledSyncTypes: string[];
+  /** SHOPEE-9A freshness SLO per sync type (minutes since the last finished job), SHOPEE_SLO_<TYPE>_MINUTES. */
+  sloMinutes: Record<string, number>;
 }
 
-type NumericKey = Exclude<keyof SyncConfig, "shopAllowlist">;
+type NumericKey = Exclude<keyof SyncConfig, "shopAllowlist" | "autoSyncEnabled" | "disabledSyncTypes" | "sloMinutes">;
+
+/**
+ * SHOPEE-9A initial SLOs (operational targets, not Shopee guarantees). A
+ * type's SLO must exceed its scheduler interval — payout / product run
+ * hourly, so their target is 90 min (the spec's 60 would flap every hour).
+ */
+export const SLO_DEFAULT_MINUTES: Record<string, number> = {
+  order: 10,
+  escrow: 30,
+  return: 15,
+  return_logistics: 20,
+  failed_delivery: 25,
+  income: 30,
+  payout: 90,
+  product: 90,
+};
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const SYNC_CONFIG_DEFAULTS: SyncConfig = {
@@ -139,7 +176,20 @@ export const SYNC_CONFIG_DEFAULTS: SyncConfig = {
   payoutIntervalMinutes: 60,
   payoutOverlapMinutes: 60,
   payoutLookbackDays: 30,
+  maxRunningPerShop: 1,
+  circuitBreakerThreshold: 5,
+  circuitBreakerCooldownMinutes: 30,
+  rateLimitCooldownMinutes: 10,
+  snapshotRetentionDays: 30,
+  financialSnapshotRetentionDays: 180,
+  logSuccessRetentionDays: 14,
+  logFailureRetentionDays: 60,
+  workerWarnAfterMinutes: 10,
+  oldestPendingWarnMinutes: 20,
   shopAllowlist: null,
+  autoSyncEnabled: true,
+  disabledSyncTypes: [],
+  sloMinutes: { ...SLO_DEFAULT_MINUTES },
 };
 
 const ENV_KEYS: Record<NumericKey, { key: string; min: number; max: number }> = {
@@ -180,11 +230,43 @@ const ENV_KEYS: Record<NumericKey, { key: string; min: number; max: number }> = 
   payoutIntervalMinutes: { key: "SHOPEE_SYNC_PAYOUT_INTERVAL_MINUTES", min: 10, max: 24 * 60 },
   payoutOverlapMinutes: { key: "SHOPEE_SYNC_PAYOUT_OVERLAP_MINUTES", min: 0, max: 7 * 24 * 60 },
   payoutLookbackDays: { key: "SHOPEE_SYNC_PAYOUT_LOOKBACK_DAYS", min: 1, max: 180 },
+  maxRunningPerShop: { key: "SHOPEE_SYNC_MAX_RUNNING_PER_SHOP", min: 1, max: 5 },
+  circuitBreakerThreshold: { key: "SHOPEE_SYNC_CIRCUIT_BREAKER_FAILURES", min: 2, max: 100 },
+  circuitBreakerCooldownMinutes: { key: "SHOPEE_SYNC_CIRCUIT_BREAKER_COOLDOWN_MINUTES", min: 1, max: 24 * 60 },
+  rateLimitCooldownMinutes: { key: "SHOPEE_SYNC_RATE_LIMIT_COOLDOWN_MINUTES", min: 1, max: 24 * 60 },
+  snapshotRetentionDays: { key: "SHOPEE_SNAPSHOT_RETENTION_DAYS", min: 3, max: 3650 },
+  financialSnapshotRetentionDays: { key: "SHOPEE_FINANCIAL_SNAPSHOT_RETENTION_DAYS", min: 30, max: 3650 },
+  logSuccessRetentionDays: { key: "SHOPEE_SYNC_LOG_SUCCESS_RETENTION_DAYS", min: 1, max: 3650 },
+  logFailureRetentionDays: { key: "SHOPEE_SYNC_LOG_FAILURE_RETENTION_DAYS", min: 7, max: 3650 },
+  workerWarnAfterMinutes: { key: "SHOPEE_SYNC_WORKER_WARN_AFTER_MINUTES", min: 2, max: 24 * 60 },
+  oldestPendingWarnMinutes: { key: "SHOPEE_SYNC_OLDEST_PENDING_WARN_MINUTES", min: 2, max: 24 * 60 },
 };
+
+const SLO_TYPES = Object.keys(SLO_DEFAULT_MINUTES);
 
 export function getSyncConfig(env: Env = process.env): SyncConfig & { warnings: string[] } {
   const warnings: string[] = [];
-  const config: SyncConfig = { ...SYNC_CONFIG_DEFAULTS };
+  const config: SyncConfig = { ...SYNC_CONFIG_DEFAULTS, sloMinutes: { ...SLO_DEFAULT_MINUTES } };
+  const auto = env.SHOPEE_AUTO_SYNC_ENABLED?.trim().toLowerCase();
+  if (auto) {
+    if (["false", "0", "off", "no"].includes(auto)) config.autoSyncEnabled = false;
+    else if (!["true", "1", "on", "yes"].includes(auto)) warnings.push(`SHOPEE_AUTO_SYNC_ENABLED="${auto}" không hợp lệ (true/false) — giữ bật.`);
+  }
+  const disabled = env.SHOPEE_SYNC_DISABLED_TYPES?.trim();
+  if (disabled) {
+    const types = disabled.split(",").map((s) => s.trim()).filter(Boolean);
+    const bad = types.filter((t) => !SLO_TYPES.includes(t));
+    if (bad.length > 0) warnings.push(`SHOPEE_SYNC_DISABLED_TYPES có loại không hợp lệ (${bad.join(", ")}) — đã bỏ qua.`);
+    config.disabledSyncTypes = types.filter((t) => SLO_TYPES.includes(t));
+  }
+  for (const type of SLO_TYPES) {
+    const key = `SHOPEE_SLO_${type.toUpperCase()}_MINUTES`;
+    const raw = env[key]?.trim();
+    if (!raw) continue;
+    const v = Number(raw);
+    if (!Number.isInteger(v) || v < 1 || v > 7 * 24 * 60) warnings.push(`${key}="${raw}" không hợp lệ — dùng mặc định ${SLO_DEFAULT_MINUTES[type]}.`);
+    else config.sloMinutes[type] = v;
+  }
   const allow = env.SHOPEE_SYNC_SHOP_IDS?.trim();
   if (allow) {
     const ids = allow.split(",").map((s) => s.trim()).filter(Boolean);
@@ -231,13 +313,18 @@ export const SYNC_PRIORITY = {
   // SHOPEE-6B: return logistics right after returns (daily delivered counts stay fresh)
   // SHOPEE-7: release + payout after financials, before catalog maintenance
   incremental: { order: 10, return: 15, return_logistics: 16, failed_delivery: 17, escrow: 20, income: 22, payout: 25, product: 30 },
+  // SHOPEE-9A: a shop's FIRST run of a type (no success yet — onboarding) is a
+  // catch-up, not realtime: below every healthy shop's live sync, above
+  // backfill; products first so orders find their listings.
+  initial: { product: 45, order: 50, return: 55, return_logistics: 56, failed_delivery: 57, escrow: 60, income: 62, payout: 65 },
   backfill: 100,
 } as const;
 
 /** Priority of a job (unknown sync types queue after the known ones of the same mode). */
-export function syncJobPriority(mode: "incremental" | "manual" | "repair" | "backfill", syncType: string): number {
+export function syncJobPriority(mode: "incremental" | "manual" | "repair" | "backfill", syncType: string, options: { initial?: boolean } = {}): number {
   if (mode === "repair") return SYNC_PRIORITY.repair;
   if (mode === "backfill") return SYNC_PRIORITY.backfill;
+  if (mode === "incremental" && options.initial) return (SYNC_PRIORITY.initial as Record<string, number>)[syncType] ?? 70;
   const table = SYNC_PRIORITY[mode] as Record<string, number>;
   return table[syncType] ?? (mode === "manual" ? 4 : 40);
 }

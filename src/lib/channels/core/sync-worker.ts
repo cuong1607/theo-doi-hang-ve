@@ -15,10 +15,14 @@
 // ============================================================
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { ExecutionBudget, type JobFailure } from "./retry-policy.ts";
+import { ExecutionBudget, type ErrorCategory, type JobFailure } from "./retry-policy.ts";
+
+/** Same list as shopee/sync-errors PROVIDER_FAILURE_CATEGORIES (core stays channel-agnostic). */
+const PROVIDER_FAILURE_CATEGORIES: readonly ErrorCategory[] = ["AUTH", "RATE_LIMIT", "PROVIDER_TEMPORARY", "PROVIDER_INVALID_REQUEST", "NETWORK", "TIMEOUT"];
 import type { SyncConfig } from "./sync-config.ts";
 import { claimNextSyncJob, JobLease, LeaseLostError, recoverStaleSyncJobs, RUNNABLE_SYNC_TYPES, type SyncJobRow } from "./sync-jobs.ts";
 import { finishSyncLog, saveSyncState, startSyncLog } from "./sync-log.ts";
+import { markHeartbeatError, RATE_LIMIT_HEARTBEAT } from "./sync-heartbeat.ts";
 import { JobProgress } from "./sync-progress.ts";
 import type { ContinuationReason, RemainingWork, SliceOutcome, SyncJobRunner } from "./sync-runner.ts";
 
@@ -126,6 +130,7 @@ export class SyncWorker {
       maxRunning: this.config.globalWorkers,
       syncTypes: RUNNABLE_SYNC_TYPES,
       shopIds: this.config.shopAllowlist,
+      maxPerShop: this.config.maxRunningPerShop,
     });
     if (!job) return null;
     const started = this.clock();
@@ -154,8 +159,13 @@ export class SyncWorker {
       if (err instanceof LeaseLostError) return report("lease_lost");
       const failure = this.classifyError(err);
       try {
+        // SHOPEE-9A: the category travels with the job (health page / logs)
+        progress.meta.lastErrorCategory = failure.category ?? "UNKNOWN";
+        progress.meta.lastErrorAt = this.now().toISOString();
+        if (failure.rateLimited) progress.incr("rateLimitedFailures");
         const status = await lease.fail(failure, progress.toPatch(), this.random);
         if (status === "failed") await this.closeJob(job, progress, "failed", { code: failure.code, message: failure.message }, null);
+        await this.recordShopOutcome(job.shop_id, failure);
         return report(status, { errorCode: failure.code });
       } catch (writeErr) {
         if (writeErr instanceof LeaseLostError) return report("lease_lost");
@@ -187,10 +197,36 @@ export class SyncWorker {
       }
       await lease.succeed(progress.toPatch());
       await this.closeJob(job, progress, outcome.logStatus, error, outcome);
+      await this.recordShopOutcome(job.shop_id, null);
       return report("success", { logStatus: outcome.logStatus });
     } catch (err) {
       if (err instanceof LeaseLostError) return report("lease_lost");
       throw err;
+    }
+  }
+
+  /**
+   * SHOPEE-9A circuit breaker + rate-limit memory. Only provider-side
+   * failures (auth, rate limit, Shopee 5xx, network, timeout) count — a bug
+   * or a bad record never pauses a shop. Never throws (bookkeeping only).
+   */
+  private async recordShopOutcome(shopId: string, failure: JobFailure | null) {
+    try {
+      if (failure && !PROVIDER_FAILURE_CATEGORIES.includes(failure.category ?? "UNKNOWN")) return;
+      const { data } = await this.db.rpc("record_shop_sync_outcome", {
+        p_shop_id: shopId,
+        p_ok: failure === null,
+        p_error_code: failure?.code ?? null,
+        p_threshold: this.config.circuitBreakerThreshold,
+        p_cooldown_minutes: this.config.circuitBreakerCooldownMinutes,
+      });
+      const r = data as { consecutive_failures?: number; pause_reason?: string | null } | null;
+      if (failure && r?.pause_reason === "circuit_breaker" && r.consecutive_failures === this.config.circuitBreakerThreshold) {
+        this.log({ event: "shop_circuit_open", shopId, failures: r.consecutive_failures, cooldownMinutes: this.config.circuitBreakerCooldownMinutes, errorCode: failure.code });
+      }
+      if (failure?.rateLimited) await markHeartbeatError(this.db, RATE_LIMIT_HEARTBEAT, `${shopId}:${failure.code}`, this.now());
+    } catch {
+      // health bookkeeping must never break the worker
     }
   }
 

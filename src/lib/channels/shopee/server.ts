@@ -13,7 +13,7 @@ import { internalSecret } from "@/lib/cron/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 import { getSyncConfig } from "../core/sync-config.ts";
-import { markHeartbeatError, markHeartbeatSuccess, WORKER_HEARTBEAT } from "../core/sync-heartbeat.ts";
+import { getHeartbeats, markHeartbeatError, markHeartbeatRun, markHeartbeatSuccess, RATE_LIMIT_HEARTBEAT, WORKER_HEARTBEAT } from "../core/sync-heartbeat.ts";
 import { mapWithConcurrency } from "../core/time-windows.ts";
 import { SyncWorker, type BurstReport } from "../core/sync-worker.ts";
 import { ShopeeClient } from "./client.ts";
@@ -115,8 +115,12 @@ export function getShopeeSyncWorker(): SyncWorker {
 export async function runShopeeWorkerBursts(options: { bursts: number; timeBudgetMs: number; source: string }): Promise<BurstReport[]> {
   const config = getSyncConfig();
   const db = createAdminClient();
-  const bursts = Math.max(1, Math.min(options.bursts, config.globalWorkers));
+  const startedAt = Date.now();
+  // SHOPEE-9A rate-limit circuit breaker: right after Shopee said "too many", run ONE burst only.
+  const rateLimitedRecently = await recentlyRateLimited(db, config.rateLimitCooldownMinutes);
+  const bursts = rateLimitedRecently ? 1 : Math.max(1, Math.min(options.bursts, config.globalWorkers));
   try {
+    await markHeartbeatRun(db, WORKER_HEARTBEAT).catch(() => undefined);
     const reports = await mapWithConcurrency(Array.from({ length: bursts }, (_, i) => i), bursts, () =>
       getShopeeSyncWorker().runBurst({ timeBudgetMs: options.timeBudgetMs }),
     );
@@ -125,6 +129,10 @@ export async function runShopeeWorkerBursts(options: { bursts: number; timeBudge
       source: options.source,
       region: process.env.VERCEL_REGION ?? "local",
       bursts,
+      rateLimitCooldown: rateLimitedRecently,
+      durationMs: Date.now() - startedAt,
+      lastClaimedJobId: slices.at(-1)?.jobId ?? null,
+      lastCompletedJobId: [...slices].reverse().find((s) => s.status === "success" || s.status === "failed")?.jobId ?? null,
       slices: slices.length,
       recovered: reports.reduce((a, r) => a + r.recovered, 0),
       stoppedBy: reports.map((r) => r.stoppedBy),
@@ -136,6 +144,15 @@ export async function runShopeeWorkerBursts(options: { bursts: number; timeBudge
     console.error(JSON.stringify({ source: "sync-worker", event: "SYNC_WORKER_FAILED", trigger: options.source, message }));
     await markHeartbeatError(db, WORKER_HEARTBEAT, message).catch(() => undefined);
     return [];
+  }
+}
+
+async function recentlyRateLimited(db: ReturnType<typeof createAdminClient>, cooldownMinutes: number): Promise<boolean> {
+  try {
+    const row = (await getHeartbeats(db, [RATE_LIMIT_HEARTBEAT])).get(RATE_LIMIT_HEARTBEAT);
+    return !!row?.last_error_at && Date.now() - new Date(row.last_error_at).getTime() < cooldownMinutes * 60_000;
+  } catch {
+    return false;
   }
 }
 

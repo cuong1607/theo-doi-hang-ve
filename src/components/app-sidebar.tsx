@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  HeartPulse,
   LayoutDashboard,
   PackageCheck,
   PackagePlus,
@@ -175,6 +176,12 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
         href: "/shopee/sync",
         icon: RefreshCw,
         permission: "channel:view",
+      },
+      {
+        title: "Sức khoẻ hệ thống",
+        href: "/shopee/system-health",
+        icon: HeartPulse,
+        permission: "channel:manage",
       },
     ],
   },
