@@ -309,7 +309,7 @@ function OperationTable({ rows, tab, canReceive, people, showShop }: { rows: Ret
             {showShop && <TableHead>Shop</TableHead>}
             <TableHead>Sản phẩm</TableHead>
             <TableHead>Phân loại</TableHead>
-            <TableHead>SKU</TableHead>
+            {/* <TableHead>SKU</TableHead> */}
             <TableHead className="text-right">{customer ? "SL hoàn" : "SL"}</TableHead>
             <TableHead>ĐVVC</TableHead>
             <TableHead>Trạng thái</TableHead>
@@ -365,7 +365,7 @@ function OperationTable({ rows, tab, canReceive, people, showShop }: { rows: Ret
                   )}
                 </TableCell>
                 <TableCell className="max-w-32 text-xs">{first?.model ?? "—"}</TableCell>
-                <TableCell className="font-mono text-xs">{first?.sku ?? "—"}</TableCell>
+                {/* <TableCell className="font-mono text-xs">{first?.sku ?? "—"}</TableCell> */}
                 <TableCell className="text-right tabular-nums">
                   {formatQuantity(r.itemQuantity)}
                   {rest.length > 0 && <span className="block text-[11px] text-muted-foreground">{r.items.length} dòng</span>}

@@ -366,13 +366,21 @@ export class ShopeeOrderSyncService {
       }
     }
 
+    // Cutoff: never IMPORT an order created before it; an already stored one is always refreshed.
+    let stored = new Set<string>();
+    if (options.createdFrom && parsed.orders.some((o) => isCreatedBeforeCutoff(o.createdAtChannel, options.createdFrom ?? null))) {
+      const { data, error } = await this.db.from("channel_orders").select("external_order_sn").eq("shop_id", shopId).in("external_order_sn", parsed.orders.map((o) => o.externalOrderSn));
+      if (error) throw new Error(`Không đọc được đơn đã lưu: ${error.message}`);
+      stored = new Set((data ?? []).map((r) => r.external_order_sn as string));
+    }
+
     for (const [index, order] of parsed.orders.entries()) {
       if (index > 0 && options.shouldStop?.()) {
         acc.deferredSns ??= new Set();
         for (const rest of parsed.orders.slice(index)) acc.deferredSns.add(rest.externalOrderSn);
         break;
       }
-      if (isCreatedBeforeCutoff(order.createdAtChannel, options.createdFrom ?? null)) {
+      if (!stored.has(order.externalOrderSn) && isCreatedBeforeCutoff(order.createdAtChannel, options.createdFrom ?? null)) {
         stats.skippedBeforeCutoff = (stats.skippedBeforeCutoff ?? 0) + 1;
         continue;
       }

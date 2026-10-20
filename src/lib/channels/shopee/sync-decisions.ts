@@ -44,14 +44,18 @@ const SN_DAY_END_MS = 36 * 3_600_000;
 
 /**
  * PATCH orders-sync cutoff (00055): is this listed order created BEFORE the
- * cutoff, so it must not be fetched? Known locally → its created_at decides.
+ * cutoff, so it must not be fetched? Known locally → always fetched (refresh).
  * Unknown → the order_sn day, only when that whole day (in ANY time zone)
  * lies before the cutoff; anything unsure is fetched and the
  * detail's create_time decides (isCreatedBeforeCutoff).
  */
 export function isOrderBeforeSyncCutoff(orderSn: string, local: Pick<LocalOrderState, "createdAtChannel"> | null, cutoff: Date | null): boolean {
   if (!cutoff) return false;
-  if (local?.createdAtChannel) return isCreatedBeforeCutoff(local.createdAtChannel, cutoff);
+  // SHOPEE-6B fix: the cutoff only stops IMPORTING history. An order already
+  // stored keeps being refreshed (SHIPPED → CANCELLED / COMPLETED …) whatever
+  // its create time — otherwise failed deliveries and completions of orders
+  // in transit at cutoff time are never seen.
+  if (local) return false;
   const m = ORDER_SN_DAY.exec(orderSn);
   if (!m) return false;
   const [y, mo, d] = [2000 + Number(m[1]), Number(m[2]), Number(m[3])];

@@ -798,6 +798,33 @@ test("PATCH cutoff (00055): the order job stores only orders created on/after ch
   }
 });
 
+test("SHOPEE-6B fix: an order STORED before the cutoff keeps being refreshed (SHIPPED → CANCELLED failed delivery); an unstored old one is still not imported", async () => {
+  const s = await shop();
+  await catalog(s, [1]);
+  const saved = (await db.from("channel_sync_settings").select("orders_from").eq("id", true).single()).data!.orders_from as string | null;
+  await db.from("channel_sync_settings").update({ orders_from: new Date((NOW - 86400) * 1000).toISOString() }).eq("id", true);
+  try {
+    const created = new Date((NOW - 5 * 86400) * 1000).toISOString();
+    const old = new Date((NOW - 4 * 86400) * 1000).toISOString();
+    const { error } = await db.from("channel_orders").insert({ shop_id: s, external_order_sn: `${TAG}-CUT-STORED`, order_status: "SHIPPED", currency: "VND", created_at_channel: created, updated_at_channel: old, last_synced_at: old, pickup_done_at_channel: old });
+    if (error) throw error;
+    const h = harness([s]);
+    h.state.orders = orderFixtures([
+      { sn: `${TAG}-CUT-STORED`, update: NOW - 600, status: "CANCELLED" },
+      { sn: `${TAG}-CUT-UNSTORED`, update: NOW - 600 },
+    ]);
+    for (const sn of [`${TAG}-CUT-STORED`, `${TAG}-CUT-UNSTORED`]) (h.state.orders.ordersBySn.get(sn) as { create_time: number }).create_time = NOW - 5 * 86400;
+    await requestShopeeSync(db, { shopId: s, syncType: "order", mode: "incremental" });
+    const [r] = await h.drain();
+    assert.equal(r.status, "success");
+    const { data: rows } = await db.from("channel_orders").select("external_order_sn, order_status, last_synced_at").eq("shop_id", s);
+    assert.deepEqual(rows!.map((o) => `${o.external_order_sn}:${o.order_status}`), [`${TAG}-CUT-STORED:CANCELLED`], "stored order refreshed, unstored old order not imported");
+    assert.ok(new Date(rows![0].last_synced_at as string) > new Date(old));
+  } finally {
+    await db.from("channel_sync_settings").update({ orders_from: saved }).eq("id", true);
+  }
+});
+
 test("PERF-2 26 + 28. one shop's failure does not block the others; the global cap still holds", async () => {
   const [bad, good] = [await shop(), await shop()];
   await catalog(good, [1]);

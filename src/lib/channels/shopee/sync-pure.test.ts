@@ -442,7 +442,7 @@ test("PATCH cutoff (00055): order_sn day pre-filter (with margin) and create_tim
   assert.equal(isOrderBeforeSyncCutoff("261017ABCDEFGH", null, cutoff), false);
   assert.equal(isOrderBeforeSyncCutoff("XYZ-NOT-A-DATE", null, cutoff), false, "unknown format → fetched");
   assert.equal(isOrderBeforeSyncCutoff("261015ABCDEFGH", null, null), false, "no cutoff → everything");
-  assert.equal(isOrderBeforeSyncCutoff("261020ABCDEFGH", { createdAtChannel: "2026-10-16T10:00:00Z" }, cutoff), true, "a stored order's create time wins");
+  assert.equal(isOrderBeforeSyncCutoff("261015ABCDEFGH", { createdAtChannel: "2026-10-14T10:00:00Z" }, cutoff), false, "SHOPEE-6B: a STORED order is always refreshed (SHIPPED → CANCELLED after the cutoff)");
   assert.equal(isOrderBeforeSyncCutoff("261015ABCDEFGH", { createdAtChannel: "2026-10-17T01:00:00Z" }, cutoff), false);
   assert.equal(isCreatedBeforeCutoff("2026-10-16T16:59:59Z", cutoff), true);
   assert.equal(isCreatedBeforeCutoff("2026-10-16T17:00:00Z", cutoff), false, "exactly the cutoff is kept");
