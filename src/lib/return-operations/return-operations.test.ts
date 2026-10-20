@@ -278,3 +278,38 @@ test("fixtures: the documented-shape fixture files load and parse (event, fallba
   assert.equal(fd.canonicalStatus, "delivered_to_seller");
   assert.equal(fd.trackingNumber, "SPXVN-FD-0001");
 });
+
+test("real VN shapes (prod 2026-10): reverse history in tracking_info without per-event status -> seller_validation, update_time fallback; return-leg carrier from get_return_detail", async () => {
+  const real = {
+    error: "",
+    response: {
+      return_sn: "261007023M90Y6K",
+      tracking_info: [{ update_time: 1792200240, tracking_description: "Giao hang thanh cong" }],
+      tracking_number: "SPXVN06125226162A",
+      validation_type: "seller_validation",
+      collection_pin_code: "",
+      reverse_logistics_status: "LOGISTICS_DELIVERY_DONE",
+      return_refund_request_type: 0,
+      estimated_delivery_date_max: 1792256399,
+      estimated_delivery_date_min: 1792169999,
+      reverse_logistics_update_time: 1792200241,
+    },
+  };
+  const f = parseReverseTrackingInfo(real);
+  assert.equal(f.segment, "reverse");
+  assert.equal(f.events.length, 1, "tracking_info is the reverse history");
+  assert.equal(f.deliveredAtSource, "status_update_time");
+  assert.equal(f.deliveredToSellerAt, new Date(1792200241 * 1000).toISOString());
+  assert.equal(f.logisticsProvider, null, "reverse tracking has no carrier name");
+
+  const { parseReturnDetail } = await import("../channels/shopee/return-adapter.ts");
+  const d = parseReturnDetail({
+    error: "",
+    response: { return_sn: "2610110BW7X7HD5", order_sn: "2610071VB0KYQF", status: "ACCEPTED", needs_logistics: true, tracking_number: "SPXVN06142532314A", reverse_logistics_status: "LOGISTICS_DELIVERY_DONE", reverse_logistics_channel_name: "SPX Express", item: [] },
+  });
+  assert.ok(!("issue" in d));
+  if (!("issue" in d)) {
+    assert.equal(d.detail.reverseLogisticsChannelName, "SPX Express");
+    assert.equal(d.detail.reverseLogisticsStatus, "LOGISTICS_DELIVERY_DONE");
+  }
+});

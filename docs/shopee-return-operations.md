@@ -31,6 +31,11 @@ Nội dung mô tả (description) chỉ để hiển thị, không bao giờ đ�
 
 `business_date = DATE(delivered_to_seller_at theo shops.timezone)` (mặc định `Asia/Ho_Chi_Minh`) — không dùng ngày UTC (23:59 và 00:01 giờ VN đã test). Shopee sửa lại thời điểm giao → `business_date` và ca đi theo; ảnh chụp thông báo cũ giữ nguyên.
 
+### Đơn vị vận chuyển (ĐVVC) của đơn hoàn — sửa ở 00061
+
+- **Hoàn Trả** = ĐVVC của **chiều hoàn**: `get_return_detail.reverse_logistics_channel_name` (lưu ở `channel_returns.reverse_logistics_channel_name`). **Không** dùng `shipping_carrier` của đơn: trên prod, đơn giao bằng GHN / beDelivery / SPX Instant vẫn hoàn về bằng "SPX Express". Chưa biết → để trống ("Không rõ ĐVVC"), không lấy ĐVVC chiều giao. `get_reverse_tracking_info` không có tên ĐVVC.
+- **Hoàn Hủy** = ĐVVC của kiện hàng: chính kiện đó, cùng mã vận đơn, quay về shop; `get_tracking_info` không có tên ĐVVC.
+
 ## 3. Ca giao (`return_delivery_windows`)
 
 - Cấu hình được (tên, giờ bắt đầu/kết thúc, thứ tự, bật/tắt) ở `/shopee/returns/operations/settings`; mặc định chung: Ca sáng 08:00–11:59, Ca chiều 12:00–16:59, Ca tối 17:00–21:00.
@@ -106,7 +111,14 @@ Mọi câu hỏi ("Hôm nay SPX giao bao nhiêu đơn hoàn?", "Ca sáng SPX bao
 
 Xuất Excel: `/api/shopee/returns/operations/export` theo đúng bộ lọc, tên file `<ĐVVC>_<HoanTra|HoanHuy|HangHoan>_<ngày>[_<Ca>].xlsx`, tối đa 5 000 đơn.
 
-## 10. Xác nhận payload thật (CHƯA LÀM — sandbox không có return / đơn giao thất bại)
+## 10. Xác nhận payload thật
+
+**Đã xác nhận trên prod (đọc snapshot, 2026-10-20):**
+- `get_reverse_tracking_info` (VN, `validation_type = seller_validation`): lịch sử nằm ở `tracking_info[]`, mỗi sự kiện chỉ có `update_time` + `tracking_description` (không có trạng thái) → ngày giao lấy theo fallback `reverse_logistics_update_time` khi `reverse_logistics_status = LOGISTICS_DELIVERY_DONE`. Không có trường post-return / RTS và không có tên ĐVVC.
+- `get_return_detail`: `reverse_logistics_status` (có "s"; tài liệu ghi `reverse_logistic_status`), `reverse_logistics_channel_name`, `validation_type`, `logistics_status`.
+- `get_tracking_info` (Hoàn Hủy): `tracking_info[].logistics_status` có thật — `PICKED_UP`, `RETURN_INITIATED`, `RETURN_STARTED`, `RETURNED` ("Trả hàng thành công"); package `LOGISTICS_DELIVERY_FAILED`; đơn `CANCELLED`.
+
+**Phần còn lại cần kiểm (checklist cũ):**
 
 Mọi tên trường và giá trị trạng thái trên lấy từ tài liệu Shopee. Sandbox xác nhận: `get_reverse_tracking_info` với return không tồn tại trả `returns.return_not_found`. Cần chạy trên shop thật (chỉ đọc, không refresh token, không ghi cloud):
 

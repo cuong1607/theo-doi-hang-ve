@@ -128,8 +128,11 @@ export class ShopeeReturnSyncService {
     });
     const { data, error } = await this.db.rpc("apply_channel_return", { p_shop_id: target.shopId, p_order_id: orderId, ...toApplyReturnArgs(detail), p_synced_at: syncedAt });
     if (error) throw new Error(`Không lưu được yêu cầu trả hàng ${returnSn}: ${error.message} [${error.code ?? ""}]`);
+    const r = data as { return_id: string; created: boolean; items: number; unmatched: number };
+    // SHOPEE-6B: carrier of the RETURN leg (operational display only; 00061)
+    const { error: carrierErr } = await this.db.from("channel_returns").update({ reverse_logistics_channel_name: detail.reverseLogisticsChannelName }).eq("id", r.return_id);
+    if (carrierErr) throw new Error(`Không lưu được ĐVVC hoàn của ${returnSn}: ${carrierErr.message}`);
     await this.clearRetry(target.shopId, returnSn);
-    const r = data as { created: boolean; items: number; unmatched: number };
     logReturn({ event: "return_synced", returnSn, orderSn: detail.externalOrderSn, status: detail.status, created: r.created, items: r.items, unmatched: r.unmatched, orderFetched });
     return { status: "stored", created: r.created, items: r.items, unmatched: r.unmatched, orderFetched };
   }

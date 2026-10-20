@@ -67,7 +67,12 @@ const returnDetail = z
     currency: z.string().nullish(),
     needs_logistics: z.boolean().nullish(),
     tracking_number: z.string().nullish(),
+    // real VN payload (SHOPEE-6B, prod 2026-10): reverse_logistics_status; the
+    // documented reverse_logistic_status is kept as a fallback
+    reverse_logistics_status: z.string().nullish(),
     reverse_logistic_status: z.string().nullish(),
+    // carrier of the RETURN leg (e.g. "SPX Express") — NOT the order's outbound shipping_carrier
+    reverse_logistics_channel_name: z.string().nullish(),
     return_refund_type: z.string().nullish(),
     create_time: z.number().nullish(),
     update_time: z.number().nullish(),
@@ -145,6 +150,8 @@ export interface MappedReturnDetail {
   needsLogistics: boolean | null;
   trackingNumber: string | null;
   reverseLogisticsStatus: string | null;
+  /** SHOPEE-6B: carrier of the return leg (get_return_detail.reverse_logistics_channel_name). */
+  reverseLogisticsChannelName: string | null;
   sellerCompensationStatus: string | null;
   sellerCompensationAmount: string | null;
   negotiationStatus: string | null;
@@ -193,7 +200,8 @@ export function parseReturnDetail(raw: unknown): { detail: MappedReturnDetail; s
     currency: clean(d.currency)?.toUpperCase() ?? null,
     needsLogistics: d.needs_logistics ?? null,
     trackingNumber: clean(d.tracking_number),
-    reverseLogisticsStatus: clean(d.reverse_logistic_status),
+    reverseLogisticsStatus: clean(d.reverse_logistics_status) ?? clean(d.reverse_logistic_status),
+    reverseLogisticsChannelName: clean(d.reverse_logistics_channel_name),
     sellerCompensationStatus: clean(d.seller_compensation?.seller_compensation_status),
     sellerCompensationAmount: toDecimalString(d.seller_compensation?.compensation_amount ?? null),
     negotiationStatus: clean(d.negotiation?.negotiation_status),
@@ -236,6 +244,7 @@ export function toApplyReturnArgs(d: MappedReturnDetail) {
       needs_logistics: d.needsLogistics,
       tracking_number: d.trackingNumber,
       reverse_logistics_status: d.reverseLogisticsStatus,
+      reverse_logistics_channel_name: d.reverseLogisticsChannelName,
       seller_compensation_status: d.sellerCompensationStatus,
       seller_compensation_amount: d.sellerCompensationAmount,
       negotiation_status: d.negotiationStatus,

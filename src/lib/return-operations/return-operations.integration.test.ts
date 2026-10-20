@@ -105,7 +105,7 @@ async function order(shopId: string, opts: { sn?: string; status?: string; picku
   return { orderId: o!.id as string, sn };
 }
 
-async function customerReturn(shopId: string, orderId: string, returnSn: string, items: Array<{ itemId: string; qty: number; model?: string }>, status = "PROCESSING") {
+async function customerReturn(shopId: string, orderId: string, returnSn: string, items: Array<{ itemId: string; qty: number; model?: string }>, status = "PROCESSING", returnCarrier: string | null = null) {
   const { data, error } = await db.rpc("apply_channel_return", {
     p_shop_id: shopId,
     p_order_id: orderId,
@@ -114,7 +114,10 @@ async function customerReturn(shopId: string, orderId: string, returnSn: string,
     p_synced_at: new Date().toISOString(),
   });
   if (error) throw new Error(error.message);
-  return (data as { return_id: string }).return_id;
+  const id = (data as { return_id: string }).return_id;
+  // what the return sync stores from get_return_detail.reverse_logistics_channel_name
+  if (returnCarrier) await db.from("channel_returns").update({ reverse_logistics_channel_name: returnCarrier }).eq("id", id);
+  return id;
 }
 
 /** Direct observation through the same DB function the sync uses. */
@@ -176,8 +179,9 @@ async function sideEffectFingerprint() {
 
 test("70/63/76: Hoàn Trả via the return_logistics job — delivered event time, RTS tracking, business date, window; re-sync idempotent; late sync keeps the window", async () => {
   const s = await shop();
-  const o = await order(s, { lines: [{ qty: 3 }, { qty: 1, model: "M2" }] });
-  const returnId = await customerReturn(s, o.orderId, `${TAG}R1`, [{ itemId: "100", qty: 2 }, { itemId: "101", qty: 1, model: "M2" }]);
+  // shipped to the buyer by GHN, returned to the seller by the SPX carrier (real prod pattern)
+  const o = await order(s, { carrier: `${TAG} Giao Hàng Nhanh`, lines: [{ qty: 3 }, { qty: 1, model: "M2" }] });
+  const returnId = await customerReturn(s, o.orderId, `${TAG}R1`, [{ itemId: "100", qty: 2 }, { itemId: "101", qty: 1, model: "M2" }], "PROCESSING", CAR3);
   const delivered = vn("2026-10-20", "10:15");
   const fx = emptyReturnLogisticsFixtures();
   fx.reverseBySn.set(`${TAG}R1`, {
@@ -205,7 +209,8 @@ test("70/63/76: Hoàn Trả via the return_logistics job — delivered event tim
   assert.equal(op.delivered_at_source, "tracking_event");
   assert.equal(op.business_date, "2026-10-20");
   assert.equal(op.rts_tracking_number, "RTS-001");
-  assert.equal(op.logistics_provider, CAR3, "carrier falls back to the order's carrier");
+  assert.equal(op.logistics_provider, CAR3, "Hoàn Trả carrier = return-leg carrier (reverse_logistics_channel_name), not the outbound GHN");
+  // unknown return-leg carrier → "Không rõ ĐVVC", never the outbound carrier
   const items = (await db.from("channel_return_operation_items").select("item_name_snapshot, model_name_snapshot, sku_snapshot, quantity::text").eq("return_operation_id", op.id as string).order("sku_snapshot")).data!;
   assert.deepEqual(items.map((i) => [i.sku_snapshot, i.model_name_snapshot, i.quantity]), [["SKU-1", null, "2.0000"], ["SKU-2", "Màu M2", "1.0000"]], "returned quantities, product snapshot from the order line");
 
@@ -228,6 +233,16 @@ test("70/63/76: Hoàn Trả via the return_logistics job — delivered event tim
   assert.ok((snap.count ?? 0) >= 1, "raw payload kept as audit snapshot");
 
   assert.deepEqual(await sideEffectFingerprint(), before, "78: no inventory / COGS / financial / payout side effect");
+  const sx = await shop();
+  const o2 = await order(sx, { carrier: `${TAG} Giao Hàng Nhanh` });
+  const r2 = await customerReturn(sx, o2.orderId, `${TAG}R1b`, [{ itemId: "100", qty: 1 }]);
+  const unknown = await applyOp(sx, { operation_type: "customer_return", channel_order_id: o2.orderId, return_id: r2, return_sn: `${TAG}R1b`, canonical_status: "pending" });
+  assert.equal((await db.from("channel_return_operations").select("logistics_provider").eq("id", unknown.id).single()).data!.logistics_provider, null);
+  // Hoàn Hủy: the same parcel goes back → the order / package carrier
+  const fdo = await order(sx, { status: "CANCELLED", carrier: `${TAG} Giao Hàng Nhanh` });
+  const fdOp = await applyOp(sx, { operation_type: "failed_delivery_return", channel_order_id: fdo.orderId, canonical_status: "pending" });
+  assert.equal((await db.from("channel_return_operations").select("logistics_provider").eq("id", fdOp.id).single()).data!.logistics_provider, `${TAG} Giao Hàng Nhanh`);
+
 });
 
 // ================================================================ HOÀN HỦY + classification parity
@@ -308,7 +323,7 @@ test("73/55/25: daily summary — carrier groups × windows + outside reconcile 
   const mk = async (carrier: string, hhmm: string, date = D, type: "cr" | "fd" = "fd", qty = 1) => {
     const o = await order(s, { status: type === "fd" ? "CANCELLED" : "COMPLETED", carrier, lines: [{ qty }] });
     if (type === "fd") return deliveredFd(s, o.orderId, vn(date, hhmm));
-    const rid = await customerReturn(s, o.orderId, `${TAG}R${++n}`, [{ itemId: "100", qty }]);
+    const rid = await customerReturn(s, o.orderId, `${TAG}R${++n}`, [{ itemId: "100", qty }], "PROCESSING", carrier);
     return applyOp(s, { operation_type: "customer_return", channel_order_id: o.orderId, return_id: rid, return_sn: `${TAG}R${n}`, canonical_status: "delivered_to_seller", delivered_to_seller_at: vn(date, hhmm), delivered_at_source: "tracking_event" });
   };
   await mk(CAR3, "08:00", D, "cr", 2);

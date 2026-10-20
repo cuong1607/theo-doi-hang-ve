@@ -61,12 +61,13 @@ const reverseResponse = z
     reverse_logistics_status: text,
     reverse_logistics_update_time: unix,
     reverse_logistics_tracking_info: z.array(z.unknown()).nullish(),
+    // real VN payload (prod 2026-10): the reverse-leg history is `tracking_info`,
+    // events carry only update_time + tracking_description (no status)
+    tracking_info: z.array(z.unknown()).nullish(),
     post_return_logistics_status: text,
     post_return_logistics_update_time: unix,
     rts_tracking_number: text,
     post_return_logistics_tracking_info: z.array(z.unknown()).nullish(),
-    logistics_channel_name: text,
-    shipping_carrier: text,
   })
   .passthrough();
 
@@ -164,7 +165,7 @@ export function parseReverseTrackingInfo(raw: unknown): ReturnLogisticsFacts {
   const notes: string[] = [];
   const reverseTracking = clean(d.tracking_number);
   const rtsTracking = clean(d.rts_tracking_number);
-  const reverseEvents = parseEvents("reverse", d.reverse_logistics_tracking_info, reverseTracking);
+  const reverseEvents = parseEvents("reverse", d.reverse_logistics_tracking_info ?? d.tracking_info, reverseTracking);
   const postEvents = parseEvents("post_return", d.post_return_logistics_tracking_info, rtsTracking);
   const postStatus = clean(d.post_return_logistics_status)?.toUpperCase() ?? null;
   const reverseStatus = clean(d.reverse_logistics_status)?.toUpperCase() ?? null;
@@ -215,7 +216,9 @@ export function parseReverseTrackingInfo(raw: unknown): ReturnLogisticsFacts {
     deliveredAtSource: source,
     trackingNumber: reverseTracking,
     rtsTrackingNumber: rtsTracking,
-    logisticsProvider: clean(d.logistics_channel_name) ?? clean(d.shipping_carrier),
+    // reverse tracking carries no carrier name — the return-leg carrier is
+    // get_return_detail.reverse_logistics_channel_name (channel_returns, read in SQL)
+    logisticsProvider: null,
     events: [...reverseEvents, ...postEvents],
     notes,
   };
