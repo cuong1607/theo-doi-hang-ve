@@ -10,6 +10,7 @@ import { returnOpStatusInfo } from "@/lib/channels/shopee/return-logistics-statu
 import { getTodayDateVN } from "@/lib/notifications/date-vn";
 import { isReturnOperationType, RETURN_OPERATION_LABELS } from "@/lib/return-operations/classify";
 import { getDailyReturnOperationsList, loadDeliveryWindows, MAX_EXPORT_ROWS } from "@/lib/return-operations/queries";
+import { returnOperationReason } from "@/lib/return-operations/reasons";
 import { displayDate } from "@/lib/return-operations/time";
 import { OUTSIDE_WINDOW_ID } from "@/lib/return-operations/windows";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -64,15 +65,17 @@ export async function GET(request: Request) {
   const ws = wb.addWorksheet("Hang hoan");
   ws.addRow([`Hàng hoàn ${tab === "open" ? "đang hoàn về" : `đã giao về shop ngày ${displayDate(date)}`}${carrier ? ` · ${carrier}` : ""}${type ? ` · ${RETURN_OPERATION_LABELS[type]}` : ""}${total > rows.length ? ` · ${rows.length}/${total} đơn (giới hạn xuất)` : ""}`]);
   ws.addRow(["Chỉ theo dõi vận hành — không phải phiếu nhập kho."]);
-  const header = ws.addRow(["Giờ giao thành công", "Ca giao", "Loại", "Mã đơn", "Mã đơn hoàn", "Mã vận đơn", "Mã vận đơn hoàn (RTS)", "Sản phẩm", "Phân loại", "SKU", "SL", "ĐVVC", "Trạng thái", "Đã nhận lúc", "Shop"]);
+  const header = ws.addRow(["Giờ giao thành công", "Ca giao", "Loại", "Lý do hoàn", "Mã đơn", "Mã đơn hoàn", "Mã vận đơn", "Mã vận đơn hoàn (RTS)", "Sản phẩm", "Phân loại", "SKU", "SL", "ĐVVC", "Trạng thái", "Đã nhận lúc", "Shop"]);
   header.font = { bold: true };
   for (const r of rows) {
     const items = r.items.length > 0 ? r.items : [{ name: "", model: null, sku: null, quantity: r.itemQuantity }];
+    const reason = returnOperationReason(r);
     for (const it of items) {
       ws.addRow([
         r.deliveredToSellerAt ? formatDateTime(r.deliveredToSellerAt) : "",
         r.deliveredToSellerAt ? (r.windowId ? (windowName.get(r.windowId) ?? "") : "Ngoài ca") : "",
         RETURN_OPERATION_LABELS[r.operationType],
+        reason,
         r.externalOrderSn,
         r.returnSn ?? "",
         r.trackingNumber ?? "",
@@ -88,7 +91,7 @@ export async function GET(request: Request) {
       ]);
     }
   }
-  ws.columns.forEach((c, i) => (c.width = [17, 10, 10, 18, 18, 18, 18, 40, 20, 18, 6, 14, 18, 17, 16][i] ?? 14));
+  ws.columns.forEach((c, i) => (c.width = [17, 10, 10, 36, 18, 18, 18, 18, 40, 20, 18, 6, 14, 18, 17, 16][i] ?? 14));
 
   const parts = [carrier ? slug(carrier) : tab === "open" ? "DangHoan" : "TatCa", type === "customer_return" ? "HoanTra" : type === "failed_delivery_return" ? "HoanHuy" : "HangHoan", date];
   if (windowId) parts.push(windowId === OUTSIDE_WINDOW_ID ? "NgoaiCa" : slug(windowName.get(windowId) ?? "Ca"));

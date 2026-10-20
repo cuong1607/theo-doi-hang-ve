@@ -8,6 +8,7 @@ import { parseFailedDeliveryTracking, parseReverseTrackingInfo } from "../channe
 import { loadReturnLogisticsFixtures } from "../channels/shopee/return-logistics-provider.ts";
 import { mapReturnLogisticsStatus } from "../channels/shopee/return-logistics-status.ts";
 import { classifyReturnOperation } from "./classify.ts";
+import { returnOperationReason } from "./reasons.ts";
 import { formatReturnNotificationMessage, type MessageBucket } from "./notification-message.ts";
 import { dueSlots, normalizeSlot, presyncSlots } from "./schedule.ts";
 import { addQuantities, buildDailySummary, type SummaryRow } from "./summary.ts";
@@ -312,4 +313,13 @@ test("real VN shapes (prod 2026-10): reverse history in tracking_info without pe
     assert.equal(d.detail.reverseLogisticsChannelName, "SPX Express");
     assert.equal(d.detail.reverseLogisticsStatus, "LOGISTICS_DELIVERY_DONE");
   }
+});
+
+test("export 'Lý do hoàn': return reason label + buyer text; cancel reason for Hoàn Hủy; unknown codes kept as-is", () => {
+  assert.equal(returnOperationReason({ operationType: "customer_return", returnReason: "CHANGE_MIND", returnTextReason: "Hàng không như kỳ vọng", cancelReason: null }), "Đổi ý: Hàng không như kỳ vọng");
+  assert.equal(returnOperationReason({ operationType: "customer_return", returnReason: "DIFFERENT_DESCRIPTION", returnTextReason: null, cancelReason: null }), "Không đúng mô tả");
+  assert.equal(returnOperationReason({ operationType: "customer_return", returnReason: "NEW_CODE_X", returnTextReason: "", cancelReason: null }), "NEW_CODE_X");
+  assert.equal(returnOperationReason({ operationType: "failed_delivery_return", returnReason: null, returnTextReason: null, cancelReason: "Failed Delivery" }), "Giao hàng không thành công");
+  assert.equal(returnOperationReason({ operationType: "failed_delivery_return", returnReason: null, returnTextReason: null, cancelReason: "Something Else" }), "Something Else");
+  assert.equal(returnOperationReason({ operationType: "failed_delivery_return", returnReason: null, returnTextReason: null, cancelReason: null }), "Giao hàng không thành công");
 });

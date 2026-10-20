@@ -68,6 +68,10 @@ export interface ReturnOperationRow {
   attentionReason: string | null;
   itemQuantity: string;
   items: ReturnOperationItem[];
+  /** Hoàn Trả: Shopee reason code + buyer text; Hoàn Hủy: order cancel_reason (00062). */
+  returnReason: string | null;
+  returnTextReason: string | null;
+  cancelReason: string | null;
 }
 
 const shopIdsOf = (shopId: string | null | undefined) => (shopId ? [shopId] : null);
@@ -137,6 +141,9 @@ interface ListRpcRow {
   attention_reason: string | null;
   item_qty: string;
   items: ReturnOperationItem[];
+  return_reason: string | null;
+  return_text_reason: string | null;
+  cancel_reason: string | null;
   total_count: number | string;
 }
 
@@ -190,6 +197,9 @@ export async function getDailyReturnOperationsList(db: SupabaseClient, filters: 
       attentionReason: r.attention_reason,
       itemQuantity: r.item_qty,
       items: r.items ?? [],
+      returnReason: r.return_reason,
+      returnTextReason: r.return_text_reason,
+      cancelReason: r.cancel_reason,
     })),
   };
 }

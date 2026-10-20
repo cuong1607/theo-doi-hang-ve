@@ -214,7 +214,9 @@ test("70/63/76: Hoàn Trả via the return_logistics job — delivered event tim
   const items = (await db.from("channel_return_operation_items").select("item_name_snapshot, model_name_snapshot, sku_snapshot, quantity::text").eq("return_operation_id", op.id as string).order("sku_snapshot")).data!;
   assert.deepEqual(items.map((i) => [i.sku_snapshot, i.model_name_snapshot, i.quantity]), [["SKU-1", null, "2.0000"], ["SKU-2", "Màu M2", "1.0000"]], "returned quantities, product snapshot from the order line");
 
+  await db.from("channel_returns").update({ reason: "CHANGE_MIND", text_reason: "Không vừa" }).eq("id", returnId);
   const list = await getDailyReturnOperationsList(db, { date: "2026-10-20", shopId: s });
+  assert.deepEqual([list.rows[0].returnReason, list.rows[0].returnTextReason, list.rows[0].cancelReason], ["CHANGE_MIND", "Không vừa", null], "Lý do hoàn columns (00062)");
   const windows = await loadDeliveryWindows(db);
   assert.equal(windows.find((x) => x.id === list.rows[0].windowId)?.name, "Ca sáng");
 
