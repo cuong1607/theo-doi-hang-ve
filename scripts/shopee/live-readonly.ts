@@ -6,6 +6,14 @@
 //   npm run shopee:live -- order <orderSn> [orderSn…]      get_order_detail
 //   npm run shopee:live -- estimate [--limit 5] [orderSn…] open orders: Shopee
 //                                                          estimated revenue vs order total
+//   SHOPEE-6B (hàng hoàn — real payload validation):
+//   npm run shopee:live -- returns [--days 15] [--limit 10]  get_return_list → detail +
+//                                                          get_reverse_tracking_info (Hoàn Trả)
+//   npm run shopee:live -- reverse <returnSn…>             get_reverse_tracking_info
+//   npm run shopee:live -- tracking <orderSn…>             get_order_detail (cancel / package) +
+//                                                          get_tracking_number + get_tracking_info
+//   npm run shopee:live -- failed [--limit 10]             cancelled-after-pickup orders from the
+//                                                          cloud DB → same as "tracking" (Hoàn Hủy)
 //   options: --shop <shopId>   --save   (writes sanitized payloads to .shopee-live/)
 //
 // Env:
@@ -38,6 +46,10 @@ import { ESCROW_ESTIMATE_STATUSES } from "../../src/lib/channels/shopee/escrow-s
 import { RealShopeeOrderProvider } from "../../src/lib/channels/shopee/order-provider.ts";
 import { RealShopeePaymentProvider } from "../../src/lib/channels/shopee/payment-provider.ts";
 import { tokenContext, type ShopeeTokenSource } from "../../src/lib/channels/shopee/token.ts";
+import { parseReturnListPage, sanitizeReturnPayload } from "../../src/lib/channels/shopee/return-adapter.ts";
+import { RealShopeeReturnProvider } from "../../src/lib/channels/shopee/return-provider.ts";
+import { parseFailedDeliveryTracking, parseReverseTrackingInfo, parseTrackingNumber, type ReturnLogisticsFacts } from "../../src/lib/channels/shopee/return-logistics-adapter.ts";
+import { RealShopeeReturnLogisticsProvider } from "../../src/lib/channels/shopee/return-logistics-provider.ts";
 
 const OUT_DIR = path.join(process.cwd(), ".shopee-live");
 const ORDER_PII_KEYS = new Set(["buyer_username", "buyer_user_name", "buyer_user_id", "recipient_address", "buyer_cpf_id", "buyer_cancel_reason", "message_to_seller", "note"]);
@@ -124,9 +136,9 @@ async function main() {
     return i >= 0 ? args[i + 1] : undefined;
   };
   const saveFiles = args.includes("--save");
-  const positional = args.slice(1).filter((a, i, all) => !a.startsWith("--") && !all[i - 1]?.startsWith("--shop") && !all[i - 1]?.startsWith("--limit"));
-  if (!command || !["shops", "escrow", "order", "estimate"].includes(command)) {
-    fail("Lệnh: shops | escrow <sn…> | order <sn…> | estimate [--limit N] [sn…]   (tuỳ chọn --shop <id> --save)");
+  const positional = args.slice(1).filter((a, i, all) => !a.startsWith("--") && !all[i - 1]?.startsWith("--shop") && !all[i - 1]?.startsWith("--limit") && !all[i - 1]?.startsWith("--days"));
+  if (!command || !["shops", "escrow", "order", "estimate", "returns", "reverse", "tracking", "failed"].includes(command)) {
+    fail("Lệnh: shops | escrow <sn…> | order <sn…> | estimate [--limit N] [sn…] | returns [--days N] [--limit N] | reverse <returnSn…> | tracking <orderSn…> | failed [--limit N]   (tuỳ chọn --shop <id> --save)");
   }
 
   const config = getShopeeConfig({ ...process.env, SHOPEE_REDIRECT_URL: process.env.SHOPEE_REDIRECT_URL || "https://localhost/readonly" });
@@ -154,6 +166,11 @@ async function main() {
   if (!shop) fail(`Chọn shop bằng --shop <id> (có ${shops?.length ?? 0} shop live; xem lệnh "shops").`);
   const ctx = { shopId: shop.id as string, externalShopId: shop.external_shop_id as string };
   const payment = new RealShopeePaymentProvider({ client, connections: tokens });
+
+  if (command === "returns" || command === "reverse" || command === "tracking" || command === "failed") {
+    await returnOperationsCommand(command, { db, client, tokens, ctx, positional, saveFiles, days: Number(flag("--days") ?? 15), limit: Number(flag("--limit") ?? 10) });
+    return;
+  }
 
   if (command === "order") {
     if (positional.length === 0) fail("Cần ít nhất 1 mã đơn.");
@@ -211,6 +228,112 @@ async function main() {
     } catch (err) {
       console.log(`${sn}  lỗi: ${(err as Error).message.slice(0, 200)}`);
     }
+  }
+}
+
+// ------------------------------------------------------------ SHOPEE-6B
+
+function printFacts(label: string, f: ReturnLogisticsFacts) {
+  console.log(`  [${label}] segment=${f.segment} provider=${f.providerStatus ?? "—"} → ${f.canonicalStatus}`);
+  console.log(`  delivered_to_seller_at=${f.deliveredToSellerAt ?? "—"} (${f.deliveredAtSource ?? "—"})  tracking=${f.trackingNumber ?? "—"}  rts=${f.rtsTrackingNumber ?? "—"}  carrier=${f.logisticsProvider ?? "—"}${f.notes.length ? `  notes=${f.notes.join(",")}` : ""}`);
+  for (const e of f.events) console.log(`    ${e.eventTime}  ${e.segment.padEnd(19)} ${String(e.providerStatus ?? "(không có status)").padEnd(28)} → ${e.canonicalStatus.padEnd(26)} ${e.description ?? ""}`);
+}
+
+/** Raw field names actually present (for the docs checklist) — keys only, never values. */
+const keysOf = (v: unknown) => (v && typeof v === "object" ? Object.keys(v as Record<string, unknown>).sort().join(", ") : "—");
+
+async function returnOperationsCommand(
+  command: "returns" | "reverse" | "tracking" | "failed",
+  o: { db: SupabaseClient; client: ShopeeClient; tokens: ShopeeTokenSource; ctx: { shopId: string; externalShopId: string }; positional: string[]; saveFiles: boolean; days: number; limit: number },
+) {
+  const logistics = new RealShopeeReturnLogisticsProvider({ client: o.client, connections: o.tokens });
+  const reverse = async (sn: string) => {
+    try {
+      const payload = await logistics.getReverseTrackingInfo(o.ctx, { returnSn: sn });
+      const response = (payload.raw as { response?: unknown }).response;
+      console.log(`  fields: ${keysOf(response)}`);
+      printFacts("reverse", parseReverseTrackingInfo(payload.raw));
+      if (o.saveFiles) console.log(`  → ${save(`reverse-tracking-${sn}.json`, payload.raw)}`);
+    } catch (err) {
+      console.log(`  get_reverse_tracking_info lỗi: ${(err as Error).message.slice(0, 200)}`);
+    }
+  };
+  const tracking = async (sn: string) => {
+    const orders = new RealShopeeOrderProvider({ client: o.client, connections: o.tokens });
+    let packageNumber: string | null = null;
+    try {
+      const detail = sanitizeOrder((await orders.getOrderDetails(o.ctx, { orderSns: [sn] })).raw) as { response?: { order_list?: Array<Record<string, unknown>> } };
+      const ord = detail.response?.order_list?.[0];
+      const pkgs = (ord?.package_list as Array<Record<string, unknown>> | undefined) ?? [];
+      packageNumber = (pkgs[0]?.package_number as string | undefined) ?? null;
+      console.log(`  order_status=${ord?.order_status ?? "?"} cancel_by=${ord?.cancel_by ?? "—"} cancel_reason=${ord?.cancel_reason ?? "—"} pickup_done_time=${ord?.pickup_done_time ?? "—"} carrier=${ord?.shipping_carrier ?? "—"}`);
+      for (const p of pkgs) console.log(`  package ${p.package_number ?? "—"} logistics_status=${p.logistics_status ?? "—"} carrier=${p.shipping_carrier ?? "—"}`);
+      if (o.saveFiles) console.log(`  → ${save(`order-${sn}.json`, detail)}`);
+    } catch (err) {
+      console.log(`  get_order_detail lỗi: ${(err as Error).message.slice(0, 200)}`);
+    }
+    let trackingNumber: string | null = null;
+    try {
+      const tn = await logistics.getTrackingNumber(o.ctx, { orderSn: sn, packageNumber });
+      console.log(`  get_tracking_number fields: ${keysOf((tn.raw as { response?: unknown }).response)}`);
+      trackingNumber = parseTrackingNumber(tn.raw);
+    } catch (err) {
+      console.log(`  get_tracking_number lỗi: ${(err as Error).message.slice(0, 200)}`);
+    }
+    try {
+      const info = await logistics.getTrackingInfo(o.ctx, { orderSn: sn, packageNumber });
+      console.log(`  get_tracking_info fields: ${keysOf((info.raw as { response?: unknown }).response)}`);
+      printFacts("rts", parseFailedDeliveryTracking(info.raw, trackingNumber));
+      if (o.saveFiles) console.log(`  → ${save(`tracking-info-${sn}.json`, { ...(info.raw as object), tracking_number: trackingNumber })}`);
+    } catch (err) {
+      console.log(`  get_tracking_info lỗi: ${(err as Error).message.slice(0, 200)}`);
+    }
+  };
+
+  if (command === "reverse" || command === "tracking") {
+    if (o.positional.length === 0) fail("Cần ít nhất 1 mã.");
+    for (const sn of o.positional) {
+      console.log(`\n${sn}`);
+      await (command === "reverse" ? reverse(sn) : tracking(sn));
+    }
+    return;
+  }
+
+  if (command === "returns") {
+    const returns = new RealShopeeReturnProvider({ client: o.client, connections: o.tokens });
+    const to = Math.floor(Date.now() / 1000);
+    const from = to - Math.min(Math.max(o.days, 1), 15) * 86400;
+    const page = parseReturnListPage((await returns.listReturns(o.ctx, { updateTimeFrom: from, updateTimeTo: to, pageNo: 0, pageSize: 50 })).raw);
+    console.log(`${page.entries.length} return trong ${o.days} ngày (more=${page.more}); xem ${Math.min(o.limit, page.entries.length)}:`);
+    for (const e of page.entries.slice(0, o.limit)) {
+      console.log(`\n${e.returnSn}  order ${e.orderSn}  status ${e.status ?? "—"}`);
+      try {
+        const detail = (await returns.getReturnDetail(o.ctx, { returnSn: e.returnSn })).raw as { response?: Record<string, unknown> };
+        const r = detail.response ?? {};
+        console.log(`  detail: needs_logistics=${r.needs_logistics ?? "—"} reverse_logistic_status=${r.reverse_logistic_status ?? "—"} return_refund_type=${r.return_refund_type ?? "—"} tracking_number=${r.tracking_number ?? "—"} items=${Array.isArray(r.item) ? r.item.length : "—"}`);
+        if (o.saveFiles) console.log(`  → ${save(`return-detail-${e.returnSn}.json`, sanitizeReturnPayload(detail))}`);
+      } catch (err) {
+        console.log(`  get_return_detail lỗi: ${(err as Error).message.slice(0, 200)}`);
+      }
+      await reverse(e.returnSn);
+    }
+    return;
+  }
+
+  // failed: cancelled orders that had been handed to the carrier (columns that exist before 00060 only)
+  const { data, error } = await o.db
+    .from("channel_orders")
+    .select("external_order_sn, order_status, pickup_done_at_channel, updated_at_channel")
+    .eq("shop_id", o.ctx.shopId)
+    .eq("order_status", "CANCELLED")
+    .not("pickup_done_at_channel", "is", null)
+    .order("updated_at_channel", { ascending: false })
+    .limit(o.limit);
+  if (error) fail(error.message);
+  console.log(`${data?.length ?? 0} đơn huỷ sau khi đã lấy hàng (ứng viên Hoàn Hủy):`);
+  for (const r of data ?? []) {
+    console.log(`\n${r.external_order_sn}  cập nhật ${r.updated_at_channel}`);
+    await tracking(r.external_order_sn as string);
   }
 }
 

@@ -584,10 +584,10 @@ test("31. scheduler: due shops get one incremental job per type; a second run cr
   const [a, b] = [await shop(), await shop()];
   const config: SyncConfig = { ...getSyncConfig({}), shopAllowlist: [a, b] };
   const r1 = await runShopeeSyncScheduler(db, { config, providerMode: "fixture" });
-  assert.equal(r1.enqueued.length, 12, "2 shops x (order, product, escrow, return, income, payout)");
+  assert.equal(r1.enqueued.length, 16, "2 shops x (order, product, escrow, return, return_logistics, failed_delivery, income, payout)");
   const r2 = await runShopeeSyncScheduler(db, { config, providerMode: "fixture" });
   assert.equal(r2.enqueued.length, 0);
-  assert.equal(r2.alreadyQueued.length, 12);
+  assert.equal(r2.alreadyQueued.length, 16);
   await settle([a, b]);
   await db.from("channel_sync_states").upsert(
     [
@@ -597,12 +597,14 @@ test("31. scheduler: due shops get one incremental job per type; a second run cr
       { shop_id: a, sync_type: "return", last_success_at: new Date().toISOString() },
       { shop_id: a, sync_type: "income", last_success_at: new Date().toISOString() },
       { shop_id: a, sync_type: "payout", last_success_at: new Date().toISOString() },
+      { shop_id: a, sync_type: "return_logistics", last_success_at: new Date().toISOString() },
+      { shop_id: a, sync_type: "failed_delivery", last_success_at: new Date().toISOString() },
     ],
     { onConflict: "shop_id,sync_type" },
   );
   const r3 = await runShopeeSyncScheduler(db, { config, providerMode: "fixture" });
-  assert.deepEqual(r3.enqueued.map((e) => e.shopId).sort(), [b, b, b, b, b, b]);
-  assert.equal(r3.notDue, 6);
+  assert.deepEqual(r3.enqueued.map((e) => e.shopId).sort(), [b, b, b, b, b, b, b, b]);
+  assert.equal(r3.notDue, 8);
   // a live-mode scheduler never queues fixture shops
   const r4 = await runShopeeSyncScheduler(db, { config, providerMode: "live" });
   assert.equal(r4.enqueued.length, 0);
@@ -628,28 +630,28 @@ test("PERF-2 1 + 2 + 5 + 6 + 7. scheduler tick: heartbeat, per-shop due types, i
   const [a, b] = [await shop(), await shop()];
   const config: SyncConfig = { ...getSyncConfig({}), shopAllowlist: [a, b] };
   const t1 = await runShopeeSchedulerTick(db, { config, providerMode: "fixture" });
-  assert.equal(t1.enqueued.length, 12, "2 shops x (order, product, escrow, return, income, payout)");
+  assert.equal(t1.enqueued.length, 16, "2 shops x (order, product, escrow, return, return_logistics, failed_delivery, income, payout)");
   assert.equal(t1.workDue, true);
   const beat = (await getHeartbeats(db)).get(SCHEDULER_HEARTBEAT)!;
   assert.ok(beat.last_run_at && beat.last_success_at && beat.last_success_at >= beat.last_run_at);
-  assert.equal((beat.last_result as { enqueued: number }).enqueued, 12);
+  assert.equal((beat.last_result as { enqueued: number }).enqueued, 16);
 
   const t2 = await runShopeeSchedulerTick(db, { config, providerMode: "fixture" });
   assert.equal(t2.enqueued.length, 0, "idempotent: active jobs are not duplicated");
-  assert.equal(t2.alreadyQueued.length, 12);
+  assert.equal(t2.alreadyQueued.length, 16);
   const { count: active } = await db.from("channel_sync_jobs").select("id", { count: "exact", head: true }).in("shop_id", [a, b]).in("status", ["pending", "running", "retry"]);
-  assert.equal(active, 12);
+  assert.equal(active, 16);
   await settle([a, b]);
 
   // every type of both shops synced just now → nothing due
   const nowIso = new Date().toISOString();
   await db.from("channel_sync_states").upsert(
-    [a, b].flatMap((shop_id) => ["order", "product", "escrow", "return", "income", "payout"].map((sync_type) => ({ shop_id, sync_type, last_success_at: nowIso }))),
+    [a, b].flatMap((shop_id) => ["order", "product", "escrow", "return", "return_logistics", "failed_delivery", "income", "payout"].map((sync_type) => ({ shop_id, sync_type, last_success_at: nowIso }))),
     { onConflict: "shop_id,sync_type" },
   );
   const t3 = await runShopeeSchedulerTick(db, { config, providerMode: "fixture" });
   assert.equal(t3.enqueued.length, 0);
-  assert.equal(t3.notDue, 12);
+  assert.equal(t3.notDue, 16);
 
   // order due again after its 5-minute interval; product (60) / escrow (15) not yet
   const sixMinAgo = new Date(Date.now() - 6 * 60_000).toISOString();

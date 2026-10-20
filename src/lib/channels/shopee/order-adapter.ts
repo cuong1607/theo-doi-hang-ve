@@ -19,7 +19,7 @@ import { createHash } from "node:crypto";
 import { toDecimalString } from "../core/decimal.ts";
 import type { MappedOrder, MappedOrderItem } from "../core/mapped.ts";
 import type { Timestamp } from "../core/types.ts";
-import { shopeeOrderDetailResponseSchema, shopeeOrderItemSchema, shopeeOrderListItemSchema, shopeeOrderListResponseSchema, shopeeOrderSchema } from "./dto/order.ts";
+import { shopeeOrderDetailResponseSchema, shopeeOrderItemSchema, shopeeOrderListItemSchema, shopeeOrderListResponseSchema, shopeeOrderSchema, shopeePackageSchema } from "./dto/order.ts";
 import { ShopeePayloadError, type ParseIssue } from "./product-adapter.ts";
 
 const API = { list: "v2.order.get_order_list", detail: "v2.order.get_order_detail" } as const;
@@ -147,6 +147,10 @@ export function mapShopeeOrderEntry(entry: unknown, options: { fallbackCurrency?
     });
   }
 
+  // SHOPEE-6B: first package's logistics (multi-package orders keep the count; see docs)
+  const packages = (o.package_list ?? []).map((p) => shopeePackageSchema.safeParse(p)).filter((p) => p.success).map((p) => p.data);
+  const firstPackage = packages[0] ?? null;
+
   const currency = clean(o.currency) ?? options.fallbackCurrency ?? null;
   if (!currency || !/^[A-Z]{3}$/.test(currency)) {
     return { issue: { apiName: API.detail, externalId: o.order_sn, reason: "thiếu/sai currency" } };
@@ -168,7 +172,11 @@ export function mapShopeeOrderEntry(entry: unknown, options: { fallbackCurrency?
       pickupDoneAtChannel: unixToIso(o.pickup_done_time),
       shipByDate: unixToIso(o.ship_by_date),
       updatedAtChannel: unixToIso(o.update_time),
-      shippingCarrier: clean(o.shipping_carrier),
+      shippingCarrier: clean(o.shipping_carrier) ?? clean(firstPackage?.shipping_carrier),
+      cancelReason: clean(o.cancel_reason),
+      packageLogisticsStatus: clean(firstPackage?.logistics_status)?.toUpperCase() ?? null,
+      packageNumber: clean(firstPackage?.package_number),
+      packageCount: o.package_list ? packages.length : null,
       items,
     },
   };

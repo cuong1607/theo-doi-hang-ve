@@ -116,6 +116,8 @@ export const shopeeOrderSchema = z.object({
   reverse_shipping_fee: numberish,
   shipping_carrier: optionalString,
   fulfillment_flag: optionalString,
+  cancel_by: optionalString,
+  cancel_reason: optionalString,
   // Validated per line by the adapter (one bad line must not hide which line failed).
   item_list: z.array(z.unknown()).nullish(),
   package_list: z.array(z.unknown()).nullish(),

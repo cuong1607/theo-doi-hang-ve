@@ -69,6 +69,11 @@ export type MappedOrderItem = Omit<
 
 export type MappedOrder = Omit<ChannelOrder, "id" | "shopId" | "financialStatus" | "lastSyncedAt"> & {
   shippingCarrier: string | null;
+  /** SHOPEE-6B (Hoàn Hủy classification): provider cancel reason + first package's logistics. */
+  cancelReason?: string | null;
+  packageLogisticsStatus?: string | null;
+  packageNumber?: string | null;
+  packageCount?: number | null;
   items: MappedOrderItem[];
 };
 

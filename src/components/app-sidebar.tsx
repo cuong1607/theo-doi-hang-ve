@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  PackageCheck,
   PackagePlus,
   History,
   FileText,
@@ -155,6 +156,12 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
         title: "Trả hàng Shopee",
         href: "/shopee/returns",
         icon: Undo2,
+        permission: "channel:view",
+      },
+      {
+        title: "Hàng hoàn đã giao",
+        href: "/shopee/returns/operations",
+        icon: PackageCheck,
         permission: "channel:view",
       },
       {

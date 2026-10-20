@@ -21,6 +21,7 @@ import type { ListOrdersInput, OrderProviderContext, ShopeeOrderProvider } from 
 import type { PaymentProviderContext, ShopeePaymentProvider } from "./payment-provider.ts";
 import type { ListItemsInput, ProductProviderContext, ProviderPayload, ShopeeProductProvider } from "./product-provider.ts";
 import type { ListReturnsInput, ReturnProviderContext, ShopeeReturnProvider } from "./return-provider.ts";
+import type { ReturnLogisticsProviderContext, ShopeeReturnLogisticsProvider } from "./return-logistics-provider.ts";
 import type { IncomeProviderContext, ShopeeIncomeProvider, TimeWindowPage } from "./income-provider.ts";
 import type { ShopeeTokenSource } from "./token.ts";
 
@@ -95,6 +96,15 @@ export function meterReturnProvider(provider: ShopeeReturnProvider, meter: ApiCa
     mode: provider.mode,
     listReturns: (ctx: ReturnProviderContext, input: ListReturnsInput) => meter.track("get_return_list", () => provider.listReturns(ctx, input)),
     getReturnDetail: (ctx: ReturnProviderContext, input: { returnSn: string }) => meter.track("get_return_detail", () => provider.getReturnDetail(ctx, input)),
+  };
+}
+
+export function meterReturnLogisticsProvider(provider: ShopeeReturnLogisticsProvider, meter: ApiCallMeter): ShopeeReturnLogisticsProvider {
+  return {
+    mode: provider.mode,
+    getReverseTrackingInfo: (ctx: ReturnLogisticsProviderContext, input: { returnSn: string }) => meter.track("get_reverse_tracking_info", () => provider.getReverseTrackingInfo(ctx, input)),
+    getTrackingNumber: (ctx: ReturnLogisticsProviderContext, input: { orderSn: string; packageNumber?: string | null }) => meter.track("get_tracking_number", () => provider.getTrackingNumber(ctx, input)),
+    getTrackingInfo: (ctx: ReturnLogisticsProviderContext, input: { orderSn: string; packageNumber?: string | null }) => meter.track("get_tracking_info", () => provider.getTrackingInfo(ctx, input)),
   };
 }
 

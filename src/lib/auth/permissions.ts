@@ -43,6 +43,7 @@ export const PERMISSIONS = {
   "payment:create": OPERATORS,
   "channel:map": OPERATORS, // map / unmap a Shopee variation to an internal SKU
   "channel:sync": OPERATORS, // request a normal (incremental) Shopee sync — enqueue only, never inline
+  "return:receive": OPERATORS, // SHOPEE-6B: "Đã nhận" on a delivered return package (operational only — no stock, no cost, no money)
 
   // Master data + system administration — admin only.
   "product:manage": ADMIN,

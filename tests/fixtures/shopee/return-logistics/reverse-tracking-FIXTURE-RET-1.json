@@ -1,0 +1,23 @@
+{
+  "error": "",
+  "message": "",
+  "request_id": "fixture",
+  "response": {
+    "return_sn": "FIXTURE-RET-1",
+    "validation_type": "warehouse_validation",
+    "tracking_number": "SPXVN-BUYER-0001",
+    "reverse_logistics_status": "LOGISTICS_DELIVERY_DONE",
+    "reverse_logistics_update_time": 1792900800,
+    "reverse_logistics_tracking_info": [
+      { "update_time": 1792814400, "tracking_description": "Đã lấy hàng từ người mua", "logistics_status": "LOGISTICS_PICKUP_DONE" },
+      { "update_time": 1792900800, "tracking_description": "Đã tới kho Shopee", "logistics_status": "LOGISTICS_DELIVERY_DONE" }
+    ],
+    "post_return_logistics_status": "LOGISTICS_DELIVERY_DONE",
+    "post_return_logistics_update_time": 1792998000,
+    "rts_tracking_number": "SPXVN-RTS-0001",
+    "post_return_logistics_tracking_info": [
+      { "update_time": 1792975200, "tracking_description": "Kho đã bàn giao cho vận chuyển", "logistics_status": "LOGISTICS_PICKUP_DONE" },
+      { "update_time": 1792991700, "tracking_description": "Giao hàng thành công cho người bán", "logistics_status": "LOGISTICS_DELIVERY_DONE" }
+    ]
+  }
+}

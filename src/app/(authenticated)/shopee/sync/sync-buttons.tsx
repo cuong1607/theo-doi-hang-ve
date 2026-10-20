@@ -6,12 +6,13 @@
 // action's revalidatePath re-renders the status cells.
 import { History, RefreshCw, RotateCcw, XCircle } from "lucide-react";
 
+import type { RunnableSyncType } from "@/lib/channels/core/sync-jobs";
 import { LoadingButton } from "@/components/patterns/loading-button";
 import { useAsyncAction } from "@/components/patterns/use-async-action";
 
 import { cancelSyncJobAction, requestBackfillAction, requestSyncNowAction, retrySyncJobAction } from "./actions";
 
-export function SyncNowButton({ shopId, syncType, label = "Đồng bộ ngay", disabled, variant = "default" }: { shopId: string; syncType: "order" | "product" | "escrow" | "return" | "income" | "payout"; label?: string; disabled?: boolean; variant?: "default" | "outline" }) {
+export function SyncNowButton({ shopId, syncType, label = "Đồng bộ ngay", disabled, variant = "default" }: { shopId: string; syncType: RunnableSyncType; label?: string; disabled?: boolean; variant?: "default" | "outline" }) {
   const { run, pending } = useAsyncAction({ errorMessage: "Không gửi được yêu cầu đồng bộ. Vui lòng thử lại." });
   return (
     <LoadingButton

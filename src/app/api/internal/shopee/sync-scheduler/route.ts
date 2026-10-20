@@ -20,6 +20,7 @@ import { diagnosePendingQueue } from "@/lib/channels/core/sync-diagnostics";
 import { getShopeeProviderMode } from "@/lib/channels/shopee/provider-mode";
 import { runShopeeWorkerBursts } from "@/lib/channels/shopee/server";
 import { runShopeeSchedulerTick } from "@/lib/channels/shopee/sync-service";
+import { runReturnNotificationTickSafe } from "@/lib/return-operations/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export const dynamic = "force-dynamic";
@@ -55,6 +56,9 @@ async function handle(request: Request) {
       }),
     );
     for (const e of tick.enqueued) console.info(JSON.stringify({ source: "sync-scheduler", event: "job_enqueued", jobId: e.jobId, shopId: e.shopId, syncType: e.syncType }));
+    // SHOPEE-6B: scheduled "hàng hoàn đã giao" notifications (pre-sync + generate); never throws
+    const notifications = await runReturnNotificationTickSafe(db);
+    if (notifications && notifications.presyncEnqueued > 0) tick.workDue = true;
     // §14: say WHY queued jobs are held back (logged only when something is blocked).
     const pending = await diagnosePendingQueue(db, config).catch(() => []);
     const blocked = pending.filter((p) => p.reason !== "ready" && p.reason !== "scheduler_not_running" && p.reason !== "worker_not_running");
@@ -70,7 +74,7 @@ async function handle(request: Request) {
         after(() => runShopeeWorkerBursts({ bursts: config.schedulerWorkerTriggers, timeBudgetMs, source: "scheduler" }).then(() => undefined));
       }
     }
-    return NextResponse.json({ ok: true, ...tick, workerTriggered, pending: pending.map(({ jobId, syncType, status, reason, detail }) => ({ jobId, syncType, status, reason, detail })), configWarnings: config.warnings });
+    return NextResponse.json({ ok: true, ...tick, workerTriggered, returnNotifications: notifications, pending: pending.map(({ jobId, syncType, status, reason, detail }) => ({ jobId, syncType, status, reason, detail })), configWarnings: config.warnings });
   } catch (err) {
     console.error(JSON.stringify({ source: "sync-scheduler", event: "SYNC_SCHEDULER_FAILED", message: err instanceof Error ? err.message.slice(0, 300) : String(err) }));
     return NextResponse.json({ ok: false, error: "scheduler_failed" }, { status: 500 });

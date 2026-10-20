@@ -1,0 +1,17 @@
+{
+  "error": "",
+  "message": "",
+  "request_id": "fixture",
+  "tracking_number": "SPXVN-FD-0001",
+  "response": {
+    "order_sn": "FIXTURE-FD-1",
+    "package_number": "PKG-FD-1",
+    "logistics_status": "LOGISTICS_DELIVERY_FAILED",
+    "tracking_info": [
+      { "update_time": 1792814400, "description": "Đã lấy hàng", "logistics_status": "PICKED_UP" },
+      { "update_time": 1792900800, "description": "Giao hàng không thành công", "logistics_status": "FAILED_DELIVERED" },
+      { "update_time": 1792929600, "description": "Đang hoàn hàng về người bán", "logistics_status": "RETURN_STARTED" },
+      { "update_time": 1793012400, "description": "Đã hoàn hàng thành công cho người bán", "logistics_status": "RETURNED" }
+    ]
+  }
+}

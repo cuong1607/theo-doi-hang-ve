@@ -15,7 +15,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSyncConfig } from "./sync-config.ts";
 import { diagnosePendingJob, loadPendingDiagnosticsContext, type PendingDiagnosis, type PendingDiagnosticsContext } from "./sync-diagnostics.ts";
 import { getHeartbeats, isHeartbeatStale, SCHEDULER_HEARTBEAT, WORKER_HEARTBEAT, type HeartbeatRow } from "./sync-heartbeat.ts";
-import type { SyncJobRow, SyncJobStatus } from "./sync-jobs.ts";
+import { RUNNABLE_SYNC_TYPES, type SyncJobRow, type SyncJobStatus } from "./sync-jobs.ts";
 
 export interface SyncJobView {
   id: string;
@@ -136,7 +136,7 @@ export async function getSyncHealth(now: Date = new Date()): Promise<SyncHealthV
   };
 }
 
-export async function getSyncStatuses(shopIds: string[], syncTypes: readonly string[] = ["order", "product", "escrow", "return", "income", "payout"]): Promise<Map<string, SyncStatusView>> {
+export async function getSyncStatuses(shopIds: string[], syncTypes: readonly string[] = RUNNABLE_SYNC_TYPES): Promise<Map<string, SyncStatusView>> {
   const result = new Map<string, SyncStatusView>();
   if (shopIds.length === 0) return result;
   const db = createAdminClient();

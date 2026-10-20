@@ -11,7 +11,7 @@ import { z } from "zod";
 import { authorizeAction } from "@/lib/auth/session";
 import { getSyncConfig } from "@/lib/channels/core/sync-config";
 import { diagnosePendingQueue } from "@/lib/channels/core/sync-diagnostics";
-import type { RunnableSyncType } from "@/lib/channels/core/sync-jobs";
+import { RUNNABLE_SYNC_TYPES, type RunnableSyncType } from "@/lib/channels/core/sync-jobs";
 import { getShopeeProviderMode } from "@/lib/channels/shopee/provider-mode";
 import { getShopeeSyncWorker, runShopeeWorkerBursts } from "@/lib/channels/shopee/server";
 import { requestShopeeSync, runShopeeSchedulerTick } from "@/lib/channels/shopee/sync-service";
@@ -21,7 +21,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export type DevActionResult = { ok: boolean; message: string; detail?: unknown };
 
 const uuid = z.string().uuid();
-const SYNC_TYPE = z.enum(["order", "product", "escrow", "return", "income", "payout"]);
+const SYNC_TYPE = z.enum(RUNNABLE_SYNC_TYPES);
 
 async function guard(): Promise<DevActionResult | null> {
   if (!devToolsEnabled()) return { ok: false, message: "Công cụ dev chỉ dùng được trên môi trường local." };

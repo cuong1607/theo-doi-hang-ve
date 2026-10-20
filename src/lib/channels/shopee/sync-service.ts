@@ -26,7 +26,9 @@ import { ShopeeOrderSyncService } from "./order-sync.ts";
 import { ProductSyncJobRunner, MAX_REPAIR_ITEM_IDS } from "./product-sync-job.ts";
 import type { ProviderMode, ShopeeProductProvider } from "./product-provider.ts";
 import { ShopeeProductSyncService } from "./product-sync.ts";
-import { ApiCallMeter, meterIncomeProvider, meterOrderProvider, meterPaymentProvider, meterProductProvider, meterReturnProvider } from "./sync-instrumentation.ts";
+import { ApiCallMeter, meterIncomeProvider, meterOrderProvider, meterPaymentProvider, meterProductProvider, meterReturnLogisticsProvider, meterReturnProvider } from "./sync-instrumentation.ts";
+import type { ShopeeReturnLogisticsProvider } from "./return-logistics-provider.ts";
+import { ReturnLogisticsJobRunner, ShopeeReturnLogisticsSyncService } from "./return-logistics-sync.ts";
 import type { ShopeeIncomeProvider } from "./income-provider.ts";
 import { IncomeSyncJobRunner, ShopeeIncomeSyncService } from "./income-sync.ts";
 import { PayoutSyncJobRunner, ShopeePayoutSyncService } from "./payout-sync.ts";
@@ -48,6 +50,8 @@ export interface ShopeeSyncRequest {
   itemIds?: string[];
   /** SHOPEE-6 return repair scope. */
   returnSns?: string[];
+  /** SHOPEE-6B manual return-logistics refresh: also re-poll this business date's operations. */
+  focusDate?: string;
   now?: Date;
 }
 
@@ -76,6 +80,19 @@ export async function requestShopeeSync(db: SupabaseClient, req: ShopeeSyncReque
       windowFrom,
       windowTo,
       metadata: { trigger: req.createdBy ? "user" : "scheduler" },
+      createdBy: req.createdBy ?? null,
+    });
+  }
+
+  if (req.syncType === "return_logistics" || req.syncType === "failed_delivery") {
+    if (req.mode === "repair" || req.mode === "backfill") throw new SyncJobError("bad_mode", "Vận chuyển hoàn không có backfill / sửa lỗi theo mã — dùng Làm mới dữ liệu hoàn.");
+    const focus = req.focusDate && /^\d{4}-\d{2}-\d{2}$/.test(req.focusDate) ? req.focusDate : null;
+    return enqueueSyncJob(db, {
+      shopId: req.shopId,
+      syncType: req.syncType,
+      mode: req.mode,
+      priority: syncJobPriority(req.mode, req.syncType),
+      metadata: { trigger: req.createdBy ? "user" : "scheduler", ...(focus ? { scope: { focusDate: focus } } : {}) },
       createdBy: req.createdBy ?? null,
     });
   }
@@ -137,6 +154,8 @@ export type ShopeeProviderSource = (job: SyncJobRow) => {
   return?: ShopeeReturnProvider;
   /** SHOPEE-7 income / payout APIs (optional for the same reason). */
   income?: ShopeeIncomeProvider;
+  /** SHOPEE-6B reverse tracking + logistics tracking (optional for the same reason). */
+  returnLogistics?: ShopeeReturnLogisticsProvider;
 };
 
 export function createShopeeRunnerFactory(deps: { db: SupabaseClient; config: SyncConfig; providers: ShopeeProviderSource }): RunnerFactory {
@@ -176,6 +195,12 @@ export function createShopeeRunnerFactory(deps: { db: SupabaseClient; config: Sy
       const returns = new ShopeeReturnSyncService({ db: deps.db, provider: meterReturnProvider(raw.return, meter), orders: orderSync });
       return { meter, runner: new ReturnSyncJobRunner({ db: deps.db, sync: returns, providerMode: raw.mode }) };
     }
+    if (job.sync_type === "return_logistics" || job.sync_type === "failed_delivery") {
+      if (!raw.returnLogistics) throw new JobRefusedError("unsupported_sync_type", "Chưa cấu hình provider vận chuyển hoàn.");
+      const sync = new ShopeeReturnLogisticsSyncService({ db: deps.db, provider: meterReturnLogisticsProvider(raw.returnLogistics, meter) });
+      const kind = job.sync_type === "return_logistics" ? "customer_return" : "failed_delivery_return";
+      return { meter, runner: new ReturnLogisticsJobRunner({ db: deps.db, sync, providerMode: raw.mode, kind }) };
+    }
     if (job.sync_type === "income") {
       if (!raw.income) throw new JobRefusedError("unsupported_sync_type", "Chưa cấu hình provider giải ngân.");
       const income = new ShopeeIncomeSyncService({ db: deps.db, provider: meterIncomeProvider(raw.income, meter) });
@@ -205,12 +230,14 @@ export interface SchedulerResult {
   skippedShops: Array<{ shopId: string; reason: string }>;
 }
 
-const SCHEDULED_TYPES: readonly RunnableSyncType[] = ["order", "product", "escrow", "return", "income", "payout"];
+const SCHEDULED_TYPES: readonly RunnableSyncType[] = ["order", "product", "escrow", "return", "return_logistics", "failed_delivery", "income", "payout"];
 
 const INTERVAL_KEY: Record<RunnableSyncType, keyof SyncConfig> = {
   order: "orderIntervalMinutes",
   escrow: "escrowIntervalMinutes",
   return: "returnIntervalMinutes",
+  return_logistics: "returnLogisticsIntervalMinutes",
+  failed_delivery: "failedDeliveryIntervalMinutes",
   income: "incomeIntervalMinutes",
   payout: "payoutIntervalMinutes",
   product: "productIntervalMinutes",

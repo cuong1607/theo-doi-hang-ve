@@ -55,6 +55,9 @@ export const ORDER_DETAIL_OPTIONAL_FIELDS = [
   "estimated_shipping_fee",
   "reverse_shipping_fee",
   "fulfillment_flag",
+  // SHOPEE-6B: Hoàn Hủy classification (provider enum text; buyer_cancel_reason stays excluded)
+  "cancel_by",
+  "cancel_reason",
 ] as const;
 
 export class RealShopeeOrderProvider implements ShopeeOrderProvider {

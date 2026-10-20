@@ -10,7 +10,7 @@ const EXPECTED: Record<Role, Permission[]> = {
   staff: [
     "dashboard:view", "receipt:view", "invoice:view", "outstanding:view", "debt:view", "payment:view",
     "product:view", "supplier:view", "channel:view", "cost:view", "receipt:create", "receipt:edit", "invoice:create", "invoice:edit",
-    "payment:create", "channel:map", "channel:sync",
+    "payment:create", "channel:map", "channel:sync", "return:receive",
   ],
   viewer: [
     "dashboard:view", "receipt:view", "invoice:view", "outstanding:view", "debt:view", "payment:view",

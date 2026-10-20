@@ -4,6 +4,7 @@ import { requirePermission } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/permissions";
 import { listShops } from "@/lib/channels/core/queries";
 import { getSyncConfig } from "@/lib/channels/core/sync-config";
+import type { RunnableSyncType } from "@/lib/channels/core/sync-jobs";
 import type { PendingDiagnosis } from "@/lib/channels/core/sync-diagnostics";
 import { diagnoseJobView, getPendingDiagnosticsContext, getQueueCounts, getSyncHealth, getSyncStatuses, listRecentSyncJobs } from "@/lib/channels/core/sync-status-queries";
 import { getOrdersSyncFrom } from "@/lib/channels/core/sync-settings";
@@ -30,9 +31,11 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 /** Matrix columns, in queue priority order (orders first). */
-const MATRIX: Array<{ type: "order" | "escrow" | "product" | "return" | "income" | "payout"; label: string; button: string }> = [
+const MATRIX: Array<{ type: RunnableSyncType; label: string; button: string }> = [
   { type: "order", label: "Đơn hàng", button: "Đồng bộ đơn" },
   { type: "return", label: "Trả hàng", button: "Đồng bộ trả hàng" },
+  { type: "return_logistics", label: "Vận chuyển Hoàn Trả", button: "Đồng bộ vận chuyển Hoàn Trả" },
+  { type: "failed_delivery", label: "Vận chuyển Hoàn Hủy", button: "Đồng bộ vận chuyển Hoàn Hủy" },
   { type: "escrow", label: "Tài chính", button: "Đồng bộ tài chính" },
   { type: "income", label: "Giải ngân", button: "Đồng bộ giải ngân" },
   { type: "payout", label: "Payout", button: "Đồng bộ payout" },

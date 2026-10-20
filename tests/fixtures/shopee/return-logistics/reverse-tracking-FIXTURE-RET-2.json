@@ -1,0 +1,17 @@
+{
+  "error": "",
+  "message": "",
+  "request_id": "fixture",
+  "response": {
+    "return_sn": "FIXTURE-RET-2",
+    "tracking_number": "SPXVN-BUYER-0002",
+    "reverse_logistics_status": "LOGISTICS_DELIVERY_DONE",
+    "reverse_logistics_update_time": 1792900800,
+    "post_return_logistics_status": "LOGISTICS_DELIVERY_DONE",
+    "post_return_logistics_update_time": 1793006100,
+    "rts_tracking_number": "SPXVN-RTS-0002",
+    "post_return_logistics_tracking_info": [
+      { "update_time": 1792980000, "tracking_description": "Đang giao cho người bán" }
+    ]
+  }
+}

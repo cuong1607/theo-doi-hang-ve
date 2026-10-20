@@ -85,6 +85,11 @@ export async function upsertChannelOrder(
         ship_by_date: order.shipByDate,
         updated_at_channel: order.updatedAtChannel,
         shipping_carrier: order.shippingCarrier,
+        // SHOPEE-6B: only written when the payload carried them (older callers / fixtures leave them untouched)
+        ...(order.cancelReason !== undefined ? { cancel_reason: order.cancelReason } : {}),
+        ...(order.packageLogisticsStatus !== undefined ? { logistics_status: order.packageLogisticsStatus } : {}),
+        ...(order.packageNumber !== undefined ? { package_number: order.packageNumber } : {}),
+        ...(order.packageCount !== undefined ? { package_count: order.packageCount } : {}),
         last_synced_at: syncedAt,
       },
       { onConflict: "shop_id,external_order_sn" },

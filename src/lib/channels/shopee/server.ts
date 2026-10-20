@@ -28,6 +28,7 @@ import { FixtureShopeeOrderProvider, loadOrderFixtures, RealShopeeOrderProvider 
 import { FixtureShopeePaymentProvider, loadEscrowFixtures, RealShopeePaymentProvider } from "./payment-provider.ts";
 import { FixtureShopeeReturnProvider, loadReturnFixtures, RealShopeeReturnProvider } from "./return-provider.ts";
 import { FixtureShopeeIncomeProvider, RealShopeeIncomeProvider } from "./income-provider.ts";
+import { FixtureShopeeReturnLogisticsProvider, loadReturnLogisticsFixtures, RealShopeeReturnLogisticsProvider } from "./return-logistics-provider.ts";
 import { getShopeeProviderMode } from "./provider-mode.ts";
 
 let cached: { config: ShopeeConfig; client: ShopeeClient; service: ShopeeConnectionService } | null = null;
@@ -78,6 +79,7 @@ export function getShopeeSyncWorker(): SyncWorker {
         payment: new FixtureShopeePaymentProvider(loadEscrowFixtures()),
         return: new FixtureShopeeReturnProvider(loadReturnFixtures()),
         income: new FixtureShopeeIncomeProvider({}),
+        returnLogistics: new FixtureShopeeReturnLogisticsProvider(loadReturnLogisticsFixtures()),
       };
     }
     const { config: shopeeConfig, service } = getShopee();
@@ -90,6 +92,7 @@ export function getShopeeSyncWorker(): SyncWorker {
       payment: new RealShopeePaymentProvider({ client, connections: tokens }),
       return: new RealShopeeReturnProvider({ client, connections: tokens }),
       income: new RealShopeeIncomeProvider({ client, connections: tokens }),
+      returnLogistics: new RealShopeeReturnLogisticsProvider({ client, connections: tokens }),
     };
   };
   const region = process.env.VERCEL_REGION ?? "local";

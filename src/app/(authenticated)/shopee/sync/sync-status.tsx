@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/patterns/status-badge";
 import { SyncProgress } from "@/components/patterns/sync-progress";
 import { FRESHNESS_SUBJECT, SYNC_DISPLAY_LABELS, syncDisplayState } from "@/lib/channels/core/sync-display";
 import type { SyncHealthView, SyncJobView, SyncStatusView } from "@/lib/channels/core/sync-status-queries";
+import type { RunnableSyncType } from "@/lib/channels/core/sync-jobs";
 import { formatAge, formatDateTime } from "@/lib/ui/format";
 import { JOB_STATUS_TONE, SYNC_STATE_TONE, toneOf } from "@/lib/ui/status";
 
@@ -32,11 +33,13 @@ export const SYNC_TYPE_LABELS: Record<string, string> = {
   product: "Sản phẩm",
   escrow: "Tài chính",
   return: "Trả hàng",
+  return_logistics: "Vận chuyển Hoàn Trả",
+  failed_delivery: "Vận chuyển Hoàn Hủy",
   income: "Giải ngân",
   payout: "Payout",
 };
 
-const PROGRESS_UNIT: Record<string, string> = { order: "đơn", product: "sản phẩm", escrow: "đơn", return: "yêu cầu", income: "đơn", payout: "giao dịch" };
+const PROGRESS_UNIT: Record<string, string> = { order: "đơn", product: "sản phẩm", escrow: "đơn", return: "yêu cầu", return_logistics: "đơn hoàn", failed_delivery: "đơn hoàn", income: "đơn", payout: "giao dịch" };
 
 export function JobStatusBadge({ job }: { job: Pick<SyncJobView, "status" | "cancelRequested"> }) {
   return (
@@ -66,7 +69,7 @@ export function FreshnessSummary({
 }: {
   shops: Array<{ id: string; shopName: string }>;
   statuses: Map<string, SyncStatusView>;
-  syncType: "order" | "product" | "escrow" | "return" | "income" | "payout";
+  syncType: RunnableSyncType;
   schedulerStale?: boolean;
 }) {
   if (shops.length === 0) return null;

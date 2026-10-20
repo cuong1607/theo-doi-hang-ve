@@ -12,7 +12,7 @@ import { after } from "next/server";
 import { z } from "zod";
 
 import { authorizeAction } from "@/lib/auth/session";
-import { cancelSyncJob, retrySyncJob, SyncJobError, type RunnableSyncType } from "@/lib/channels/core/sync-jobs";
+import { cancelSyncJob, retrySyncJob, RUNNABLE_SYNC_TYPES, SyncJobError, type RunnableSyncType } from "@/lib/channels/core/sync-jobs";
 import { kickShopeeSyncWorker } from "@/lib/channels/shopee/server";
 import { requestShopeeSync } from "@/lib/channels/shopee/sync-service";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -20,7 +20,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 export type SyncActionResult = { ok: boolean; message: string };
 
 const uuid = z.string().uuid();
-const SYNC_TYPE = z.enum(["order", "product", "escrow", "return", "income", "payout"]);
+const SYNC_TYPE = z.enum(RUNNABLE_SYNC_TYPES);
 
 async function requestOrigin(): Promise<string | null> {
   const h = await headers();
