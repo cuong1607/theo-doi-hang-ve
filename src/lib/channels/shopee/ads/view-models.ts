@@ -13,26 +13,46 @@
 
 import type { PeriodPreset } from "../../../analytics/periods.ts";
 
-export type AdsCampaignStatus = "active" | "paused" | "ended" | "warning";
-/** UI grouping only — real Shopee campaign/ad types are mapped in SHOPEE-ADS-1. */
-export type AdsCampaignType = "search" | "discovery" | "shop" | "auto";
+/**
+ * UI status. Real data maps the raw Shopee status (ongoing → active, paused,
+ * ended, closed; anything else → unknown, raw value kept). "warning" is fixture-only.
+ */
+export type AdsCampaignStatus = "active" | "paused" | "ended" | "closed" | "warning" | "unknown";
+/**
+ * UI grouping. Real data: bidding auto → "auto"; manual bidding → placement
+ * (search / discovery / all → "all_placements"); unknown → "other". "shop" is fixture-only.
+ */
+export type AdsCampaignType = "search" | "discovery" | "shop" | "auto" | "all_placements" | "other";
 
-/** Raw additive totals for one slice (period, campaign, day …). */
+/**
+ * Raw additive totals for one slice (period, campaign, day …).
+ * revenue / orders = BROAD attribution (Shopee broad_gmv / broad_order);
+ * directRevenue / directOrders = DIRECT attribution. Never "shop revenue".
+ */
 export interface AdsTotals {
   spend: number;
   revenue: number;
   orders: number;
+  directRevenue: number;
+  directOrders: number;
   clicks: number;
   impressions: number;
 }
 
-/** Totals + derived ratios (null when the denominator is 0 → shown "—"). */
+/** Totals + ratios derived from the totals (ratio-of-sums; null when the denominator is 0 → "—"). */
 export interface AdsMetricValues extends AdsTotals {
+  /** Broad ROAS = revenue / spend */
   roas: number | null;
+  /** Broad ACOS = spend / revenue */
   acos: number | null;
   ctr: number | null;
+  /** Cost per CLICK = spend / clicks (never Shopee's campaign "cpc" field). */
   cpc: number | null;
+  /** Broad CVR = orders / clicks */
   conversionRate: number | null;
+  directRoas: number | null;
+  directAcos: number | null;
+  directConversionRate: number | null;
 }
 
 export interface AdsOverviewMetrics {
@@ -40,8 +60,13 @@ export interface AdsOverviewMetrics {
   previous: AdsMetricValues;
   /** Daily (or hourly) series per metric for card sparklines. */
   spark: Record<keyof AdsMetricValues, number[]>;
-  /** Σ daily budget × days of the period, for "x% ngân sách đã dùng". */
+  /** Σ daily budget × days of the period, for "x% ngân sách đã dùng" (0 = unknown → "—"). */
   budget: number;
+  /**
+   * Real data only: shop-level total minus Σ product campaigns for the same
+   * range ("Ngoài chiến dịch sản phẩm" — source not identified by Shopee).
+   */
+  outsideProductCampaigns?: AdsMetricValues | null;
 }
 
 export interface AdsTrendPoint {
@@ -52,15 +77,20 @@ export interface AdsTrendPoint {
   spend: number;
   revenue: number;
   orders: number;
+  directRevenue: number;
+  directOrders: number;
   clicks: number;
   roas: number | null;
 }
 
 export interface AdsAdvertisedProduct {
   name: string;
-  spend: number;
-  revenue: number;
-  orders: number;
+  /** Provider item id (real data). */
+  itemId?: string;
+  /** null = not available per product (Shopee reports metrics per campaign only). */
+  spend: number | null;
+  revenue: number | null;
+  orders: number | null;
 }
 
 export interface AdsCampaignRow {
@@ -70,7 +100,11 @@ export interface AdsCampaignRow {
   shopName: string;
   type: AdsCampaignType;
   status: AdsCampaignStatus;
-  /** Daily budget (VND); null = no cap. */
+  /** Raw provider values (real data) — kept for display / audit, never mapped away. */
+  provider?: { status: string; adType: string | null; biddingMethod: string | null; placement: string | null; campaignId: string };
+  /** Shopee roas_target (auto bidding); null / 0 → "—" (meaning of 0 unknown). */
+  roasTarget?: number | null;
+  /** Daily budget (VND, "Ngân sách/ngày"); null = not set / unknown → "—". */
   dailyBudget: number | null;
   /** Budget available over the period (dailyBudget × active days). */
   periodBudget: number | null;
@@ -95,10 +129,15 @@ export type AdsSyncState = "fresh" | "never" | "refreshing" | "error";
 
 export interface AdsSyncStatus {
   state: AdsSyncState;
-  /** Last successful Ads data update (ISO), null = never. */
+  /** Last successful Ads data update (ISO), null = never. Real data: the OLDEST of the three reads. */
   lastSyncedAt: string | null;
-  /** "fixture" until SHOPEE-ADS-1 ships a real source. */
   source: "fixture" | "shopee";
+  /** Real data: freshness per read job (campaign metadata / campaign facts / shop totals). */
+  details?: Array<{ key: string; label: string; lastSuccessAt: string | null; lastErrorAt: string | null; errorMessage: string | null }>;
+  /** The selected range includes today (shop-local) — today's data is partial. */
+  todayPartial?: boolean;
+  /** Latest report date with shop-level facts (YYYY-MM-DD). */
+  reportThrough?: string | null;
 }
 
 export interface AdsShopOption {

@@ -29,17 +29,24 @@ export interface AdsMetricDef {
   definition?: string;
 }
 
+// SHOPEE-ADS-1B: labels follow Shopee's attribution terms. "Broad" / "Direct"
+// are Shopee's own attributed metrics — never the shop's revenue or order count.
 export const ADS_METRIC_DEFS: Record<AdsMetricKey, AdsMetricDef> = {
   spend: { key: "spend", label: "Chi tiêu Ads", short: "Chi tiêu", format: "vnd", direction: "neutral", definition: "Tiền Shopee trừ cho quảng cáo trong kỳ" },
-  revenue: { key: "revenue", label: "Doanh thu Ads", short: "Doanh thu", format: "vnd", direction: "up", definition: "Giá trị đơn được quy cho quảng cáo" },
-  roas: { key: "roas", label: "ROAS", short: "ROAS", format: "roas", direction: "up", definition: "Doanh thu quảng cáo / Chi tiêu quảng cáo" },
-  orders: { key: "orders", label: "Đơn hàng Ads", short: "Đơn hàng", format: "int", direction: "up", definition: "Đơn được quy cho quảng cáo" },
-  clicks: { key: "clicks", label: "Clicks", short: "Clicks", format: "int", direction: "up", definition: "Số lần nhấp vào quảng cáo" },
-  impressions: { key: "impressions", label: "Impressions", short: "Hiển thị", format: "int", direction: "up", definition: "Số lần quảng cáo được hiển thị" },
-  ctr: { key: "ctr", label: "CTR", short: "CTR", format: "pct2", direction: "up", definition: "Clicks / Impressions" },
-  cpc: { key: "cpc", label: "CPC", short: "CPC", format: "vnd", direction: "down", definition: "Chi tiêu / Clicks" },
-  acos: { key: "acos", label: "ACOS", short: "ACOS", format: "pct1", direction: "down", definition: "Chi tiêu quảng cáo / Doanh thu quảng cáo" },
-  conversionRate: { key: "conversionRate", label: "Tỷ lệ chuyển đổi", short: "CR", format: "pct2", direction: "up", definition: "Orders / Clicks" },
+  revenue: { key: "revenue", label: "Doanh số Broad", short: "Doanh số Broad", format: "vnd", direction: "up", definition: "Doanh số Shopee quy cho quảng cáo theo cách tính Broad (rộng). Không phải doanh thu shop." },
+  directRevenue: { key: "directRevenue", label: "Doanh số Direct", short: "Doanh số Direct", format: "vnd", direction: "up", definition: "Doanh số Shopee quy trực tiếp cho quảng cáo (Direct). Luôn ≤ Broad." },
+  roas: { key: "roas", label: "ROAS Broad", short: "ROAS", format: "roas", direction: "up", definition: "Doanh số Broad / Chi tiêu Ads" },
+  directRoas: { key: "directRoas", label: "ROAS Direct", short: "ROAS Direct", format: "roas", direction: "up", definition: "Doanh số Direct / Chi tiêu Ads" },
+  orders: { key: "orders", label: "Đơn Broad", short: "Đơn Broad", format: "int", direction: "up", definition: "Số đơn Shopee quy cho quảng cáo theo cách tính Broad. Không phải tổng đơn của shop." },
+  directOrders: { key: "directOrders", label: "Đơn Direct", short: "Đơn Direct", format: "int", direction: "up", definition: "Số đơn Shopee quy trực tiếp cho quảng cáo (Direct)." },
+  clicks: { key: "clicks", label: "Lượt nhấp", short: "Lượt nhấp", format: "int", direction: "up", definition: "Số lần nhấp vào quảng cáo" },
+  impressions: { key: "impressions", label: "Lượt hiển thị", short: "Hiển thị", format: "int", direction: "up", definition: "Số lần quảng cáo được hiển thị" },
+  ctr: { key: "ctr", label: "CTR", short: "CTR", format: "pct2", direction: "up", definition: "Lượt nhấp / Lượt hiển thị" },
+  cpc: { key: "cpc", label: "CPC", short: "CPC", format: "vnd", direction: "down", definition: "Chi phí mỗi lượt nhấp = Chi tiêu Ads / Lượt nhấp" },
+  acos: { key: "acos", label: "ACOS Broad", short: "ACOS", format: "pct1", direction: "down", definition: "Chi tiêu Ads / Doanh số Broad" },
+  directAcos: { key: "directAcos", label: "ACOS Direct", short: "ACOS Direct", format: "pct1", direction: "down", definition: "Chi tiêu Ads / Doanh số Direct" },
+  conversionRate: { key: "conversionRate", label: "CVR Broad", short: "CVR", format: "pct2", direction: "up", definition: "Đơn Broad / Lượt nhấp" },
+  directConversionRate: { key: "directConversionRate", label: "CVR Direct", short: "CVR Direct", format: "pct2", direction: "up", definition: "Đơn Direct / Lượt nhấp" },
 };
 
 /**
@@ -56,26 +63,52 @@ export const ADS_TARGETS = {
 
 const ratio = (a: number, b: number): number | null => (b > 0 ? a / b : null);
 
+/** Ratios from SUMMED primitives (ratio-of-sums) — never an average of row ratios. */
 export function deriveMetrics(t: AdsTotals): AdsMetricValues {
   return {
-    ...t,
+    spend: t.spend,
+    revenue: t.revenue,
+    orders: t.orders,
+    directRevenue: t.directRevenue,
+    directOrders: t.directOrders,
+    clicks: t.clicks,
+    impressions: t.impressions,
     roas: ratio(t.revenue, t.spend),
     acos: ratio(t.spend, t.revenue),
     ctr: ratio(t.clicks, t.impressions),
+    // cost per CLICK — the only CPC the UI shows
     cpc: ratio(t.spend, t.clicks),
     conversionRate: ratio(t.orders, t.clicks),
+    directRoas: ratio(t.directRevenue, t.spend),
+    directAcos: ratio(t.spend, t.directRevenue),
+    directConversionRate: ratio(t.directOrders, t.clicks),
   };
 }
 
-export const ZERO_TOTALS: AdsTotals = { spend: 0, revenue: 0, orders: 0, clicks: 0, impressions: 0 };
+export const ZERO_TOTALS: AdsTotals = { spend: 0, revenue: 0, orders: 0, directRevenue: 0, directOrders: 0, clicks: 0, impressions: 0 };
 
 export function addTotals(a: AdsTotals, b: AdsTotals): AdsTotals {
   return {
     spend: a.spend + b.spend,
     revenue: a.revenue + b.revenue,
     orders: a.orders + b.orders,
+    directRevenue: a.directRevenue + b.directRevenue,
+    directOrders: a.directOrders + b.directOrders,
     clicks: a.clicks + b.clicks,
     impressions: a.impressions + b.impressions,
+  };
+}
+
+/** a − b on additive totals (used for "Ngoài chiến dịch sản phẩm" = shop − Σ campaigns). */
+export function subtractTotals(a: AdsTotals, b: AdsTotals): AdsTotals {
+  return {
+    spend: a.spend - b.spend,
+    revenue: a.revenue - b.revenue,
+    orders: a.orders - b.orders,
+    directRevenue: a.directRevenue - b.directRevenue,
+    directOrders: a.directOrders - b.directOrders,
+    clicks: a.clicks - b.clicks,
+    impressions: a.impressions - b.impressions,
   };
 }
 

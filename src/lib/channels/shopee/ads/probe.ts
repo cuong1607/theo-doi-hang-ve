@@ -22,20 +22,11 @@
 // CANDIDATES: a provider parameter error is recorded as evidence, never
 // "fixed" by trying random combinations.
 // ============================================================
-import { isAdsReadOnlyRequest } from "./read-only-policy.ts";
+import { ADS_READ_ENDPOINTS, isAdsReadOnlyRequest } from "./read-only-policy.ts";
 import { createAdsFixtureSanitizer, type AdsFixtureSanitizer } from "./sanitize.ts";
 
-export const ADS_PROBE_ENDPOINTS = {
-  shop_toggle_info: "/api/v2/ads/get_shop_toggle_info",
-  total_balance: "/api/v2/ads/get_total_balance",
-  campaign_id_list: "/api/v2/ads/get_product_level_campaign_id_list",
-  campaign_setting_info: "/api/v2/ads/get_product_level_campaign_setting_info",
-  shop_daily_performance: "/api/v2/ads/get_all_cpc_ads_daily_performance",
-  campaign_daily_performance: "/api/v2/ads/get_product_campaign_daily_performance",
-  shop_hourly_performance: "/api/v2/ads/get_all_cpc_ads_hourly_performance",
-  campaign_hourly_performance: "/api/v2/ads/get_product_campaign_hourly_performance",
-  recommended_item_list: "/api/v2/ads/get_recommended_item_list",
-} as const;
+/** The single allowlist lives in read-only-policy.ts (shared with the provider). */
+export const ADS_PROBE_ENDPOINTS = ADS_READ_ENDPOINTS;
 
 export type AdsProbeEndpoint = keyof typeof ADS_PROBE_ENDPOINTS;
 

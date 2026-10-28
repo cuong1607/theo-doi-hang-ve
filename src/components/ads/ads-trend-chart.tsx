@@ -17,13 +17,13 @@ import { AdsSegmented } from "./ads-segmented";
 import { AdsEmptyState } from "./ads-states";
 
 type Mode = "money" | "orders" | "roas" | "clicks";
-type SeriesKey = "spend" | "revenue" | "orders" | "roas" | "clicks";
+type SeriesKey = "spend" | "revenue" | "directRevenue" | "orders" | "directOrders" | "roas" | "clicks";
 
 const MODES: Array<{ value: Mode; label: string }> = [
-  { value: "money", label: "Chi tiêu & Doanh thu" },
-  { value: "orders", label: "Đơn hàng" },
-  { value: "roas", label: "ROAS" },
-  { value: "clicks", label: "Clicks" },
+  { value: "money", label: "Chi tiêu & Doanh số" },
+  { value: "orders", label: "Đơn Broad / Direct" },
+  { value: "roas", label: "ROAS Broad" },
+  { value: "clicks", label: "Lượt nhấp" },
 ];
 
 interface SeriesDef {
@@ -35,14 +35,16 @@ interface SeriesDef {
 }
 
 const SERIES: Record<SeriesKey, SeriesDef> = {
-  revenue: { key: "revenue", label: "Doanh thu", color: "var(--metric-revenue)", kind: "area", fmt: formatVndFull },
+  revenue: { key: "revenue", label: "Doanh số Broad", color: "var(--metric-revenue)", kind: "area", fmt: formatVndFull },
+  directRevenue: { key: "directRevenue", label: "Doanh số Direct", color: "var(--ads-accent)", kind: "line", fmt: formatVndFull },
   spend: { key: "spend", label: "Chi tiêu", color: "var(--metric-spend)", kind: "line", fmt: formatVndFull },
-  orders: { key: "orders", label: "Đơn hàng", color: "var(--metric-orders)", kind: "bar", fmt: formatInt },
-  roas: { key: "roas", label: "ROAS", color: "var(--metric-roas)", kind: "area", fmt: formatRoas },
-  clicks: { key: "clicks", label: "Clicks", color: "var(--metric-clicks)", kind: "bar", fmt: formatInt },
+  orders: { key: "orders", label: "Đơn Broad", color: "var(--metric-orders)", kind: "bar", fmt: formatInt },
+  directOrders: { key: "directOrders", label: "Đơn Direct", color: "var(--ads-accent)", kind: "line", fmt: formatInt },
+  roas: { key: "roas", label: "ROAS Broad", color: "var(--metric-roas)", kind: "area", fmt: formatRoas },
+  clicks: { key: "clicks", label: "Lượt nhấp", color: "var(--metric-clicks)", kind: "bar", fmt: formatInt },
 };
 
-const MODE_SERIES: Record<Mode, SeriesKey[]> = { money: ["revenue", "spend"], orders: ["orders"], roas: ["roas"], clicks: ["clicks"] };
+const MODE_SERIES: Record<Mode, SeriesKey[]> = { money: ["revenue", "directRevenue", "spend"], orders: ["orders", "directOrders"], roas: ["roas"], clicks: ["clicks"] };
 const PAD = { l: 52, r: 12, t: 16, b: 26 };
 
 function niceMax(v: number): number {
@@ -241,7 +243,7 @@ export function AdsTrendChart({ points, granularity }: { points: AdsTrendPoint[]
                 <g>
                   <line x1={PAD.l} x2={W - PAD.r} y1={y(ADS_TARGETS.roas)} y2={y(ADS_TARGETS.roas)} strokeDasharray="6 4" strokeWidth={1.2} style={{ stroke: "var(--ads-primary)" }} />
                   <text x={W - PAD.r} y={y(ADS_TARGETS.roas) - 5} textAnchor="end" className="text-[10px] font-medium" style={{ fill: "var(--ads-primary-text)" }}>
-                    Mục tiêu {formatRoas(ADS_TARGETS.roas)}
+                    Mục tiêu tham khảo {formatRoas(ADS_TARGETS.roas)}
                   </text>
                 </g>
               )}
@@ -302,7 +304,7 @@ export function AdsTrendChart({ points, granularity }: { points: AdsTrendPoint[]
                 ))}
                 {mode === "money" && (
                   <p className="mt-1 flex justify-between gap-4 border-t border-ads-border pt-1 text-muted-foreground tabular-nums">
-                    ROAS <span className="font-medium text-foreground">{formatRoas(ap.roas)}</span>
+                    ROAS Broad <span className="font-medium text-foreground">{formatRoas(ap.roas)}</span>
                   </p>
                 )}
               </div>
@@ -323,10 +325,12 @@ export function AdsTrendChart({ points, granularity }: { points: AdsTrendPoint[]
                 <tr className="text-muted-foreground">
                   <th className="px-2 py-1.5 font-medium">Mốc</th>
                   <th className="px-2 py-1.5 text-right font-medium">Chi tiêu</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Doanh thu</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Đơn</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Clicks</th>
-                  <th className="px-2 py-1.5 text-right font-medium">ROAS</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Doanh số Broad</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Doanh số Direct</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Đơn Broad</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Đơn Direct</th>
+                  <th className="px-2 py-1.5 text-right font-medium">Lượt nhấp</th>
+                  <th className="px-2 py-1.5 text-right font-medium">ROAS Broad</th>
                 </tr>
               </thead>
               <tbody>
@@ -335,7 +339,9 @@ export function AdsTrendChart({ points, granularity }: { points: AdsTrendPoint[]
                     <td className="px-2 py-1">{p.label}</td>
                     <td className="px-2 py-1 text-right">{formatVndFull(p.spend)}</td>
                     <td className="px-2 py-1 text-right">{formatVndFull(p.revenue)}</td>
+                    <td className="px-2 py-1 text-right">{formatVndFull(p.directRevenue)}</td>
                     <td className="px-2 py-1 text-right">{formatInt(p.orders)}</td>
+                    <td className="px-2 py-1 text-right">{formatInt(p.directOrders)}</td>
                     <td className="px-2 py-1 text-right">{formatInt(p.clicks)}</td>
                     <td className="px-2 py-1 text-right">{formatRoas(p.roas)}</td>
                   </tr>

@@ -27,7 +27,7 @@ export function topCampaignLists(rows: AdsCampaignRow[]): TopList[] {
   const by = (k: AdsMetricKey) => [...rows].filter((r) => (r.metrics[k] ?? 0) > 0).sort((a, b) => (b.metrics[k] ?? 0) - (a.metrics[k] ?? 0)).slice(0, 3);
   return [
     { key: "roas", title: "Top ROAS", icon: TrendingUp, chip: "bg-metric-roas/12 text-metric-roas", bar: "bg-metric-roas", metric: "roas", rows: by("roas").filter((r) => r.metrics.orders > 0) },
-    { key: "revenue", title: "Top doanh thu", icon: BadgeDollarSign, chip: "bg-metric-revenue/12 text-metric-revenue", bar: "bg-metric-revenue", metric: "revenue", rows: by("revenue") },
+    { key: "revenue", title: "Top doanh số Broad", icon: BadgeDollarSign, chip: "bg-metric-revenue/12 text-metric-revenue", bar: "bg-metric-revenue", metric: "revenue", rows: by("revenue") },
     { key: "spend", title: "Chi tiêu cao nhất", icon: Wallet, chip: "bg-metric-spend/12 text-metric-spend", bar: "bg-metric-spend", metric: "spend", rows: by("spend") },
     { key: "attention", title: "Cần chú ý", icon: AlertTriangle, chip: "bg-warning-soft text-warning-text", bar: "bg-warning", metric: "roas", rows: rows.filter(needsAttention).sort((a, b) => b.metrics.spend - a.metrics.spend).slice(0, 3) },
   ];

@@ -5,6 +5,12 @@
 > - **Sandbox:** no Ads backend (see §2).
 > - **Production:** probe run once, 2026-10-28 08:58 UTC, on shop "CTV Bedding & decor Store". It used 12 GET requests and the result was **Ads AVAILABLE**: all 9 endpoints `VERIFIED_PROD` (see §3).
 > - Expansion probe (ADS-1A.1), 09:25 UTC, 12 GET requests: full campaign coverage (143), reconciliation, budget / status / field formulas (see §3.5).
+> - ADS-1B builds on these facts: data model in [shopee-ads-data-model.md](shopee-ads-data-model.md), sync in [shopee-ads-sync.md](shopee-ads-sync.md).
+>   - **Shop total ≠ Σ campaigns.**
+>   - **Provider `cpc` ≠ click CPC.**
+>   - **Broad / Direct** are Shopee attribution metrics.
+>   - **Today is partial.**
+>   - **The restatement overlap is a temporary 7 days.**
 > - Fixtures: `src/lib/channels/shopee/ads/__fixtures__/provider/`.
 > - Confidence labels used below:
 >   - **VERIFIED**: proven by the payload or by arithmetic on it.

@@ -10,10 +10,10 @@ import { createClient } from "@supabase/supabase-js";
 
 import { getShopeeFlags, isLegacyShopeeApi, isLegacyShopeePage, legacyRedirectTarget } from "../../feature-flags.ts";
 import { getSyncConfig } from "../core/sync-config.ts";
-import { activeSyncTypes, LEGACY_DISABLED_CODE, PLANNED_ADS_SYNC_TYPES, retiredSyncTypes } from "../core/sync-domains.ts";
+import { activeAdsSyncTypes, activeSyncTypes, ADS_SYNC_TYPES, LEGACY_DISABLED_CODE, retiredSyncTypes } from "../core/sync-domains.ts";
 import { RUNNABLE_SYNC_TYPES, type SyncJobRow } from "../core/sync-jobs.ts";
 import { SyncWorker } from "../core/sync-worker.ts";
-import { AdsNotImplementedError, NotImplementedShopeeAdsProvider } from "./ads/provider.ts";
+import { RealShopeeAdsProvider } from "./ads/provider.ts";
 import { FixtureShopeeOrderProvider } from "./order-provider.ts";
 import { FixtureShopeePaymentProvider } from "./payment-provider.ts";
 import { FixtureShopeeProductProvider } from "./product-provider.ts";
@@ -45,14 +45,17 @@ const legacyOff = getShopeeFlags({ SHOPEE_LEGACY_MODULES_ENABLED: "false", SHOPE
 
 // ================================================================ pure
 
-test("4/34: flags — legacy off by default, Ads on by default; there is no global Shopee switch", () => {
-  assert.deepEqual(getShopeeFlags({}), { legacyModulesEnabled: false, adsEnabled: true });
-  assert.deepEqual(getShopeeFlags({ SHOPEE_LEGACY_MODULES_ENABLED: "true", SHOPEE_ADS_ENABLED: "0" }), { legacyModulesEnabled: true, adsEnabled: false });
-  assert.deepEqual(getShopeeFlags({ SHOPEE_LEGACY_MODULES_ENABLED: "maybe" }), { legacyModulesEnabled: false, adsEnabled: true }, "garbage → safe defaults");
+test("4/34: flags — legacy off by default, Ads on by default (fixture data); there is no global Shopee switch", () => {
+  assert.deepEqual(getShopeeFlags({}), { legacyModulesEnabled: false, adsEnabled: true, adsDataSource: "fixture", adsProvider: "live" });
+  assert.deepEqual(getShopeeFlags({ SHOPEE_LEGACY_MODULES_ENABLED: "true", SHOPEE_ADS_ENABLED: "0", SHOPEE_ADS_DATA_SOURCE: "real" }), { legacyModulesEnabled: true, adsEnabled: false, adsDataSource: "fixture", adsProvider: "live" }, "Ads off → never real");
+  assert.deepEqual(getShopeeFlags({ SHOPEE_LEGACY_MODULES_ENABLED: "maybe", SHOPEE_ADS_DATA_SOURCE: "maybe" }), { legacyModulesEnabled: false, adsEnabled: true, adsDataSource: "fixture", adsProvider: "live" }, "garbage → safe defaults");
   assert.deepEqual(activeSyncTypes(legacyOff), [], "no legacy job type may run");
   assert.deepEqual(retiredSyncTypes(legacyOff), [...RUNNABLE_SYNC_TYPES]);
   assert.deepEqual(activeSyncTypes(getShopeeFlags({ SHOPEE_LEGACY_MODULES_ENABLED: "true" })), [...RUNNABLE_SYNC_TYPES]);
-  assert.ok(PLANNED_ADS_SYNC_TYPES.every((t) => !(RUNNABLE_SYNC_TYPES as readonly string[]).includes(t)), "Ads types are planned, not runnable");
+  // SHOPEE-ADS-1B: Ads read jobs are a separate domain, claimable only in REAL mode
+  assert.ok(ADS_SYNC_TYPES.every((t) => !(RUNNABLE_SYNC_TYPES as readonly string[]).includes(t)), "Ads types are not legacy types");
+  assert.deepEqual(activeAdsSyncTypes(legacyOff), [], "fixture mode (default) → no Ads job runs");
+  assert.deepEqual(activeAdsSyncTypes(getShopeeFlags({ SHOPEE_ADS_DATA_SOURCE: "real" })), [...ADS_SYNC_TYPES]);
 });
 
 test("7/8/43: route policy — every legacy page / API matched; OAuth, settings, Ads, internal scheduler NOT matched", () => {
@@ -61,13 +64,20 @@ test("7/8/43: route policy — every legacy page / API matched; OAuth, settings,
   for (const p of ["/api/shopee/analytics/export", "/api/shopee/returns/operations/export"]) assert.ok(isLegacyShopeeApi(p), p);
   for (const p of ["/api/shopee/auth/start", "/api/shopee/auth/callback", "/api/shopee/test-connection", "/api/internal/shopee/sync-scheduler"]) assert.ok(!isLegacyShopeeApi(p), p);
   assert.equal(legacyRedirectTarget(legacyOff), "/shopee/ads");
-  assert.equal(legacyRedirectTarget({ legacyModulesEnabled: false, adsEnabled: false }), "/dashboard");
+  assert.equal(legacyRedirectTarget({ ...legacyOff, adsEnabled: false }), "/dashboard");
 });
 
-test("27: Ads provider is a contract only — it never calls Shopee", async () => {
-  const p = new NotImplementedShopeeAdsProvider();
-  await assert.rejects(p.listCampaigns(), AdsNotImplementedError);
-  await assert.rejects(p.getBudgetInfo(), AdsNotImplementedError);
+test("27: Ads provider (ADS-1B) refuses unverified request shapes before any network call", async () => {
+  let calls = 0;
+  const client = { request: async () => { calls++; return { data: {}, requestId: null, latencyMs: 0, attempts: 1 }; } } as unknown as ConstructorParameters<typeof RealShopeeAdsProvider>[0]["client"];
+  const connections = { getValidAccessToken: async () => "tok", recordApiFailure: async () => {} };
+  const p = new RealShopeeAdsProvider({ client, connections });
+  const ctx = { shopId: "s", externalShopId: "1" };
+  await assert.rejects(p.listProductLevelCampaignIds(ctx, { offset: 0, limit: 101 }));
+  await assert.rejects(p.getProductLevelCampaignSettings(ctx, { campaignIds: Array.from({ length: 51 }, (_, i) => String(i + 1)) }));
+  await assert.rejects(p.getProductCampaignDailyPerformance(ctx, { campaignIds: ["1"], range: { from: "2026-10-01", to: "2026-10-08" } }), /7 ngày/);
+  await assert.rejects(p.getAllCpcAdsDailyPerformance(ctx, { range: { from: "2026-09-01", to: "2026-10-27" } }), /30 ngày/);
+  assert.equal(calls, 0);
 });
 
 // ================================================================ scheduler / worker

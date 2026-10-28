@@ -31,7 +31,16 @@ import { FixtureShopeeIncomeProvider, RealShopeeIncomeProvider } from "./income-
 import { FixtureShopeeReturnLogisticsProvider, loadReturnLogisticsFixtures, RealShopeeReturnLogisticsProvider } from "./return-logistics-provider.ts";
 import { getShopeeProviderMode } from "./provider-mode.ts";
 import { getShopeeFlags } from "../../feature-flags.ts";
-import { activeSyncTypes } from "../core/sync-domains.ts";
+import { activeAdsSyncTypes, activeSyncTypes } from "../core/sync-domains.ts";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { ExecutionBudget } from "../core/retry-policy.ts";
+import type { SyncJobRow } from "../core/sync-jobs.ts";
+import type { RunnerHandle } from "../core/sync-worker.ts";
+import { ApiCallMeter } from "./sync-instrumentation.ts";
+import { JobRefusedError } from "./sync-errors.ts";
+import { FixtureShopeeAdsProvider, loadAdsFixtures, MeteredShopeeAdsProvider, RealShopeeAdsProvider, type AdsFixtureData, type ShopeeAdsProvider } from "./ads/provider.ts";
+import { isAdsSyncType } from "./ads/read-only-policy.ts";
+import { createAdsRunner } from "./ads/sync.ts";
 
 let cached: { config: ShopeeConfig; client: ShopeeClient; service: ShopeeConnectionService } | null = null;
 
@@ -67,9 +76,34 @@ function getWorkerClient(config: ShopeeConfig): ShopeeClient {
  * slice: live → worker client + JobTokenCache over the shared connection
  * service (concurrency-safe refresh of SHOPEE-1); fixture → fixture files.
  */
+let adsFixtures: AdsFixtureData | null = null;
+
+/**
+ * SHOPEE-ADS-1B: runner for an Ads READ job. Live → the read-only provider over
+ * the worker client + job token cache; fixture → the sanitized production
+ * payloads (local dev / tests only — refused in production unless explicitly enabled).
+ */
+function adsRunnerHandle(job: SyncJobRow, budget: ExecutionBudget, db: SupabaseClient): RunnerHandle {
+  const flags = getShopeeFlags();
+  const meter = new ApiCallMeter(budget);
+  let provider: ShopeeAdsProvider;
+  if (flags.adsProvider === "fixture") {
+    if (process.env.NODE_ENV === "production" && process.env.ENABLE_SHOPEE_FIXTURE_MODE !== "true") {
+      throw new JobRefusedError("fixture_refused", "SHOPEE_ADS_PROVIDER=fixture không được dùng ở production.");
+    }
+    adsFixtures ??= loadAdsFixtures();
+    provider = new FixtureShopeeAdsProvider(adsFixtures);
+  } else {
+    const { config: shopeeConfig, service } = getShopee();
+    provider = new RealShopeeAdsProvider({ client: getWorkerClient(shopeeConfig), connections: new JobTokenCache(service) });
+  }
+  return { meter, runner: createAdsRunner(job, { db, provider: new MeteredShopeeAdsProvider(provider, meter) }) };
+}
+
 export function getShopeeSyncWorker(): SyncWorker {
   const config = getSyncConfig();
   const db = createAdminClient();
+  const flags = getShopeeFlags();
   const providers: ShopeeProviderSource = () => {
     const { mode, problem } = getShopeeProviderMode();
     if (problem) throw new ShopeeConfigError([problem]);
@@ -98,13 +132,15 @@ export function getShopeeSyncWorker(): SyncWorker {
     };
   };
   const region = process.env.VERCEL_REGION ?? "local";
+  const legacyFactory = createShopeeRunnerFactory({ db, config, providers });
   return new SyncWorker({
     db,
     config,
     workerId: `${region}-${randomUUID().slice(0, 8)}`,
-    createRunner: createShopeeRunnerFactory({ db, config, providers }),
-    // SHOPEE-ADS-0: only job types of active domains are claimed (legacy retired = none)
-    syncTypes: activeSyncTypes(getShopeeFlags()),
+    createRunner: (job, budget) => (isAdsSyncType(job.sync_type) ? adsRunnerHandle(job, budget, db) : legacyFactory(job, budget)),
+    // SHOPEE-ADS-0: only job types of active domains are claimed (legacy retired = none);
+    // SHOPEE-ADS-1B: + the Ads READ jobs, only when SHOPEE_ADS_DATA_SOURCE=real
+    syncTypes: [...activeSyncTypes(flags), ...activeAdsSyncTypes(flags)],
     classifyError: toJobFailure,
     region,
   });

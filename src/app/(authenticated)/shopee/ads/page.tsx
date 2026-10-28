@@ -7,6 +7,9 @@ import { requirePermission } from "@/lib/auth/session";
 import { formatAdsRange, parseAdsDemo, parseAdsFilters, parseAdsTableQuery, queryCampaigns } from "@/lib/channels/shopee/ads/filters";
 import { adsDeltaPercent } from "@/lib/channels/shopee/ads/metrics";
 import { AdsDataUnavailableError, FixtureAdsDashboardSource } from "@/lib/channels/shopee/ads/source";
+import { RealAdsDashboardSource } from "@/lib/channels/shopee/ads/real-source";
+import { formatDateTime } from "@/lib/ui/format";
+import { AdsAttributionPanel } from "@/components/ads/ads-attribution-panel";
 import type { AdsDashboardData } from "@/lib/channels/shopee/ads/view-models";
 import { getShopeeFlags } from "@/lib/feature-flags";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -31,24 +34,30 @@ const QUERY_KEYS = ["period", "from", "to", "shop", "status", "type", "q", "sort
 /** Secondary KPI cards, in display order (ROAS is the hero card). */
 const CARDS = ["spend", "revenue", "orders", "clicks", "impressions", "ctr", "cpc", "acos"] as const;
 
-// SHOPEE-ADS-UI-1: the Ads dashboard. Data comes from an AdsDashboardSource —
-// FIXTURE ONLY in this phase (no Shopee Ads API call, no Ads tables).
-// ?demo=empty|error|unsynced|large|slow switches fixture states for QA.
+// SHOPEE-ADS-UI-1 / 1B: the Ads dashboard. Data comes from an AdsDashboardSource:
+//   SHOPEE_ADS_DATA_SOURCE=fixture (default)  FixtureAdsDashboardSource
+//     (?demo=empty|error|unsynced|large|slow switches fixture states for QA)
+//   SHOPEE_ADS_DATA_SOURCE=real               RealAdsDashboardSource — canonical
+//     Ads tables only (DB); "Làm mới dữ liệu" enqueues read-only sync jobs.
+// The page never calls Shopee and the Ads module never writes to Shopee.
 export default async function ShopeeAdsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  if (!getShopeeFlags().adsEnabled) notFound();
+  const flags = getShopeeFlags();
+  if (!flags.adsEnabled) notFound();
   const auth = await requirePermission("channel:view");
   const sp = await searchParams;
   const filters = parseAdsFilters(sp);
   const table = parseAdsTableQuery(sp);
-  const demo = parseAdsDemo(sp);
+  const real = flags.adsDataSource === "real";
+  const demo = real ? null : parseAdsDemo(sp);
   const canManage = hasPermission(auth.profile.role, "channel:manage");
   const serverNow = new Date().toISOString();
 
   let data: AdsDashboardData | null = null;
   try {
-    data = await new FixtureAdsDashboardSource({ scenario: demo }).load(filters);
+    data = await (real ? new RealAdsDashboardSource(createAdminClient()) : new FixtureAdsDashboardSource({ scenario: demo })).load(filters);
   } catch (e) {
     if (!(e instanceof AdsDataUnavailableError)) throw e;
+    console.warn(JSON.stringify({ source: "ads-dashboard", event: "load_failed", message: e.cause instanceof Error ? e.cause.message.slice(0, 200) : null }));
   }
 
   // Real connection state (shared OAuth) — the one live fact on this page.
@@ -63,10 +72,10 @@ export default async function ShopeeAdsPage({ searchParams }: { searchParams: Pr
 
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   const query = Object.fromEntries(QUERY_KEYS.map((k) => [k, one(sp[k])]));
-  const sync = data?.sync ?? { state: "error" as const, lastSyncedAt: null, source: "fixture" as const };
+  const sync = data?.sync ?? { state: "error" as const, lastSyncedAt: null, source: real ? ("shopee" as const) : ("fixture" as const) };
 
   return (
-    <AdsRefreshProvider>
+    <AdsRefreshProvider mode={real ? "real" : "fixture"} shop={data?.filters.shop ?? filters.shop}>
       <div data-ads-root className="space-y-5">
         <AdsPageHeader preset={filters.preset} rangeLabel={formatAdsRange(filters.from, filters.to)} canManage={canManage} sync={sync} serverNow={serverNow} />
 
@@ -82,7 +91,7 @@ export default async function ShopeeAdsPage({ searchParams }: { searchParams: Pr
               <AdsEmptyState
                 icon={Unplug}
                 title="Chưa đồng bộ Ads"
-                description="Chưa có dữ liệu quảng cáo nào được đồng bộ. Kiểm tra kết nối shop để sẵn sàng khi đồng bộ Ads được bật."
+                description={real ? "Chưa có dữ liệu quảng cáo nào trong hệ thống. Bấm “Làm mới dữ liệu” để đồng bộ (chỉ đọc) từ Shopee Ads." : "Chưa có dữ liệu quảng cáo nào được đồng bộ. Kiểm tra kết nối shop để sẵn sàng khi đồng bộ Ads được bật."}
                 action={
                   <Link href="/settings/shopee" className="inline-flex h-8 items-center rounded-full border border-ads-border bg-card px-3 text-sm font-medium hover:bg-ads-surface-strong focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
                     Kiểm tra kết nối
@@ -101,7 +110,7 @@ export default async function ShopeeAdsPage({ searchParams }: { searchParams: Pr
             )}
           </AdsSection>
         ) : (
-          <Dashboard data={data} table={table} query={query} />
+          <Dashboard data={data} table={table} query={query} real={real} />
         )}
 
         <AdsSection
@@ -124,22 +133,44 @@ export default async function ShopeeAdsPage({ searchParams }: { searchParams: Pr
               <span className="font-medium text-foreground tabular-nums">{connectedShops}</span> / {liveShops.length} shop Shopee đang kết nối (OAuth dùng chung, token tự làm mới).
             </p>
           </div>
-          <p className="mt-3 rounded-lg border border-dashed border-ads-border bg-ads-surface px-3 py-2 text-xs text-ads-muted">
-            Đang hiển thị <strong className="font-medium">dữ liệu mẫu</strong> để hoàn thiện giao diện — chưa gọi Shopee Ads API. Số liệu thật sẽ có khi đồng bộ Ads được bật (SHOPEE-ADS-1).
-          </p>
+          {real ? (
+            <div className="mt-3 space-y-2" data-slot="ads-freshness">
+              <ul className="grid gap-2 text-xs sm:grid-cols-3">
+                {(sync.details ?? []).map((d) => (
+                  <li key={d.key} className="rounded-lg border border-ads-border bg-ads-surface px-3 py-2">
+                    <p className="font-medium">{d.label}</p>
+                    <p className="text-muted-foreground tabular-nums">{d.lastSuccessAt ? `Thành công: ${formatDateTime(d.lastSuccessAt)}` : "Chưa đồng bộ"}</p>
+                    {d.lastErrorAt && <p className="text-danger-text">Lỗi lúc {formatDateTime(d.lastErrorAt)}{d.errorMessage ? ` — ${d.errorMessage.slice(0, 120)}` : ""}</p>}
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-ads-muted">
+                Dữ liệu thật từ Shopee Ads (chỉ đọc){sync.reportThrough ? ` · có số liệu đến ngày ${formatAdsRange(sync.reportThrough, sync.reportThrough)}` : ""}. Tổng quan lấy từ tổng quảng cáo cấp shop; bảng chiến dịch lấy từ từng chiến dịch sản phẩm.
+              </p>
+            </div>
+          ) : (
+            <p className="mt-3 rounded-lg border border-dashed border-ads-border bg-ads-surface px-3 py-2 text-xs text-ads-muted">
+              Đang hiển thị <strong className="font-medium">dữ liệu mẫu</strong> để hoàn thiện giao diện. Đồng bộ Ads thật được bật bằng cấu hình SHOPEE_ADS_DATA_SOURCE=real.
+            </p>
+          )}
         </AdsSection>
       </div>
     </AdsRefreshProvider>
   );
 }
 
-function Dashboard({ data, table, query }: { data: AdsDashboardData; table: ReturnType<typeof parseAdsTableQuery>; query: Record<string, string | undefined> }) {
+function Dashboard({ data, table, query, real }: { data: AdsDashboardData; table: ReturnType<typeof parseAdsTableQuery>; query: Record<string, string | undefined>; real: boolean }) {
   const { current: cur, previous: prev, spark, budget } = data.overview;
   const revenueDelta = adsDeltaPercent(cur.revenue, prev.revenue);
   const paged = queryCampaigns(data.campaigns, table);
 
   return (
     <>
+      {data.sync.todayPartial && (
+        <p role="status" data-slot="ads-today-partial" className="rounded-lg border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning-text">
+          Hôm nay — dữ liệu có thể chưa hoàn tất{real && data.filters.preset === "today" ? " (không so sánh với cả ngày hôm qua)" : ""}.
+        </p>
+      )}
       <section aria-label="Chỉ số chính" data-refresh-dim className="grid gap-3 transition-opacity duration-(--ads-dur-normal) sm:grid-cols-2 lg:grid-cols-4">
         <AdsHeroMetric value={cur.roas} previous={prev.roas} spark={spark.roas} revenue={cur.revenue} spend={cur.spend} className="sm:col-span-2 lg:row-span-2" />
         {/* Mobile: swipeable snap row; tablet: 2-col grid; desktop: joins the parent grid. */}
@@ -163,17 +194,24 @@ function Dashboard({ data, table, query }: { data: AdsDashboardData; table: Retu
         <AdsSection id="ads-trend" title="Xu hướng hiệu quả" description={data.granularity === "hour" ? "Theo giờ" : data.granularity === "week" ? "Theo tuần" : "Theo ngày"} icon={Activity} delay={150} className="xl:col-span-2">
           <AdsTrendChart points={data.trend} granularity={data.granularity} />
         </AdsSection>
-        <AdsSection id="ads-insights" title="Gợi ý & cảnh báo" description="Gợi ý mẫu — chưa phải hệ thống khuyến nghị" icon={Lightbulb} iconClass="bg-ads-secondary/12 text-ads-secondary-text" delay={190}>
-          {data.insights.length === 0 ? (
-            <AdsEmptyState compact title="Không có gì cần chú ý." description="Các chỉ số đang ổn định so với kỳ trước." />
-          ) : (
-            <ul className="space-y-2.5">
-              {data.insights.map((ins, i) => (
-                <AdsInsightCard key={ins.id} insight={ins} delay={220 + i * 40} />
-              ))}
-            </ul>
-          )}
-        </AdsSection>
+        {real ? (
+          // real data: no demo insights — Broad vs Direct + the shop-vs-campaigns remainder instead
+          <AdsSection id="ads-attribution" title="Broad & Direct" description="Cách Shopee quy doanh số cho quảng cáo" icon={Lightbulb} iconClass="bg-ads-secondary/12 text-ads-secondary-text" delay={190}>
+            <AdsAttributionPanel current={cur} outside={data.overview.outsideProductCampaigns} />
+          </AdsSection>
+        ) : (
+          <AdsSection id="ads-insights" title="Gợi ý & cảnh báo" description="Gợi ý mẫu — chưa phải hệ thống khuyến nghị" icon={Lightbulb} iconClass="bg-ads-secondary/12 text-ads-secondary-text" delay={190}>
+            {data.insights.length === 0 ? (
+              <AdsEmptyState compact title="Không có gì cần chú ý." description="Các chỉ số đang ổn định so với kỳ trước." />
+            ) : (
+              <ul className="space-y-2.5">
+                {data.insights.map((ins, i) => (
+                  <AdsInsightCard key={ins.id} insight={ins} delay={220 + i * 40} />
+                ))}
+              </ul>
+            )}
+          </AdsSection>
+        )}
       </div>
 
       <AdsSection id="ads-campaigns" title="Tổng quan chiến dịch" description={`${data.statusCounts.all} chiến dịch có hoạt động trong kỳ`} icon={ListOrdered} delay={220}>

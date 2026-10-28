@@ -13,13 +13,14 @@ import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 
-import { PLANNED_ADS_SYNC_TYPES } from "../../core/sync-domains.ts";
+import { ADS_SYNC_TYPES as CORE_ADS_SYNC_TYPES } from "../../core/sync-domains.ts";
 import { RUNNABLE_SYNC_TYPES } from "../../core/sync-jobs.ts";
 import { ADS_PROBE_ENDPOINTS, assertAdsProbeRequest } from "./probe.ts";
-import { NotImplementedShopeeAdsProvider } from "./provider.ts";
+import { FixtureShopeeAdsProvider, MeteredShopeeAdsProvider, RealShopeeAdsProvider } from "./provider.ts";
 import {
   ADS_APPROVED_POST_READ_ENDPOINTS,
   ADS_FORBIDDEN_IDENTIFIERS,
+  ADS_SYNC_TYPES,
   assertAdsReadOnlyRequest,
   AdsWriteForbiddenError,
   isAdsReadJobType,
@@ -92,9 +93,13 @@ test("POST read exceptions: none approved (adding one needs a documented review)
   assert.deepEqual([...ADS_APPROVED_POST_READ_ENDPOINTS], [], "a POST read endpoint must be reviewed in docs/shopee-ads-read-only-policy.md first");
 });
 
-test("provider exposes READ methods only (get… / list…)", () => {
-  const proto = NotImplementedShopeeAdsProvider.prototype as unknown as Record<string, unknown>;
-  const implemented = Object.getOwnPropertyNames(proto).filter((n) => n !== "constructor" && typeof proto[n] === "function");
+test("provider exposes READ methods only (get… / list…) — every implementation", () => {
+  // private helpers (get / guard) are prefixed by the read verb or are guards; public surface must be get… / list…
+  const PRIVATE_HELPERS = new Set(["get", "guard"]);
+  const implemented = [RealShopeeAdsProvider, FixtureShopeeAdsProvider, MeteredShopeeAdsProvider].flatMap((cls) => {
+    const proto = cls.prototype as unknown as Record<string, unknown>;
+    return Object.getOwnPropertyNames(proto).filter((n) => n !== "constructor" && typeof proto[n] === "function" && !PRIVATE_HELPERS.has(n));
+  });
   const src = read("src/lib/channels/shopee/ads/provider.ts");
   const iface = /export interface ShopeeAdsProvider \{([\s\S]*?)\n\}/.exec(src)?.[1] ?? "";
   const declared = [...iface.matchAll(/^\s*([a-zA-Z]+)\(/gm)].map((m) => m[1]);
@@ -148,7 +153,9 @@ test("UI has no campaign mutation actions (insights are advisory only)", () => {
 });
 
 test("queue: Ads job types are read/sync only; no Ads mutation job type exists anywhere", () => {
-  for (const t of PLANNED_ADS_SYNC_TYPES) assert.ok(isAdsReadJobType(t), t);
+  for (const t of CORE_ADS_SYNC_TYPES) assert.ok(isAdsReadJobType(t), t);
+  assert.deepEqual([...CORE_ADS_SYNC_TYPES], [...ADS_SYNC_TYPES], "core mirror == policy list");
+  for (const t of ADS_SYNC_TYPES) assert.ok(isAdsReadJobType(t), t);
   for (const bad of ["ads_campaign_update", "ads_budget_update", "ads_bid_update", "ads_status_update", "ads_budget", "ads_set_bid_read"]) assert.equal(isAdsReadJobType(bad), false, bad);
   for (const t of RUNNABLE_SYNC_TYPES as readonly string[]) {
     if (t.startsWith("ads_")) assert.ok(isAdsReadJobType(t), `runnable ${t}`);

@@ -31,9 +31,9 @@ const COLUMNS: Array<{ key: AdsSortColumn; label: string; align?: "right" }> = [
   { key: "status", label: "Trạng thái" },
   { key: "budget", label: "Ngân sách/ngày", align: "right" },
   { key: "spend", label: "Chi tiêu", align: "right" },
-  { key: "revenue", label: "Doanh thu", align: "right" },
-  { key: "orders", label: "Đơn", align: "right" },
-  { key: "roas", label: "ROAS", align: "right" },
+  { key: "revenue", label: "Doanh số Broad", align: "right" },
+  { key: "orders", label: "Đơn Broad", align: "right" },
+  { key: "roas", label: "ROAS Broad", align: "right" },
   { key: "ctr", label: "CTR", align: "right" },
   { key: "cpc", label: "CPC", align: "right" },
   { key: "acos", label: "ACOS", align: "right" },
@@ -55,7 +55,7 @@ function StatusChips({ value, counts }: { value: AdsCampaignStatus | "all"; coun
   const { setParam } = useFilterNav();
   return (
     <div role="group" aria-label="Lọc theo trạng thái" className="flex flex-wrap gap-1.5">
-      {ADS_STATUS_OPTIONS.map((o) => {
+      {ADS_STATUS_OPTIONS.filter((o) => o.value === "all" || o.value === value || (counts[o.value] ?? 0) > 0).map((o) => {
         const active = value === o.value;
         return (
           <button
@@ -84,7 +84,7 @@ function MiniTrend({ points }: { points: AdsCampaignRow["trend"] }) {
   const max = Math.max(1, ...points.flatMap((p) => [p.spend, p.revenue]));
   const path = (k: "spend" | "revenue") => points.map((p, i) => `${i ? "L" : "M"}${((i / (points.length - 1)) * W).toFixed(1)},${(H - 4 - (p[k] / max) * (H - 8)).toFixed(1)}`).join(" ");
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-16 w-full" role="img" aria-label="Xu hướng chi tiêu và doanh thu của chiến dịch">
+    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="h-16 w-full" role="img" aria-label="Xu hướng chi tiêu và doanh số Broad của chiến dịch">
       <path d={`${path("revenue")} L${W},${H} L0,${H} Z`} style={{ fill: "var(--metric-revenue)", opacity: 0.14 }} />
       <path d={path("revenue")} fill="none" strokeWidth="2" vectorEffect="non-scaling-stroke" style={{ stroke: "var(--metric-revenue)" }} />
       <path d={path("spend")} fill="none" strokeWidth="2" strokeDasharray="4 3" vectorEffect="non-scaling-stroke" style={{ stroke: "var(--metric-spend)" }} />
@@ -101,7 +101,7 @@ function CampaignDetail({ row }: { row: AdsCampaignRow }) {
         <MiniTrend points={row.trend} />
         <p className="flex gap-3 text-[11px] text-muted-foreground">
           <span className="inline-flex items-center gap-1">
-            <span aria-hidden="true" className="h-0.5 w-3 rounded bg-metric-revenue" /> Doanh thu
+            <span aria-hidden="true" className="h-0.5 w-3 rounded bg-metric-revenue" /> Doanh số Broad
           </span>
           <span className="inline-flex items-center gap-1">
             <span aria-hidden="true" className="h-0.5 w-3 rounded border-t-2 border-dashed border-metric-spend" /> Chi tiêu
@@ -110,7 +110,7 @@ function CampaignDetail({ row }: { row: AdsCampaignRow }) {
       </div>
       <div className="space-y-3">
         <div className="space-y-1.5">
-          <p className="text-xs font-medium text-muted-foreground">Ngân sách đã dùng</p>
+          <p className="text-xs font-medium text-muted-foreground">Ngân sách đã dùng (ngân sách/ngày × số ngày có chi tiêu)</p>
           {row.periodBudget ? (
             <>
               <AdsProgress value={used} barClass={used >= 0.95 ? "bg-metric-acos" : used >= 0.8 ? "bg-metric-cpc" : "ads-gradient-primary"} label={`Ngân sách đã dùng — ${row.name}`} delay={60} />
@@ -119,15 +119,19 @@ function CampaignDetail({ row }: { row: AdsCampaignRow }) {
               </p>
             </>
           ) : (
-            <p className="text-xs text-muted-foreground">Không giới hạn ngân sách.</p>
+            <p className="text-xs text-muted-foreground">Chưa có ngân sách/ngày.</p>
           )}
         </div>
         <dl className="grid grid-cols-3 gap-2 text-xs">
           {(
             [
               ["Hiển thị", formatInt(row.metrics.impressions)],
-              ["Clicks", formatInt(row.metrics.clicks)],
-              ["Tỷ lệ CĐ", formatMetric("conversionRate", row.metrics.conversionRate)],
+              ["Lượt nhấp", formatInt(row.metrics.clicks)],
+              ["CVR Broad", formatMetric("conversionRate", row.metrics.conversionRate)],
+              ["Doanh số Direct", formatMetric("directRevenue", row.metrics.directRevenue)],
+              ["Đơn Direct", formatInt(row.metrics.directOrders)],
+              ["ROAS Direct", formatMetric("directRoas", row.metrics.directRoas)],
+              ...(row.roasTarget ? ([["ROAS mục tiêu (Shopee)", formatMetric("roas", row.roasTarget)]] as const) : []),
             ] as const
           ).map(([k, v]) => (
             <div key={k} className="rounded-lg bg-ads-surface-strong px-2 py-1.5">
@@ -140,18 +144,24 @@ function CampaignDetail({ row }: { row: AdsCampaignRow }) {
       <div className="space-y-2">
         <p className="text-xs font-medium text-muted-foreground">Sản phẩm được quảng cáo</p>
         <ul className="space-y-1.5">
+          {row.topProducts.length === 0 && <li className="text-xs text-muted-foreground">—</li>}
           {row.topProducts.map((p) => (
-            <li key={p.name} className="flex items-center justify-between gap-3 rounded-lg border border-ads-border bg-card px-2.5 py-1.5 text-xs">
+            <li key={p.itemId ?? p.name} className="flex items-center justify-between gap-3 rounded-lg border border-ads-border bg-card px-2.5 py-1.5 text-xs">
               <span className="inline-flex min-w-0 items-center gap-1.5">
                 <Package aria-hidden="true" className="size-3.5 shrink-0 text-ads-accent" />
                 <span className="truncate">{p.name}</span>
               </span>
               <span className="shrink-0 text-muted-foreground tabular-nums">
-                {formatMetric("revenue", p.revenue)} · {formatInt(p.orders)} đơn
+                {p.revenue === null ? "—" : formatMetric("revenue", p.revenue)} · {p.orders === null ? "—" : `${formatInt(p.orders)} đơn`}
               </span>
             </li>
           ))}
         </ul>
+        {row.provider && (
+          <p className="text-[11px] text-muted-foreground">
+            Shopee: trạng thái <span className="font-mono">{row.provider.status}</span> · giá thầu <span className="font-mono">{row.provider.biddingMethod ?? "—"}</span> · vị trí <span className="font-mono">{row.provider.placement ?? "—"}</span> · ID <span className="font-mono">{row.provider.campaignId}</span>
+          </p>
+        )}
       </div>
     </div>
   );
@@ -250,18 +260,20 @@ export function AdsCampaignTable({
                           </button>
                           <div className="min-w-0">
                             <p className="truncate font-medium text-heading">{r.name}</p>
-                            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                              <ShopAvatar name={r.shopName} index={r.shopId.endsWith("2") ? 1 : 0} className="size-4 text-[8px]" />
-                              {r.shopName} · {TYPE_LABEL[r.type]}
+                            <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={`${r.shopName} · ${TYPE_LABEL[r.type]}`}>
+                              <ShopAvatar name={r.shopName} index={r.shopId.endsWith("2") ? 1 : 0} className="size-4 shrink-0 text-[8px]" />
+                              <span className="truncate">
+                                {r.shopName} · {TYPE_LABEL[r.type]}
+                              </span>
                             </p>
                           </div>
                         </div>
                       </TableCell>
                       <TableCell>
-                        <AdsCampaignStatusBadge status={r.status} />
+                        <AdsCampaignStatusBadge status={r.status} raw={r.provider?.status} />
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground" title={r.dailyBudget === null ? undefined : formatMetricDetailed("spend", r.dailyBudget)}>
-                        {r.dailyBudget === null ? "Không giới hạn" : formatMetric("spend", r.dailyBudget)}
+                      <TableCell className="text-right text-muted-foreground" title={r.dailyBudget === null ? "Chưa đặt / chưa rõ" : formatMetricDetailed("spend", r.dailyBudget)}>
+                        {r.dailyBudget === null ? "—" : formatMetric("spend", r.dailyBudget)}
                       </TableCell>
                       <TableCell className="text-right font-medium" title={formatMetricDetailed("spend", r.metrics.spend)}>
                         {formatMetric("spend", r.metrics.spend)}
@@ -271,7 +283,7 @@ export function AdsCampaignTable({
                       </TableCell>
                       <TableCell className={cn("text-right", r.metrics.orders === 0 && r.metrics.spend > 0 && "font-medium text-danger-text")}>{formatInt(r.metrics.orders)}</TableCell>
                       <TableCell className="text-right">
-                        <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-semibold", roasOk === null ? "text-muted-foreground" : roasOk ? "bg-success-soft text-success-text" : "bg-warning-soft text-warning-text")} title={roasOk === null ? undefined : roasOk ? `Đạt mục tiêu ≥ ${formatMetric("roas", ADS_TARGETS.roas)}` : `Dưới mục tiêu ${formatMetric("roas", ADS_TARGETS.roas)}`}>
+                        <span className={cn("inline-flex rounded-full px-2 py-0.5 text-xs font-semibold", roasOk === null ? "text-muted-foreground" : roasOk ? "bg-success-soft text-success-text" : "bg-warning-soft text-warning-text")} title={roasOk === null ? undefined : roasOk ? `Đạt mục tiêu tham khảo ≥ ${formatMetric("roas", ADS_TARGETS.roas)}` : `Dưới mục tiêu tham khảo ${formatMetric("roas", ADS_TARGETS.roas)}`}>
                           {formatMetric("roas", r.metrics.roas)}
                         </span>
                       </TableCell>

@@ -107,9 +107,9 @@ export function AdsHeroMetric({ value, previous, spark, revenue, spend, classNam
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="flex items-center gap-1.5 text-sm font-medium text-white/85">
-            ROAS
+            {def.label}
             <Tooltip>
-              <TooltipTrigger render={<button type="button" aria-label="Định nghĩa ROAS" className="rounded-full p-0.5 text-white/80 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none" />}>
+              <TooltipTrigger render={<button type="button" aria-label={`Định nghĩa ${def.label}`} className="rounded-full p-0.5 text-white/80 hover:text-white focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none" />}>
                 <Info aria-hidden="true" className="size-3.5" />
               </TooltipTrigger>
               <TooltipContent>{def.definition}</TooltipContent>

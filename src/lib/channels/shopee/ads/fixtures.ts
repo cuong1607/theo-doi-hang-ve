@@ -160,13 +160,18 @@ function campaignDay(c: CampaignSpec, day: string, today: string): AdsTotals {
   const impressions = ctr > 0 ? Math.round(clicks / ctr) : 0;
   const orders = c.cvr > 0 ? Math.floor(clicks * c.cvr * seasonal * (0.75 + r() * 0.5) + r()) : 0;
   const revenue = Math.round((orders * c.aov * (0.85 + r() * 0.3)) / 1000) * 1000;
-  return { spend, revenue, orders, clicks, impressions };
+  // Direct ⊆ Broad (as in the real payloads); deterministic, no extra PRNG draw
+  const directOrders = Math.floor(orders * 0.85);
+  const directRevenue = Math.round((revenue * 0.92) / 1000) * 1000;
+  return { spend, revenue, orders, directRevenue, directOrders, clicks, impressions };
 }
 
 const scale = (t: AdsTotals, f: number): AdsTotals => ({
   spend: Math.round(t.spend * f),
   revenue: Math.round(t.revenue * f),
   orders: Math.round(t.orders * f),
+  directRevenue: Math.round(t.directRevenue * f),
+  directOrders: Math.min(Math.round(t.directOrders * f), Math.round(t.orders * f)),
   clicks: Math.round(t.clicks * f),
   impressions: Math.round(t.impressions * f),
 });
@@ -232,7 +237,10 @@ function activeDays(c: CampaignSpec, from: string, to: string, today: string): n
   }).length;
 }
 
-const SPARK_KEYS: Array<keyof AdsMetricValues> = ["spend", "revenue", "orders", "clicks", "impressions", "roas", "acos", "ctr", "cpc", "conversionRate"];
+export const SPARK_KEYS: Array<keyof AdsMetricValues> = [
+  "spend", "revenue", "orders", "directRevenue", "directOrders", "clicks", "impressions",
+  "roas", "acos", "ctr", "cpc", "conversionRate", "directRoas", "directAcos", "directConversionRate",
+];
 
 function demoInsights(cur: AdsMetricValues, prev: AdsMetricValues, rows: AdsCampaignRow[]): AdsInsight[] {
   const out: AdsInsight[] = [];
@@ -311,7 +319,7 @@ export function buildFixtureDashboard(input: AdsFilters, opts: FixtureOptions = 
     // a campaign with no activity at all in the period is not listed
     .filter((r) => r.metrics.spend > 0 || r.metrics.impressions > 0 || r.status === "active");
   const campaigns = filters.status === "all" ? allStatusRows : allStatusRows.filter((r) => r.status === filters.status);
-  const statusCounts = { all: allStatusRows.length, active: 0, paused: 0, ended: 0, warning: 0 };
+  const statusCounts = { all: allStatusRows.length, active: 0, paused: 0, ended: 0, closed: 0, warning: 0, unknown: 0 };
   for (const r of allStatusRows) statusCounts[r.status]++;
 
   const listed = new Set(campaigns.map((r) => r.id));
@@ -322,7 +330,7 @@ export function buildFixtureDashboard(input: AdsFilters, opts: FixtureOptions = 
   const bucketTotals = list.map((b) => live.reduce((acc, c) => addTotals(acc, b.get(c)), ZERO_TOTALS));
   const trend: AdsTrendPoint[] = list.map((b, i) => {
     const t = bucketTotals[i];
-    return { key: b.key, label: b.label, spend: t.spend, revenue: t.revenue, orders: t.orders, clicks: t.clicks, roas: t.spend > 0 ? t.revenue / t.spend : null };
+    return { key: b.key, label: b.label, spend: t.spend, revenue: t.revenue, orders: t.orders, directRevenue: t.directRevenue, directOrders: t.directOrders, clicks: t.clicks, roas: t.spend > 0 ? t.revenue / t.spend : null };
   });
   const sparkRows = bucketTotals.map(deriveMetrics);
   const spark = Object.fromEntries(SPARK_KEYS.map((k) => [k, sparkRows.map((m) => m[k] ?? 0)])) as Record<keyof AdsMetricValues, number[]>;

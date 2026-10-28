@@ -26,12 +26,23 @@ function bool(raw: string | undefined, fallback: boolean): boolean {
 export interface ShopeeFlags {
   legacyModulesEnabled: boolean;
   adsEnabled: boolean;
+  /** SHOPEE_ADS_DATA_SOURCE: "fixture" (default) | "real" — dashboard source AND whether Ads read jobs run. */
+  adsDataSource: "fixture" | "real";
+  /** SHOPEE_ADS_PROVIDER: "live" (default) | "fixture" — what the Ads read jobs call. */
+  adsProvider: "live" | "fixture";
 }
 
 export function getShopeeFlags(env: Env = process.env): ShopeeFlags {
+  const adsEnabled = bool(env.SHOPEE_ADS_ENABLED, true);
   return {
     legacyModulesEnabled: bool(env.SHOPEE_LEGACY_MODULES_ENABLED, false),
-    adsEnabled: bool(env.SHOPEE_ADS_ENABLED, true),
+    adsEnabled,
+    // SHOPEE-ADS-1B: real Ads data only when explicitly chosen (default fixture —
+    // production keeps the demo dashboard and never creates Ads jobs).
+    adsDataSource: adsEnabled && env.SHOPEE_ADS_DATA_SOURCE?.trim().toLowerCase() === "real" ? "real" : "fixture",
+    // where the Ads sync reads from: the live Shopee API (default) or the
+    // sanitized production fixtures (local dev / tests — the sandbox has no Ads backend)
+    adsProvider: env.SHOPEE_ADS_PROVIDER?.trim().toLowerCase() === "fixture" ? "fixture" : "live",
   };
 }
 

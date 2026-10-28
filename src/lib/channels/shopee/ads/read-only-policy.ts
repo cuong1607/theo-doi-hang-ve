@@ -18,6 +18,31 @@
 // See docs/shopee-ads-read-only-policy.md.
 // ============================================================
 
+/**
+ * The explicit allowlist of Shopee Ads READ endpoints (verified in production,
+ * docs/shopee-ads-api.md §3). The probe and the provider can call nothing else.
+ */
+export const ADS_READ_ENDPOINTS = {
+  shop_toggle_info: "/api/v2/ads/get_shop_toggle_info",
+  total_balance: "/api/v2/ads/get_total_balance",
+  campaign_id_list: "/api/v2/ads/get_product_level_campaign_id_list",
+  campaign_setting_info: "/api/v2/ads/get_product_level_campaign_setting_info",
+  shop_daily_performance: "/api/v2/ads/get_all_cpc_ads_daily_performance",
+  campaign_daily_performance: "/api/v2/ads/get_product_campaign_daily_performance",
+  shop_hourly_performance: "/api/v2/ads/get_all_cpc_ads_hourly_performance",
+  campaign_hourly_performance: "/api/v2/ads/get_product_campaign_hourly_performance",
+  recommended_item_list: "/api/v2/ads/get_recommended_item_list",
+} as const;
+export type AdsReadEndpoint = keyof typeof ADS_READ_ENDPOINTS;
+
+/** Queue job types of the Ads domain — read / sync only (ads_<what>_read). */
+export const ADS_SYNC_TYPES = ["ads_campaign_read", "ads_campaign_performance_read", "ads_shop_performance_read"] as const;
+export type AdsSyncType = (typeof ADS_SYNC_TYPES)[number];
+
+export function isAdsSyncType(type: string): type is AdsSyncType {
+  return (ADS_SYNC_TYPES as readonly string[]).includes(type);
+}
+
 /** HTTP methods an Ads call may use. Default deny for everything else. */
 export const ADS_ALLOWED_HTTP_METHODS: readonly string[] = ["GET"];
 

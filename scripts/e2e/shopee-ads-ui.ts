@@ -111,7 +111,7 @@ async function main() {
 
     await check("metric definition tooltip (ROAS / CTR)", async () => {
       await page.getByRole("button", { name: "Định nghĩa CTR" }).hover();
-      await page.getByText("Clicks / Impressions").waitFor({ timeout: 5000 });
+      await page.getByText("Lượt nhấp / Lượt hiển thị").waitFor({ timeout: 5000 });
       await page.mouse.move(5, 5);
     });
 
@@ -211,11 +211,11 @@ async function main() {
       await page.mouse.move(box.x + box.width * 0.6, box.y + box.height / 2);
       await page.locator('[data-slot="ads-trend-chart"] .animate-ads-pop').waitFor({ timeout: 5000 });
       const tip = await page.locator('[data-slot="ads-trend-chart"] .animate-ads-pop').innerText();
-      expect(tip.includes("Doanh thu") && tip.includes("Chi tiêu"), tip);
-      await page.getByRole("radio", { name: "ROAS", exact: true }).click();
+      expect(tip.includes("Doanh số Broad") && tip.includes("Doanh số Direct") && tip.includes("Chi tiêu"), tip);
+      await page.getByRole("radio", { name: "ROAS Broad", exact: true }).click();
       expect((await page.locator('[data-slot="ads-trend-chart"]').getAttribute("data-mode")) === "roas", "mode");
-      expect(await page.getByText(/Mục tiêu 4,00x/).first().isVisible(), "target line label");
-      await page.getByRole("radio", { name: "Chi tiêu & Doanh thu" }).click();
+      expect(await page.getByText(/Mục tiêu tham khảo 4,00x/).first().isVisible(), "target line label");
+      await page.getByRole("radio", { name: "Chi tiêu & Doanh số" }).click();
     });
 
     await check("refresh: old data stays, loading → success toast → 'vừa xong'", async () => {

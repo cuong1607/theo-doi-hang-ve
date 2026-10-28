@@ -30,15 +30,19 @@ export const ADS_STATUS_OPTIONS: Array<{ value: AdsCampaignStatus | "all"; label
   { value: "active", label: "Đang chạy" },
   { value: "paused", label: "Tạm dừng" },
   { value: "ended", label: "Đã kết thúc" },
+  { value: "closed", label: "Đã đóng" },
   { value: "warning", label: "Cần chú ý" },
+  { value: "unknown", label: "Trạng thái khác" },
 ];
 
 export const ADS_TYPE_OPTIONS: Array<{ value: AdsCampaignType | "all"; label: string }> = [
   { value: "all", label: "Mọi loại" },
+  { value: "auto", label: "Đặt giá tự động" },
   { value: "search", label: "Tìm kiếm" },
   { value: "discovery", label: "Khám phá" },
+  { value: "all_placements", label: "Mọi vị trí (giá thủ công)" },
   { value: "shop", label: "Quảng cáo Shop" },
-  { value: "auto", label: "Tự động" },
+  { value: "other", label: "Loại khác" },
 ];
 
 const STATUSES = new Set(ADS_STATUS_OPTIONS.map((o) => o.value));
@@ -107,7 +111,7 @@ export function parseAdsTableQuery(q: Query): AdsTableQuery {
   };
 }
 
-const STATUS_ORDER: Record<AdsCampaignStatus, number> = { warning: 0, active: 1, paused: 2, ended: 3 };
+const STATUS_ORDER: Record<AdsCampaignStatus, number> = { warning: 0, active: 1, paused: 2, ended: 3, closed: 4, unknown: 5 };
 
 function sortValue(row: AdsCampaignRow, col: AdsSortColumn): number | string | null {
   switch (col) {

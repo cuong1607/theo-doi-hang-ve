@@ -44,6 +44,12 @@ export const METRIC_STYLE: Record<AdsMetricKey, MetricStyle> = {
   cpc: { icon: Gauge, solid: "text-metric-cpc", text: "text-metric-cpc-text", soft: "bg-metric-cpc/14", ring: "ring-metric-cpc/30", stroke: "var(--metric-cpc)" },
   acos: { icon: Target, solid: "text-metric-acos", text: "text-metric-acos-text", soft: "bg-metric-acos/12", ring: "ring-metric-acos/25", stroke: "var(--metric-acos)" },
   conversionRate: { icon: Repeat, solid: "text-metric-cr", text: "text-metric-cr-text", soft: "bg-metric-cr/12", ring: "ring-metric-cr/25", stroke: "var(--metric-cr)" },
+  // Direct variants share the identity of their Broad counterpart
+  directRevenue: { icon: BadgeDollarSign, solid: "text-metric-revenue", text: "text-metric-revenue-text", soft: "bg-metric-revenue/12", ring: "ring-metric-revenue/25", stroke: "var(--metric-revenue)" },
+  directOrders: { icon: ShoppingBag, solid: "text-metric-orders", text: "text-metric-orders-text", soft: "bg-metric-orders/12", ring: "ring-metric-orders/25", stroke: "var(--metric-orders)" },
+  directRoas: { icon: TrendingUp, solid: "text-metric-roas", text: "text-metric-roas-text", soft: "bg-metric-roas/12", ring: "ring-metric-roas/25", stroke: "var(--metric-roas)" },
+  directAcos: { icon: Target, solid: "text-metric-acos", text: "text-metric-acos-text", soft: "bg-metric-acos/12", ring: "ring-metric-acos/25", stroke: "var(--metric-acos)" },
+  directConversionRate: { icon: Repeat, solid: "text-metric-cr", text: "text-metric-cr-text", soft: "bg-metric-cr/12", ring: "ring-metric-cr/25", stroke: "var(--metric-cr)" },
 };
 
 /** ACOS within target reads orange (spend colour), above target red. */
@@ -70,7 +76,9 @@ export const CAMPAIGN_STATUS: Record<AdsCampaignStatus, { label: string; tone: T
   active: { label: "Đang chạy", tone: "success" },
   paused: { label: "Tạm dừng", tone: "neutral" },
   ended: { label: "Đã kết thúc", tone: "neutral" },
+  closed: { label: "Đã đóng", tone: "neutral" },
   warning: { label: "Cần chú ý", tone: "warning" },
+  unknown: { label: "Trạng thái khác", tone: "neutral" },
 };
 
 export const INSIGHT_STYLE: Record<AdsInsightTone, { soft: string; icon: string; border: string }> = {

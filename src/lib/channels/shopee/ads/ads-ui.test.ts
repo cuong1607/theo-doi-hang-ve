@@ -262,31 +262,39 @@ function filesUnder(dir: string, pred: (p: string) => boolean): string[] {
   return out;
 }
 
-test("64. no real Ads API call: Ads UI code never imports the Shopee client / fetches", () => {
-  // ADS-1A: the admin-only read-only probe (probe*.ts + /shopee/ads/probe) is the ONE place allowed
-  // to call Shopee; the dashboard code must stay provider-free and must not import it.
-  // (read-only-policy.ts only names endpoint patterns to REFUSE them.)
-  const isProbe = (p: string) => /[\\/](probe|probe-server|read-only-policy)\.ts$|[\\/]probe[\\/]/.test(p);
+test("64. the dashboard never calls Shopee: no client / fetch / endpoint in the UI and the view-model layer", () => {
+  // Shopee is reached ONLY by: the admin read-only probe (probe*.ts + /shopee/ads/probe) and the
+  // read-only provider used by the queue worker (provider.ts, sync.ts — ADS-1B). The page, its
+  // components, the dashboard sources and the mapper stay provider-free.
+  // (read-only-policy.ts only names endpoint patterns to REFUSE / allowlist them.)
+  const shopeeSide = (p: string) => /[\\/](probe|probe-server|read-only-policy|provider|sync)\.ts$|[\\/]probe[\\/]/.test(p);
   const files = [
-    ...filesUnder("src/lib/channels/shopee/ads", (p) => /\.tsx?$/.test(p) && !p.endsWith(".test.ts") && !isProbe(p)),
+    ...filesUnder("src/lib/channels/shopee/ads", (p) => /\.tsx?$/.test(p) && !p.endsWith(".test.ts") && !shopeeSide(p)),
     ...filesUnder("src/components/ads", (p) => /\.tsx?$/.test(p)),
-    ...filesUnder("src/app/(authenticated)/shopee/ads", (p) => /\.tsx?$/.test(p) && !isProbe(p)),
+    ...filesUnder("src/app/(authenticated)/shopee/ads", (p) => /\.tsx?$/.test(p) && !shopeeSide(p)),
   ];
   assert.ok(files.length >= 15, `${files.length} files`);
   for (const f of files) {
     const src = readFileSync(path.join(ROOT, f), "utf8");
     assert.doesNotMatch(src, /\bfetch\(/, f);
-    assert.doesNotMatch(src, /from ["'][^"']*shopee\/(client|connection|server|signing|real-provider)/, f);
-    assert.doesNotMatch(src, /\/api\/v2\/(ads|marketing)/i, `${f}: no guessed Ads endpoint`);
+    // the refresh action may wake the queue worker (kickShopeeSyncWorker) — nothing else from the server wiring
+    const serverImport = /import \{([^}]*)\} from ["'][^"']*shopee\/server["']/.exec(src);
+    if (serverImport) assert.deepEqual(serverImport[1].split(",").map((s) => s.trim()).filter(Boolean), ["kickShopeeSyncWorker"], `${f}: only the worker kick`);
+    assert.doesNotMatch(src, /from ["'][^"']*shopee\/(client|connection|signing|real-provider|token)/, f);
+    assert.doesNotMatch(src, /\/api\/v2\/(ads|marketing)/i, `${f}: no Ads endpoint outside the provider / policy`);
     assert.doesNotMatch(src, /ads\/probe/, `${f}: dashboard must not use the probe`);
   }
 });
 
-test("65. no Ads DB migration / production Ads tables", () => {
+test("65. Ads canonical tables exist ONLY in migration 00064 (ADS-1B) and no Ads write / mutation RPC exists", () => {
   const migrations = readdirSync(path.join(ROOT, "supabase/migrations"));
   for (const m of migrations) {
     const sql = readFileSync(path.join(ROOT, "supabase/migrations", m), "utf8");
-    assert.doesNotMatch(sql, /create\s+table[^;(]*\bads_/i, m);
+    const adsTables = sql.match(/create\s+table\s+(?:if\s+not\s+exists\s+)?public\.shopee_ads_\w+/gi) ?? [];
+    if (m.startsWith("00064_")) assert.equal(adsTables.length, 4, m);
+    else assert.equal(adsTables.length, 0, `${m}: Ads tables belong to 00064`);
+    // read RPCs only (ads_dashboard_*) — never a function that could push changes to Shopee
+    for (const fn of sql.match(/function\s+public\.(ads_\w+)/gi) ?? []) assert.match(fn, /ads_dashboard_/i, `${m}: ${fn}`);
   }
 });
 

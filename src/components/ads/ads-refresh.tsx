@@ -1,16 +1,19 @@
 "use client";
 
 // SHOPEE-ADS-UI-1: "Làm mới dữ liệu" + sync status, sharing one state.
-// No Ads API yet → the refresh is SIMULATED: short wait, then a server
-// re-render (router.refresh in a transition) — the old dashboard stays on
-// screen the whole time (dimmed slightly), never blanked. Success → toast
-// + brief check mark; "Cập nhật … trước" restarts from now.
+// The old dashboard stays on screen the whole time (dimmed slightly), never
+// blanked. Success → toast + brief check mark; "Cập nhật … trước" restarts.
+//   fixture mode  SIMULATED: short wait, then a server re-render
+//   real mode     (SHOPEE-ADS-1B) queue only: enqueue the Ads READ jobs →
+//                 poll their status → re-render from the DB. Never a Shopee
+//                 call in the request, never a write to Shopee.
 import { createContext, useContext, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, CircleDashed, Clock, Database, RefreshCw } from "lucide-react";
 import { cn } from "cn";
 
 import type { AdsSyncStatus as AdsSyncStatusVM } from "@/lib/channels/shopee/ads/view-models";
+import { adsRefreshStatusAction, refreshAdsDataAction } from "@/app/(authenticated)/shopee/ads/actions";
 import { toast } from "@/components/patterns/toast";
 import { Button } from "@/components/ui/button";
 
@@ -27,8 +30,13 @@ const RefreshContext = createContext<RefreshState | null>(null);
 
 /** Simulated provider latency (fixture only). */
 const FIXTURE_REFRESH_MS = 900;
+/** Real mode: job status poll interval and the longest the button waits before handing back. */
+const POLL_MS = 2500;
+const MAX_WAIT_MS = 180_000;
 
-export function AdsRefreshProvider({ children }: { children: React.ReactNode }) {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export function AdsRefreshProvider({ children, mode = "fixture", shop = "all" }: { children: React.ReactNode; mode?: "fixture" | "real"; shop?: string }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [success, setSuccess] = useState(false);
@@ -40,17 +48,49 @@ export function AdsRefreshProvider({ children }: { children: React.ReactNode }) 
     return () => clearTimeout(t);
   }, [success]);
 
+  const done = () => {
+    router.refresh();
+    startTransition(() => {
+      setRefreshedAt(Date.now());
+      setSuccess(true);
+    });
+  };
+
   const refresh = () => {
     if (pending) return;
     setSuccess(false);
     startTransition(async () => {
-      await new Promise((r) => setTimeout(r, FIXTURE_REFRESH_MS));
-      router.refresh();
-      startTransition(() => {
-        setRefreshedAt(Date.now());
-        setSuccess(true);
-      });
-      toast.success("Đã làm mới dữ liệu quảng cáo", "Đang hiển thị dữ liệu mẫu — chưa kết nối Ads API.");
+      if (mode === "fixture") {
+        await sleep(FIXTURE_REFRESH_MS);
+        done();
+        toast.success("Đã làm mới dữ liệu quảng cáo", "Đang hiển thị dữ liệu mẫu — chưa bật đồng bộ Ads thật.");
+        return;
+      }
+      const req = await refreshAdsDataAction({ shop });
+      if (!req.ok) {
+        toast.error("Không làm mới được dữ liệu quảng cáo", req.message);
+        return;
+      }
+      const started = Date.now();
+      for (;;) {
+        await sleep(POLL_MS);
+        const s = await adsRefreshStatusAction({ jobIds: req.jobIds });
+        if (!s.ok) {
+          toast.error("Không theo dõi được tiến trình đồng bộ", s.message);
+          return;
+        }
+        if (s.active === 0) {
+          done();
+          if (s.failed > 0) toast.error("Đồng bộ Ads có lỗi", s.lastError ?? `${s.failed} tác vụ thất bại — dữ liệu cũ vẫn được giữ.`);
+          else toast.success("Đã làm mới dữ liệu quảng cáo", req.failedShops ? req.message : "Số liệu mới nhất từ Shopee Ads đã được lưu.");
+          return;
+        }
+        if (Date.now() - started > MAX_WAIT_MS) {
+          router.refresh();
+          toast.info("Đồng bộ Ads vẫn đang chạy nền", "Trang sẽ hiển thị số liệu mới ở lần tải sau.");
+          return;
+        }
+      }
     });
   };
 
@@ -122,7 +162,15 @@ export function AdsSyncStatus({ sync, serverNow, compact = false, className }: {
   const state = phase === "refreshing" ? "refreshing" : sync.state === "refreshing" ? "refreshing" : sync.state;
   const last = refreshedAt ?? (sync.lastSyncedAt ? Date.parse(sync.lastSyncedAt) : null);
   const label =
-    state === "refreshing" ? "Đang làm mới" : state === "error" ? "Không tải được dữ liệu" : state === "never" || last === null ? "Chưa đồng bộ Ads" : `Cập nhật ${minutesAgo(last, Math.max(now, last))}`;
+    state === "refreshing"
+      ? "Đang làm mới"
+      : state === "error"
+        ? sync.source === "shopee" && last !== null
+          ? `Lần đồng bộ gần nhất bị lỗi · dữ liệu ${minutesAgo(last, Math.max(now, last))}`
+          : "Không tải được dữ liệu"
+        : state === "never" || last === null
+          ? "Chưa đồng bộ Ads"
+          : `Cập nhật ${minutesAgo(last, Math.max(now, last))}`;
   const view = STATE_VIEW[state === "fresh" && last === null ? "never" : state];
   const Icon = view.icon;
   return (

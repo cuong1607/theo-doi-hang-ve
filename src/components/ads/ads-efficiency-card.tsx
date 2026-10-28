@@ -60,7 +60,7 @@ export function AdsEfficiencyCard({ metric, value, delay = 0 }: { metric: AdsTar
           {ok === null ? "Chưa có dữ liệu" : ok ? "Đạt mục tiêu" : "Chưa đạt mục tiêu"}
         </span>
         <span className="text-muted-foreground tabular-nums">
-          Mục tiêu {def.direction === "down" ? "≤" : "≥"} {formatMetric(metric, ADS_TARGETS[metric])}
+          Mục tiêu tham khảo {def.direction === "down" ? "≤" : "≥"} {formatMetric(metric, ADS_TARGETS[metric])}
         </span>
       </div>
     </div>

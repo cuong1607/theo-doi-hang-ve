@@ -13,7 +13,10 @@ import { ShopeePayloadError } from "./product-adapter.ts";
 
 export function errorInfo(err: unknown): { code: string; message: string } {
   if (err instanceof ShopeeApiError) return { code: err.errorCode, message: `${err.message}${err.requestId ? ` (request_id: ${err.requestId})` : ""}` };
-  if (err instanceof ShopeePayloadError) return { code: "provider_parse_error", message: err.message };
+  if (err instanceof ShopeePayloadError || (err instanceof Error && err.name === "AdsPayloadError")) return { code: "provider_parse_error", message: err.message };
+  // errors that carry their own snake_case code (e.g. ads_campaigns_pending) keep it
+  const own = err instanceof Error ? (err as { code?: unknown }).code : undefined;
+  if (err instanceof Error && typeof own === "string" && /^[a-z][a-z0-9_]{2,60}$/.test(own)) return { code: own, message: err.message.slice(0, 300) };
   if (err instanceof Error) return { code: "sync_error", message: err.message.slice(0, 300) };
   return { code: "sync_error", message: "Lỗi không xác định." };
 }
@@ -50,6 +53,8 @@ export function toJobFailure(err: unknown): JobFailure {
   if (err instanceof JobRefusedError) return { kind: "fatal", code: err.code, message: err.message, category };
   if (err instanceof ShopeeConfigError) return { kind: "fatal", code: "config_error", message: err.message, category };
   if (err instanceof ShopeePayloadError) return { kind: "fatal", code, message, category };
+  // SHOPEE-ADS-1B: an Ads payload that cannot be parsed will not parse better on retry
+  if (err instanceof Error && err.name === "AdsPayloadError") return { kind: "fatal", code, message, category: "DATA_MAPPING" };
   return { kind: "retryable", code, message, category };
 }
 

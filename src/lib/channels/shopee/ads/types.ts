@@ -8,7 +8,7 @@
 //   ads_daily_performance    one row per (shop, entity, business date)
 //   sync state               reuses channel_sync_states / jobs / logs
 //                            (sync types: see core/sync-domains.ts
-//                            PLANNED_ADS_SYNC_TYPES)
+//                            ADS_SYNC_TYPES)
 //   raw payloads             reuse channel_api_snapshots (entity_type "ads")
 // Money stays exact NUMERIC strings at the data boundary (carry-forward #5).
 // ============================================================
