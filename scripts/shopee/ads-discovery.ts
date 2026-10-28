@@ -35,7 +35,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { ShopeeClient } from "../../src/lib/channels/shopee/client.ts";
 import { getShopeeConfig, type ShopeeConfig } from "../../src/lib/channels/shopee/config.ts";
 import { ShopeeConnectionService, type ShopeeTokenSource } from "../../src/lib/channels/shopee/token.ts";
-import { adsProbeFixtures, isAllowlistedAdsPath, runAdsProbe, type AdsProbeReport, type AdsProbeTransport } from "../../src/lib/channels/shopee/ads/probe.ts";
+import { adsProbeFixtures, isAllowlistedAdsPath, runAdsProbe, runAdsProbeExpansion, type AdsProbeReport, type AdsProbeTransport } from "../../src/lib/channels/shopee/ads/probe.ts";
 import { findFixtureSecrets, sanitizeAdsPayload } from "../../src/lib/channels/shopee/ads/sanitize.ts";
 import { assertAdsReadOnlyRequest, isAdsReadOnlyPath } from "../../src/lib/channels/shopee/ads/read-only-policy.ts";
 import { cloudDb, fail, ReadOnlyTokenSource } from "./cloud-readonly.ts";
@@ -137,7 +137,7 @@ function importReport(report: AdsProbeReport): void {
     writeFileSync(file, `${JSON.stringify(content, null, 2)}\n`);
     console.log(`  → ${path.relative(process.cwd(), file)}`);
   };
-  write("_probe-report", { ...report, calls: report.calls.map(({ body, ...c }) => ({ ...c, body: c.classification === "AVAILABLE" ? `see ${c.endpoint.replace(/_/g, "-")}*.json` : body })) });
+  write(report.kind === "expansion" ? "_probe-report-expansion" : "_probe-report", { ...report, calls: report.calls.map(({ body, ...c }) => ({ ...c, body: c.classification === "AVAILABLE" ? `see ${report.kind === "expansion" ? "exp-" : ""}${c.endpoint.replace(/_/g, "-")}*.json` : body })) });
   for (const f of adsProbeFixtures(report)) write(f.name, f.content);
   console.log("Xem lại các file trước khi commit (tên / ID đã được che, metric giữ nguyên).");
 }
@@ -162,7 +162,7 @@ async function main() {
   }
   if (cmd === "survey") {
     const shop = await pickShop(ctx);
-    const report = await runAdsProbe({
+    const report = await (argv.includes("--expansion") ? runAdsProbeExpansion : runAdsProbe)({
       environment: ctx.isSandboxHost ? "sandbox" : "production",
       confirmProduction: PROD, // production only with the explicit flag
       shopLabel: shop.shop_name,

@@ -1,0 +1,143 @@
+{
+  "_meta": {
+    "endpoint": "/api/v2/ads/get_product_level_campaign_setting_info",
+    "method": "GET",
+    "params": {
+      "info_type_list": "1,2,3,4",
+      "campaign_id_list": "900000001,900000002,900000003,900000004,900000005"
+    },
+    "purpose": "Campaign settings: status / budget / bid / schedule / type / products",
+    "environment": "production",
+    "captured_at": "2026-10-28T08:58:42.489Z",
+    "http_status": 200,
+    "latency_ms": 302,
+    "truncated_arrays": [],
+    "note": "Sanitized real response: credentials and shop/partner ids removed; names and provider ids replaced by stable placeholders (consistent across this probe run); metrics untouched."
+  },
+  "response": {
+    "response": {
+      "region": "VN",
+      "campaign_list": [
+        {
+          "campaign_id": 900000001,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #1",
+            "campaign_status": "ended",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 10000,
+            "campaign_duration": {
+              "start_time": 1743354000,
+              "end_time": 1743499125
+            },
+            "item_id_list": [
+              900000051
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 0
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000002,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #2",
+            "campaign_status": "ended",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 10000,
+            "campaign_duration": {
+              "start_time": 1743354000,
+              "end_time": 1743499125
+            },
+            "item_id_list": [
+              900000052
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 0
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000003,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #3",
+            "campaign_status": "ended",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 10000,
+            "campaign_duration": {
+              "start_time": 1743354000,
+              "end_time": 1743499125
+            },
+            "item_id_list": [
+              900000053
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 0
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000004,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #4",
+            "campaign_status": "ended",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 10000,
+            "campaign_duration": {
+              "start_time": 1743354000,
+              "end_time": 1743499125
+            },
+            "item_id_list": [
+              900000054
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 0
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000005,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #5",
+            "campaign_status": "ended",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 10000,
+            "campaign_duration": {
+              "start_time": 1743354000,
+              "end_time": 1743499125
+            },
+            "item_id_list": [
+              900000055
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 0
+          },
+          "auto_product_ads_info": null
+        }
+      ]
+    },
+    "request_id": "e3e3e7f35ee2c582b0cc6790b46c2400",
+    "error": "",
+    "message": "",
+    "warning": ""
+  }
+}

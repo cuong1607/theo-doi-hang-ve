@@ -1,0 +1,230 @@
+{
+  "_meta": {
+    "endpoint": "/api/v2/ads/get_product_level_campaign_id_list",
+    "method": "GET",
+    "params": {
+      "ad_type": "all",
+      "offset": 0,
+      "limit": 50
+    },
+    "purpose": "Campaign ids (entity identity, pagination)",
+    "environment": "production",
+    "captured_at": "2026-10-28T08:58:42.489Z",
+    "http_status": 200,
+    "latency_ms": 313,
+    "truncated_arrays": [],
+    "note": "Sanitized real response: credentials and shop/partner ids removed; names and provider ids replaced by stable placeholders (consistent across this probe run); metrics untouched."
+  },
+  "response": {
+    "response": {
+      "region": "VN",
+      "has_next_page": true,
+      "campaign_list": [
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000001
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000002
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000003
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000004
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000005
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000006
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000007
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000008
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000009
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000010
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000011
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000012
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000013
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000014
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000015
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000016
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000017
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000018
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000019
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000020
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000021
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000022
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000023
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000024
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000025
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000026
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000027
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000028
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000029
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000030
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000031
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000032
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000033
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000034
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000035
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000036
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000037
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000038
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000039
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000040
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000041
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000042
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000043
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000044
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000045
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000046
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000047
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000048
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000049
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000050
+        }
+      ]
+    },
+    "request_id": "e3e3e7f35ee2c563a82365170ee33000",
+    "error": "",
+    "message": "",
+    "warning": ""
+  }
+}

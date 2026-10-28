@@ -10,8 +10,8 @@ import { PageContainer, PageHeader } from "@/components/patterns/page-header";
 import { AdsProbePanel } from "./probe-panel";
 
 export const dynamic = "force-dynamic";
-// ~12 sequential provider calls with a 1 s gap.
-export const maxDuration = 60;
+// baseline ~12, expansion up to 30 sequential provider calls with a 1 s gap.
+export const maxDuration = 120;
 
 // SHOPEE-ADS-1A: admin-only, explicitly triggered READ-ONLY probe of the
 // Shopee Ads API for ONE connected shop. Not linked from the navigation.

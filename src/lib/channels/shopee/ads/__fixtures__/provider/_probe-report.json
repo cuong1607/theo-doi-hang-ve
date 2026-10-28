@@ -1,0 +1,414 @@
+{
+  "environment": "production",
+  "mode": "READ_ONLY",
+  "shopLabel": "CTV Bedding & decor Store",
+  "startedAt": "2026-10-28T08:58:42.489Z",
+  "finishedAt": "2026-10-28T08:59:02.950Z",
+  "timeZone": "Asia/Ho_Chi_Minh",
+  "dates": {
+    "today": "28-10-2026",
+    "yesterday": "27-10-2026",
+    "threeDaysAgo": "25-10-2026"
+  },
+  "requestBudget": 25,
+  "requestsUsed": 12,
+  "stoppedReason": "completed",
+  "adsAccess": "AVAILABLE",
+  "calls": [
+    {
+      "step": 1,
+      "endpoint": "shop_toggle_info",
+      "purpose": "Ads availability + token permission + shop Ads state",
+      "method": "GET",
+      "path": "/api/v2/ads/get_shop_toggle_info",
+      "params": {},
+      "httpStatus": 200,
+      "latencyMs": 778,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee2c52ce0507341fb810000",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "data_timestamp",
+        "auto_top_up",
+        "campaign_surge"
+      ],
+      "arrayLengths": {},
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see shop-toggle-info*.json"
+    },
+    {
+      "step": 2,
+      "endpoint": "total_balance",
+      "purpose": "Ads account balance (money representation)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_total_balance",
+      "params": {},
+      "httpStatus": 200,
+      "latencyMs": 284,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee2c54b46ffc9c96fecd500",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "data_timestamp",
+        "total_balance"
+      ],
+      "arrayLengths": {},
+      "paginationHints": {
+        "total_balance": 89446
+      },
+      "truncatedArrays": [],
+      "body": "see total-balance*.json"
+    },
+    {
+      "step": 3,
+      "endpoint": "campaign_id_list",
+      "purpose": "Campaign ids (entity identity, pagination)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_product_level_campaign_id_list",
+      "params": {
+        "ad_type": "all",
+        "offset": 0,
+        "limit": 50
+      },
+      "httpStatus": 200,
+      "latencyMs": 313,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee2c563a82365170ee33000",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "shop_id",
+        "region",
+        "has_next_page",
+        "campaign_list"
+      ],
+      "arrayLengths": {
+        "campaign_list": 50
+      },
+      "paginationHints": {
+        "has_next_page": true
+      },
+      "truncatedArrays": [],
+      "body": "see campaign-id-list*.json"
+    },
+    {
+      "step": 4,
+      "endpoint": "campaign_setting_info",
+      "purpose": "Campaign settings: status / budget / bid / schedule / type / products",
+      "method": "GET",
+      "path": "/api/v2/ads/get_product_level_campaign_setting_info",
+      "params": {
+        "info_type_list": "1,2,3,4",
+        "campaign_id_list": "900000001,900000002,900000003,900000004,900000005"
+      },
+      "httpStatus": 200,
+      "latencyMs": 302,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee2c582b0cc6790b46c2400",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "shop_id",
+        "region",
+        "campaign_list"
+      ],
+      "arrayLengths": {
+        "campaign_list": 5,
+        "campaign_list[0].common_info.item_id_list": 1
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see campaign-setting-info*.json"
+    },
+    {
+      "step": 5,
+      "endpoint": "shop_daily_performance",
+      "purpose": "Shop-level daily performance, yesterday",
+      "method": "GET",
+      "path": "/api/v2/ads/get_all_cpc_ads_daily_performance",
+      "params": {
+        "start_date": "27-10-2026",
+        "end_date": "27-10-2026"
+      },
+      "httpStatus": 200,
+      "latencyMs": 324,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee2c59abf548e25c2891600",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [],
+      "arrayLengths": {
+        "$": 1
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see shop-daily-performance*.json"
+    },
+    {
+      "step": 6,
+      "endpoint": "campaign_daily_performance",
+      "purpose": "Campaign daily performance, yesterday",
+      "method": "GET",
+      "path": "/api/v2/ads/get_product_campaign_daily_performance",
+      "params": {
+        "start_date": "27-10-2026",
+        "end_date": "27-10-2026",
+        "campaign_id_list": "900000001,900000002,900000003,900000004,900000005"
+      },
+      "httpStatus": 200,
+      "latencyMs": 347,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee2c5b2bb08b9d1e4385600",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "shop_id",
+        "region",
+        "campaign_list"
+      ],
+      "arrayLengths": {
+        "campaign_list": 5,
+        "campaign_list[0].metrics_list": 1
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see campaign-daily-performance*.json"
+    },
+    {
+      "step": 7,
+      "endpoint": "shop_daily_performance",
+      "purpose": "Shop-level daily performance, last 3 completed days (range grain)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_all_cpc_ads_daily_performance",
+      "params": {
+        "start_date": "25-10-2026",
+        "end_date": "27-10-2026"
+      },
+      "httpStatus": 200,
+      "latencyMs": 364,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee2c5cb0ca55036d4fcec00",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [],
+      "arrayLengths": {
+        "$": 3
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see shop-daily-performance*.json"
+    },
+    {
+      "step": 8,
+      "endpoint": "shop_daily_performance",
+      "purpose": "Same completed day again (response stability)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_all_cpc_ads_daily_performance",
+      "params": {
+        "start_date": "27-10-2026",
+        "end_date": "27-10-2026"
+      },
+      "httpStatus": 200,
+      "latencyMs": 310,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee2c5e392b96de67f9ea000",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [],
+      "arrayLengths": {
+        "$": 1
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "identicalTo": 5,
+      "body": "see shop-daily-performance*.json"
+    },
+    {
+      "step": 9,
+      "endpoint": "shop_hourly_performance",
+      "purpose": "Shop-level hourly performance, yesterday (grain)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_all_cpc_ads_hourly_performance",
+      "params": {
+        "performance_date": "27-10-2026"
+      },
+      "httpStatus": 200,
+      "latencyMs": 319,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee2c5fb40f49db0cf136e00",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [],
+      "arrayLengths": {
+        "$": 24
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see shop-hourly-performance*.json"
+    },
+    {
+      "step": 10,
+      "endpoint": "campaign_hourly_performance",
+      "purpose": "Campaign hourly performance, yesterday (grain)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_product_campaign_hourly_performance",
+      "params": {
+        "performance_date": "27-10-2026",
+        "campaign_id_list": "900000001,900000002,900000003,900000004,900000005"
+      },
+      "httpStatus": 200,
+      "latencyMs": 354,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee2c61345121e15d5b37e00",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "shop_id",
+        "region",
+        "campaign_list"
+      ],
+      "arrayLengths": {
+        "campaign_list": 5,
+        "campaign_list[0].metrics_list": 24
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see campaign-hourly-performance*.json"
+    },
+    {
+      "step": 11,
+      "endpoint": "shop_daily_performance",
+      "purpose": "Today (is the current day partial?)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_all_cpc_ads_daily_performance",
+      "params": {
+        "start_date": "28-10-2026",
+        "end_date": "28-10-2026"
+      },
+      "httpStatus": 200,
+      "latencyMs": 331,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee2c63311c327f6c1e15f00",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [],
+      "arrayLengths": {
+        "$": 1
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see shop-daily-performance*.json"
+    },
+    {
+      "step": 12,
+      "endpoint": "recommended_item_list",
+      "purpose": "Recommended items (product relation)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_recommended_item_list",
+      "params": {},
+      "httpStatus": 200,
+      "latencyMs": 376,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee2c64b381d51f2bcdb1c00",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [],
+      "arrayLengths": {
+        "$": 20,
+        "[0].item_status_list": 1,
+        "[0].sku_tag_list": 0,
+        "[0].ongoing_ad_type_list": 1
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see recommended-item-list*.json"
+    }
+  ]
+}

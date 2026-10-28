@@ -47,7 +47,7 @@ export const ADS_PROBE_CONFIRM_TEXT = "READ-ONLY";
 /** Campaign ids carried from the list into setting / performance calls. */
 export const ADS_PROBE_MAX_CAMPAIGNS = 5;
 /** Longest array kept in a saved body (structure is what matters, not volume). */
-const MAX_ARRAY_ITEMS = 50;
+const MAX_ARRAY_ITEMS = 100;
 
 const ALLOWED_PATHS = new Set<string>(Object.values(ADS_PROBE_ENDPOINTS));
 
@@ -126,14 +126,20 @@ export interface AdsProbeCall {
   identicalTo?: number;
 }
 
+export type AdsProbeKind = "baseline" | "expansion";
+
 export interface AdsProbeReport {
+  /** baseline = ADS-1A light pass; expansion = ADS-1A.1 (pagination, reconciliation, restatement, ranges). */
+  kind: AdsProbeKind;
   environment: AdsProbeEnvironment;
   mode: "READ_ONLY";
   shopLabel: string;
   startedAt: string;
   finishedAt: string;
   timeZone: string;
-  dates: { today: string; yesterday: string; threeDaysAgo: string };
+  dates: { today: string; yesterday: string; threeDaysAgo: string; sevenDaysAgo: string; thirtyDaysAgo: string };
+  /** Expansion only: aggregates computed from the RAW answers (metrics / enums — nothing identifying). */
+  summary?: AdsProbeExpansionSummary;
   requestBudget: number;
   requestsUsed: number;
   stoppedReason: "completed" | "budget" | "circuit_breaker" | "reauth_required";
@@ -252,13 +258,26 @@ export interface RunAdsProbeOptions {
 const BREAKER_THRESHOLD = 3;
 const REAUTH_THRESHOLD = 2;
 
-export async function runAdsProbe(options: RunAdsProbeOptions): Promise<AdsProbeReport> {
+type ProbeCallFn = (endpoint: AdsProbeEndpoint, purpose: string, params?: Record<string, string | number>) => Promise<{ call: AdsProbeCall; data: unknown }>;
+type ProbeScript = (call: ProbeCallFn, dates: AdsProbeReport["dates"], report: AdsProbeReport, options: RunAdsProbeOptions) => Promise<void>;
+
+/** ADS-1A baseline: one light pass over every allowlisted endpoint. */
+export function runAdsProbe(options: RunAdsProbeOptions): Promise<AdsProbeReport> {
+  return runProbeSession(options, "baseline", ADS_PROBE_MAX_REQUESTS, baselineScript);
+}
+
+/** ADS-1A.1 expansion: bounded campaign pagination, full-coverage reconciliation, restatement + range evidence. */
+export function runAdsProbeExpansion(options: RunAdsProbeOptions): Promise<AdsProbeReport> {
+  return runProbeSession(options, "expansion", ADS_PROBE_EXPANSION_MAX_REQUESTS, expansionScript);
+}
+
+async function runProbeSession(options: RunAdsProbeOptions, kind: AdsProbeKind, ceiling: number, script: ProbeScript): Promise<AdsProbeReport> {
   if (options.environment === "production" && options.confirmProduction !== true) {
     throw new AdsProbeGuardError("Probe production cần xác nhận rõ ràng (confirmProduction).");
   }
   const now = options.now ?? new Date();
   const timeZone = options.timeZone ?? "Asia/Ho_Chi_Minh";
-  const budget = Math.max(1, Math.min(options.maxRequests ?? ADS_PROBE_MAX_REQUESTS, ADS_PROBE_MAX_REQUESTS));
+  const budget = Math.max(1, Math.min(options.maxRequests ?? ceiling, ceiling));
   const gapMs = options.gapMs ?? ADS_PROBE_GAP_MS;
   const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
   const sanitizer: AdsFixtureSanitizer = createAdsFixtureSanitizer();
@@ -267,9 +286,12 @@ export async function runAdsProbe(options: RunAdsProbeOptions): Promise<AdsProbe
     today: adsProbeDate(now, timeZone),
     yesterday: adsProbeDate(new Date(now.getTime() - day), timeZone),
     threeDaysAgo: adsProbeDate(new Date(now.getTime() - 3 * day), timeZone),
+    sevenDaysAgo: adsProbeDate(new Date(now.getTime() - 7 * day), timeZone),
+    thirtyDaysAgo: adsProbeDate(new Date(now.getTime() - 30 * day), timeZone),
   };
 
   const report: AdsProbeReport = {
+    kind,
     environment: options.environment,
     mode: "READ_ONLY",
     shopLabel: options.shopLabel,
@@ -291,7 +313,7 @@ export async function runAdsProbe(options: RunAdsProbeOptions): Promise<AdsProbe
 
   class Stop extends Error {}
 
-  const call = async (endpoint: AdsProbeEndpoint, purpose: string, params: Record<string, string | number> = {}): Promise<{ call: AdsProbeCall; data: unknown }> => {
+  const call: ProbeCallFn = async (endpoint, purpose, params = {}) => {
     if (report.requestsUsed >= budget) {
       report.stoppedReason = "budget";
       throw new Stop();
@@ -367,6 +389,16 @@ export async function runAdsProbe(options: RunAdsProbeOptions): Promise<AdsProbe
   };
 
   try {
+    await script(call, dates, report, options);
+  } catch (err) {
+    if (!(err instanceof Stop)) throw err;
+  }
+  report.finishedAt = new Date().toISOString();
+  return report;
+}
+
+const baselineScript: ProbeScript = async (call, dates, _report, options) => {
+  {
     // 1–2. availability / permission / account
     await call("shop_toggle_info", "Ads availability + token permission + shop Ads state");
     await call("total_balance", "Ads account balance (money representation)");
@@ -397,12 +429,181 @@ export async function runAdsProbe(options: RunAdsProbeOptions): Promise<AdsProbe
     }
     // 7. product-related
     await call("recommended_item_list", "Recommended items (product relation)");
-  } catch (err) {
-    if (!(err instanceof Stop)) throw err;
   }
-  report.finishedAt = new Date().toISOString();
-  return report;
+};
+
+// ------------------------------------------------------------------ ADS-1A.1 expansion
+
+/** Hard ceiling of the expansion run (spec: ≈30 additional GETs). */
+export const ADS_PROBE_EXPANSION_MAX_REQUESTS = 30;
+export const ADS_PROBE_MAX_PAGES = 5;
+export const ADS_PROBE_MAX_SCANNED_CAMPAIGNS = 250;
+/** Campaign ids per setting / performance call (50 is the size verified so far; 20 is the one fallback). */
+const ID_BATCH = 50;
+const ID_BATCH_FALLBACK = 20;
+const NON_ZERO_SAMPLE = 5;
+
+const METRIC_KEYS = ["expense", "impression", "clicks", "direct_order", "broad_order", "direct_gmv", "broad_gmv"] as const;
+type MetricTotals = Record<(typeof METRIC_KEYS)[number], number>;
+
+export interface AdsProbeExpansionSummary {
+  pagesFetched: number;
+  pageSizeTried: number[];
+  campaignsScanned: number;
+  hasNextPageAtEnd: boolean | null;
+  coverageComplete: boolean;
+  reconciliation: {
+    date: string;
+    campaignsWithRows: number;
+    shop: MetricTotals | null;
+    sumCampaigns: MetricTotals;
+    delta: MetricTotals | null;
+  } | null;
+  nonZeroCampaigns: number;
+  statusCounts: Record<string, number>;
+  adTypeCounts: Record<string, number>;
+  biddingCounts: Record<string, number>;
+  budgetZero: number;
+  budgetPositive: number;
+  roasTargetZero: number;
+  roasTargetPositive: number;
+  rangeChecks: Array<{ endpoint: AdsProbeEndpoint; days: number; classification: AdsProbeClassification; rows: number | null }>;
 }
+
+const zeroTotals = (): MetricTotals => ({ expense: 0, impression: 0, clicks: 0, direct_order: 0, broad_order: 0, direct_gmv: 0, broad_gmv: 0 });
+const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+const asRecord = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+const asArray = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+const count = (map: Record<string, number>, key: unknown) => {
+  const k = typeof key === "string" ? key : key === null || key === undefined ? "(null)" : String(key);
+  map[k] = (map[k] ?? 0) + 1;
+};
+
+/** Raw campaign rows of a *_campaign_*_performance response. */
+function campaignRows(data: unknown): Array<{ campaignId: string; metrics: Array<Record<string, unknown>> }> {
+  return asArray(asRecord(data).campaign_list).map((c) => {
+    const r = asRecord(c);
+    return { campaignId: String(r.campaign_id), metrics: asArray(r.metrics_list).map(asRecord) };
+  });
+}
+
+const expansionScript: ProbeScript = async (call, dates, report) => {
+  const summary: AdsProbeExpansionSummary = {
+    pagesFetched: 0,
+    pageSizeTried: [],
+    campaignsScanned: 0,
+    hasNextPageAtEnd: null,
+    coverageComplete: false,
+    reconciliation: null,
+    nonZeroCampaigns: 0,
+    statusCounts: {},
+    adTypeCounts: {},
+    biddingCounts: {},
+    budgetZero: 0,
+    budgetPositive: 0,
+    roasTargetZero: 0,
+    roasTargetPositive: 0,
+    rangeChecks: [],
+  };
+  report.summary = summary;
+
+  // 1. bounded pagination (one larger page-size test, one fallback to the verified 50)
+  const ids: string[] = [];
+  let limit = 100;
+  let offset = 0;
+  let hasNext = true;
+  while (hasNext && summary.pagesFetched < ADS_PROBE_MAX_PAGES && ids.length < ADS_PROBE_MAX_SCANNED_CAMPAIGNS) {
+    const pageLimit = Math.min(limit, ADS_PROBE_MAX_SCANNED_CAMPAIGNS - ids.length);
+    summary.pageSizeTried.push(pageLimit);
+    const page = await call("campaign_id_list", `Campaign list page ${summary.pagesFetched + 1} (offset ${offset}, limit ${pageLimit})`, { ad_type: "all", offset, limit: pageLimit });
+    if (page.call.classification === "PARAM_ERROR" && limit > 50 && summary.pagesFetched === 0) {
+      limit = 50;
+      continue;
+    }
+    if (page.call.classification !== "AVAILABLE") break;
+    const list = asArray(asRecord(page.data).campaign_list);
+    for (const id of findCampaignIds(page.data, Number.MAX_SAFE_INTEGER)) if (!ids.includes(id)) ids.push(id);
+    hasNext = asRecord(page.data).has_next_page === true;
+    summary.hasNextPageAtEnd = hasNext;
+    summary.pagesFetched++;
+    offset += list.length;
+    if (list.length === 0) break;
+  }
+  summary.campaignsScanned = ids.length;
+  summary.coverageComplete = summary.hasNextPageAtEnd === false;
+  if (!ids.length) return;
+
+  const batches = (list: string[], size: number) => Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, (i + 1) * size));
+
+  // 2. campaign daily performance of EVERY scanned campaign for one completed day (reconciliation)
+  const spendByCampaign = new Map<string, number>();
+  const sum = zeroTotals();
+  let campaignsWithRows = 0;
+  let size = ID_BATCH;
+  let queue = batches(ids, size);
+  for (let i = 0; i < queue.length; i++) {
+    const res = await call("campaign_daily_performance", `All campaigns, ${dates.yesterday} (batch ${i + 1}/${queue.length})`, { start_date: dates.yesterday, end_date: dates.yesterday, campaign_id_list: queue[i].join(",") });
+    if (res.call.classification === "PARAM_ERROR" && size > ID_BATCH_FALLBACK && i === 0) {
+      size = ID_BATCH_FALLBACK;
+      queue = batches(ids, size);
+      i = -1;
+      continue;
+    }
+    if (res.call.classification !== "AVAILABLE") break;
+    for (const row of campaignRows(res.data)) {
+      campaignsWithRows++;
+      for (const m of row.metrics) {
+        for (const k of METRIC_KEYS) sum[k] += num(m[k]);
+        spendByCampaign.set(row.campaignId, (spendByCampaign.get(row.campaignId) ?? 0) + num(m.expense));
+      }
+    }
+  }
+
+  // 3. settings of every scanned campaign (status / type / bidding / budget / roas_target distribution)
+  for (const [i, batch] of batches(ids, size).entries()) {
+    const res = await call("campaign_setting_info", `Settings, all scanned campaigns (batch ${i + 1})`, { info_type_list: "1,2,3,4", campaign_id_list: batch.join(",") });
+    if (res.call.classification !== "AVAILABLE") break;
+    for (const c of asArray(asRecord(res.data).campaign_list)) {
+      const common = asRecord(asRecord(c).common_info);
+      count(summary.statusCounts, common.campaign_status);
+      count(summary.adTypeCounts, common.ad_type);
+      count(summary.biddingCounts, common.bidding_method);
+      if (num(common.campaign_budget) > 0) summary.budgetPositive++;
+      else summary.budgetZero++;
+      if (num(asRecord(asRecord(c).auto_bidding_info).roas_target) > 0) summary.roasTargetPositive++;
+      else summary.roasTargetZero++;
+    }
+  }
+
+  // 4. non-zero sample: 7-day campaign range (also the campaign-endpoint range check) + one hourly
+  const nonZero = [...spendByCampaign.entries()].filter(([, s]) => s > 0).sort((a, b) => b[1] - a[1]).map(([id]) => id);
+  summary.nonZeroCampaigns = nonZero.length;
+  const sample = nonZero.slice(0, NON_ZERO_SAMPLE);
+  if (sample.length) {
+    const r7 = await call("campaign_daily_performance", `Top ${sample.length} spending campaigns, 7 days (${dates.sevenDaysAgo} → ${dates.yesterday})`, { start_date: dates.sevenDaysAgo, end_date: dates.yesterday, campaign_id_list: sample.join(",") });
+    summary.rangeChecks.push({ endpoint: "campaign_daily_performance", days: 7, classification: r7.call.classification, rows: r7.call.classification === "AVAILABLE" ? (campaignRows(r7.data)[0]?.metrics.length ?? 0) : null });
+    await call("campaign_hourly_performance", `Top spending campaign, hourly ${dates.yesterday}`, { performance_date: dates.yesterday, campaign_id_list: sample[0] });
+  }
+
+  // 5. shop daily 7 days: restatement window (re-reads the earlier completed days) + range check
+  const s7 = await call("shop_daily_performance", `Shop daily, 7 days (${dates.sevenDaysAgo} → ${dates.yesterday}) — restatement + range`, { start_date: dates.sevenDaysAgo, end_date: dates.yesterday });
+  summary.rangeChecks.push({ endpoint: "shop_daily_performance", days: 7, classification: s7.call.classification, rows: s7.call.classification === "AVAILABLE" ? asArray(s7.data).length : null });
+  const shopRow = asArray(s7.data).map(asRecord).find((r) => r.date === dates.yesterday);
+  const shop = shopRow ? (Object.fromEntries(METRIC_KEYS.map((k) => [k, num(shopRow[k])])) as MetricTotals) : null;
+  summary.reconciliation = {
+    date: dates.yesterday,
+    campaignsWithRows,
+    shop,
+    sumCampaigns: sum,
+    delta: shop ? (Object.fromEntries(METRIC_KEYS.map((k) => [k, shop[k] - sum[k]])) as MetricTotals) : null,
+  };
+
+  // 6. longer range: 30 days (dashboard preset). No further escalation.
+  if (s7.call.classification === "AVAILABLE") {
+    const s30 = await call("shop_daily_performance", `Shop daily, 30 days (${dates.thirtyDaysAgo} → ${dates.yesterday}) — range limit`, { start_date: dates.thirtyDaysAgo, end_date: dates.yesterday });
+    summary.rangeChecks.push({ endpoint: "shop_daily_performance", days: 30, classification: s30.call.classification, rows: s30.call.classification === "AVAILABLE" ? asArray(s30.data).length : null });
+  }
+};
 
 function stripRequestId(text: string): string {
   return text.replace(/"request_id"\s*:\s*"[^"]*"/g, '"request_id":""');
@@ -414,7 +615,7 @@ export function adsProbeFixtures(report: AdsProbeReport): Array<{ name: string; 
   return report.calls
     .filter((c) => c.classification === "AVAILABLE")
     .map((c) => {
-      const base = c.endpoint.replace(/_/g, "-");
+      const base = `${report.kind === "expansion" ? "exp-" : ""}${c.endpoint.replace(/_/g, "-")}`;
       const n = (used.get(base) ?? 0) + 1;
       used.set(base, n);
       return {

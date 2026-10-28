@@ -1,0 +1,222 @@
+{
+  "_meta": {
+    "endpoint": "/api/v2/ads/get_recommended_item_list",
+    "method": "GET",
+    "params": {},
+    "purpose": "Recommended items (product relation)",
+    "environment": "production",
+    "captured_at": "2026-10-28T08:58:42.489Z",
+    "http_status": 200,
+    "latency_ms": 376,
+    "truncated_arrays": [],
+    "note": "Sanitized real response: credentials and shop/partner ids removed; names and provider ids replaced by stable placeholders (consistent across this probe run); metrics untouched."
+  },
+  "response": {
+    "response": [
+      {
+        "item_id": 900000055,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000056,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "no_ongoing_promotion"
+        ]
+      },
+      {
+        "item_id": 900000057,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000058,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000059,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000060,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000061,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000062,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000063,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000064,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000065,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000066,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000067,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000068,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000069,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000070,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000071,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000072,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000073,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "product_ads"
+        ]
+      },
+      {
+        "item_id": 900000074,
+        "item_status_list": [
+          "normal"
+        ],
+        "sku_tag_list": [],
+        "ongoing_ad_type_list": [
+          "no_ongoing_promotion"
+        ]
+      }
+    ],
+    "request_id": "e3e3e7f35ee2c64b381d51f2bcdb1c00",
+    "error": "",
+    "message": "",
+    "warning": ""
+  }
+}

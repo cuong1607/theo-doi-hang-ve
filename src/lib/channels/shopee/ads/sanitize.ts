@@ -144,7 +144,7 @@ export function findFixtureSecrets(value: unknown, knownSecrets: readonly string
     if (typeof v === "string") {
       if (/bearer\s+\S/i.test(v)) findings.push(`${at}: bearer value`);
       if (/^eyJ[\w-]+\.[\w-]+\.[\w-]+$/.test(v)) findings.push(`${at}: JWT-like value`);
-      if (/^[a-f0-9]{32,}$/i.test(v) && !/(^|\.)request_id$/.test(at)) findings.push(`${at}: long hex value`);
+      if (/^[a-f0-9]{32,}$/i.test(v) && !/(^|\.)(request_id|requestId)$/.test(at)) findings.push(`${at}: long hex value`);
       if (/^[A-Za-z0-9+/=_-]{48,}$/.test(v) && /[A-Z]/.test(v) && /[0-9]/.test(v)) findings.push(`${at}: long token-like value`);
       for (const s of knownSecrets) if (s && v.includes(s)) findings.push(`${at}: contains a known secret`);
     }

@@ -14,15 +14,15 @@ import { getShopeeFlags } from "@/lib/feature-flags";
 
 export type AdsProbeActionResult = { ok: true; report: AdsProbeReport } | { ok: false; message: string };
 
-export async function runAdsProbeAction(input: { shopId: string; confirm: string }): Promise<AdsProbeActionResult> {
+export async function runAdsProbeAction(input: { shopId: string; confirm: string; kind?: "baseline" | "expansion" }): Promise<AdsProbeActionResult> {
   if (!getShopeeFlags().adsEnabled) return { ok: false, message: "Quảng cáo Shopee đang tắt." };
   const authz = await authorizeAction("channel:manage");
   if (!authz.ok) return { ok: false, message: authz.message };
-  const parsed = z.object({ shopId: z.string().uuid(), confirm: z.literal(ADS_PROBE_CONFIRM_TEXT) }).safeParse(input);
+  const parsed = z.object({ shopId: z.string().uuid(), confirm: z.literal(ADS_PROBE_CONFIRM_TEXT), kind: z.enum(["baseline", "expansion"]).default("baseline") }).safeParse(input);
   if (!parsed.success) return { ok: false, message: `Chọn shop và gõ đúng "${ADS_PROBE_CONFIRM_TEXT}" để xác nhận.` };
-  console.info(JSON.stringify({ source: "shopee-ads-probe", event: "probe_requested", shopId: parsed.data.shopId, by: authz.auth.user.id }));
+  console.info(JSON.stringify({ source: "shopee-ads-probe", event: "probe_requested", kind: parsed.data.kind, shopId: parsed.data.shopId, by: authz.auth.user.id }));
   try {
-    return { ok: true, report: await runAdsProbeForShop(parsed.data.shopId) };
+    return { ok: true, report: await runAdsProbeForShop(parsed.data.shopId, parsed.data.kind) };
   } catch (e) {
     if (e instanceof AdsProbeInputError) return { ok: false, message: e.message };
     if (e instanceof ShopeeConfigError) return { ok: false, message: "Cấu hình Shopee của máy chủ chưa đầy đủ." };

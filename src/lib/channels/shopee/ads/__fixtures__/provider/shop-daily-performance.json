@@ -1,0 +1,43 @@
+{
+  "_meta": {
+    "endpoint": "/api/v2/ads/get_all_cpc_ads_daily_performance",
+    "method": "GET",
+    "params": {
+      "start_date": "27-10-2026",
+      "end_date": "27-10-2026"
+    },
+    "purpose": "Shop-level daily performance, yesterday",
+    "environment": "production",
+    "captured_at": "2026-10-28T08:58:42.489Z",
+    "http_status": 200,
+    "latency_ms": 324,
+    "truncated_arrays": [],
+    "note": "Sanitized real response: credentials and shop/partner ids removed; names and provider ids replaced by stable placeholders (consistent across this probe run); metrics untouched."
+  },
+  "response": {
+    "response": [
+      {
+        "date": "27-10-2026",
+        "impression": 36145,
+        "clicks": 1042,
+        "ctr": 0.0288,
+        "direct_order": 41,
+        "broad_order": 52,
+        "direct_conversions": 0.0393,
+        "broad_conversions": 0.0499,
+        "direct_item_sold": 43,
+        "broad_item_sold": 54,
+        "direct_gmv": 10966208,
+        "broad_gmv": 11447308,
+        "expense": 1104162,
+        "cost_per_conversion": 21233.89,
+        "direct_roas": 9.93,
+        "broad_roas": 10.37
+      }
+    ],
+    "request_id": "e3e3e7f35ee2c59abf548e25c2891600",
+    "error": "",
+    "message": "",
+    "warning": ""
+  }
+}

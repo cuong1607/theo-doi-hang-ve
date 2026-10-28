@@ -18,7 +18,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 import { getShopee } from "../server.ts";
 import { ShopeeApiError } from "../errors.ts";
-import { runAdsProbe, type AdsProbeReport, type AdsProbeTransport } from "./probe.ts";
+import { runAdsProbe, runAdsProbeExpansion, type AdsProbeKind, type AdsProbeReport, type AdsProbeTransport } from "./probe.ts";
 import { assertAdsReadOnlyRequest } from "./read-only-policy.ts";
 
 const REQUEST_TIMEOUT_MS = 15_000;
@@ -57,7 +57,7 @@ export function adsProbeEnvironment(apiBaseUrl: string): "production" | "sandbox
   return /sandbox|test-stable/i.test(apiBaseUrl) ? "sandbox" : "production";
 }
 
-export async function runAdsProbeForShop(shopId: string): Promise<AdsProbeReport> {
+export async function runAdsProbeForShop(shopId: string, kind: AdsProbeKind = "baseline"): Promise<AdsProbeReport> {
   const shops = await listAdsProbeShops();
   const shop = shops.find((s) => s.id === shopId);
   // Only a validated internal shop record — never a provider shop id from the caller.
@@ -104,8 +104,8 @@ export async function runAdsProbeForShop(shopId: string): Promise<AdsProbeReport
 
   running.add(shopId);
   try {
-    console.info(JSON.stringify({ source: "shopee-ads-probe", event: "probe_started", environment, mode: "READ_ONLY", shopId }));
-    const report = await runAdsProbe({
+    console.info(JSON.stringify({ source: "shopee-ads-probe", event: "probe_started", kind, environment, mode: "READ_ONLY", shopId }));
+    const report = await (kind === "expansion" ? runAdsProbeExpansion : runAdsProbe)({
       environment,
       confirmProduction: true, // the server action requires the admin's explicit confirmation before calling this
       shopLabel: shop.shopName,

@@ -16,6 +16,8 @@ import {
   assertAdsProbeRequest,
   classifyAdsProbeResponse,
   runAdsProbe,
+  runAdsProbeExpansion,
+  ADS_PROBE_EXPANSION_MAX_REQUESTS,
   type AdsProbeTransport,
   type AdsProbeTransportRequest,
 } from "./probe.ts";
@@ -116,7 +118,8 @@ test("happy path: order, chaining real ids, only GET + allowlisted, stability + 
   assert.equal(settingCall.params.campaign_id_list, `${report.calls[2].body && (report.calls[2].body as { response: { campaign_list: Array<{ campaign_id: number }> } }).response.campaign_list[0].campaign_id},${(report.calls[2].body as { response: { campaign_list: Array<{ campaign_id: number }> } }).response.campaign_list[1].campaign_id}`);
   assert.doesNotMatch(JSON.stringify(report), /"111"|\b111\b|Ga chống thấm|Nệm topper/);
   // dates: yesterday / 3 days ago / today in Vietnam
-  assert.deepEqual(report.dates, { today: "28-10-2026", yesterday: "27-10-2026", threeDaysAgo: "25-10-2026" });
+  assert.deepEqual(report.dates, { today: "28-10-2026", yesterday: "27-10-2026", threeDaysAgo: "25-10-2026", sevenDaysAgo: "21-10-2026", thirtyDaysAgo: "28-09-2026" });
+  assert.equal(report.kind, "baseline");
   assert.deepEqual(seen[4].params, { start_date: "27-10-2026", end_date: "27-10-2026" });
   // same completed day twice → stability evidence (request_id ignored)
   assert.equal(report.calls[7].identicalTo, 5);
@@ -244,10 +247,165 @@ test("static: probe core has no network / DB / token access; server transport ne
 
 test("fixture review: secret scan flags leftovers, passes a sanitized report", async () => {
   assert.deepEqual(findFixtureSecrets({ request_id: "e3e3e7f35ee107970ac9b3095bcc4900", response: { expense: 1, date: "27-10-2026" } }), []);
+  // report metadata carries the same support handle as camelCase requestId (real prod report 28/10)
+  assert.deepEqual(findFixtureSecrets({ calls: [{ requestId: "e3e3e7f35ee2c52ce0507341fb810000" }] }), []);
+  assert.equal(findFixtureSecrets({ calls: [{ someId: "e3e3e7f35ee2c52ce0507341fb810000" }] }).length, 1, "other long hex values still flagged");
   const dirty = findFixtureSecrets({ access_token: "x", r: { shop_id: 1, v: "Bearer abc", j: "eyJa.eyJb.sig", h: "a".repeat(40) } });
   assert.equal(dirty.length, 5, dirty.join(" | "));
   assert.equal(findFixtureSecrets({ note: "has s3cr3t inside" }, ["s3cr3t"]).length, 1);
   const { transport } = stub((r) => okJson(HAPPY[r.endpoint]));
   const report = await runAdsProbe({ environment: "sandbox", shopLabel: "s", transport, now: NOW, sleep: noSleep });
   assert.deepEqual(findFixtureSecrets(report), []);
+});
+
+// ------------------------------------------------------------------ ADS-1A.1 expansion
+
+/** Fake shop with `total` campaigns: every 3rd one spends; shop daily = exact sum (+ optional delta). */
+function fakeAdsShop(total: number, opts: { rejectLimitAbove?: number; shopDelta?: number } = {}) {
+  const ids = Array.from({ length: total }, (_, i) => 5000 + i);
+  const spend = (id: number) => ((id - 5000) % 3 === 0 ? 1000 + (id - 5000) : 0);
+  const metrics = (id: number, date: string) => ({
+    date,
+    impression: spend(id) ? 100 : 0,
+    clicks: spend(id) ? 10 : 0,
+    expense: spend(id),
+    direct_order: spend(id) ? 1 : 0,
+    broad_order: spend(id) ? 2 : 0,
+    direct_gmv: spend(id) * 5,
+    broad_gmv: spend(id) * 6,
+  });
+  const sum = (k: string) => ids.reduce((s, id) => s + (metrics(id, "x") as unknown as Record<string, number>)[k], 0);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const days = (from: string, to: string) => {
+    const parse = (d: string) => {
+      const [dd, mm, yy] = d.split("-").map(Number);
+      return Date.UTC(yy, mm - 1, dd);
+    };
+    const out: string[] = [];
+    for (let t = parse(from); t <= parse(to); t += 86_400_000) {
+      const d = new Date(t);
+      out.push([pad(d.getUTCDate()), pad(d.getUTCMonth() + 1), d.getUTCFullYear()].join("-"));
+    }
+    return out;
+  };
+  const answer = (r: AdsProbeTransportRequest) => {
+    const p = r.params;
+    if (r.endpoint === "campaign_id_list") {
+      const limit = Number(p.limit);
+      if (opts.rejectLimitAbove && limit > opts.rejectLimitAbove) return { httpStatus: 400, latencyMs: 50, text: JSON.stringify({ error: "error_param", message: "limit invalid", request_id: "x" }) };
+      const offset = Number(p.offset);
+      const page = ids.slice(offset, offset + limit);
+      return okJson({ shop_id: 1, region: "VN", has_next_page: offset + limit < total, campaign_list: page.map((id) => ({ ad_type: "manual", campaign_id: id })) });
+    }
+    const list = String(p.campaign_id_list ?? "").split(",").filter(Boolean).map(Number);
+    if (r.endpoint === "campaign_daily_performance") {
+      return okJson({ region: "VN", campaign_list: list.map((id) => ({ campaign_id: id, ad_type: "manual", metrics_list: days(String(p.start_date), String(p.end_date)).map((d) => metrics(id, d)) })) });
+    }
+    if (r.endpoint === "campaign_hourly_performance") {
+      return okJson({ region: "VN", campaign_list: list.map((id) => ({ campaign_id: id, metrics_list: Array.from({ length: 24 }, (_, h) => ({ ...metrics(id, String(p.performance_date)), hour: h })) })) });
+    }
+    if (r.endpoint === "campaign_setting_info") {
+      return okJson({
+        region: "VN",
+        campaign_list: list.map((id) => ({
+          campaign_id: id,
+          common_info: { ad_type: "manual", ad_name: "real name " + id, campaign_status: spend(id) ? "ongoing" : "ended", bidding_method: "auto", campaign_budget: id % 2 ? 0 : 50000 },
+          auto_bidding_info: { roas_target: id % 4 ? 0 : 5 },
+        })),
+      });
+    }
+    if (r.endpoint === "shop_daily_performance") {
+      return okJson(
+        days(String(p.start_date), String(p.end_date)).map((d) => ({
+          date: d,
+          impression: sum("impression"),
+          clicks: sum("clicks"),
+          expense: sum("expense") + (opts.shopDelta ?? 0),
+          direct_order: sum("direct_order"),
+          broad_order: sum("broad_order"),
+          direct_gmv: sum("direct_gmv"),
+          broad_gmv: sum("broad_gmv"),
+        })),
+      );
+    }
+    return okJson({});
+  };
+  return { ids, spend, answer };
+}
+
+test("expansion: bounded pagination to the end, full coverage, exact reconciliation, GET + allowlisted only", async () => {
+  const shop = fakeAdsShop(120);
+  const { seen, transport } = stub(shop.answer);
+  const report = await runAdsProbeExpansion({ environment: "production", confirmProduction: true, shopLabel: "Pilot", transport, now: NOW, sleep: noSleep });
+  const s = report.summary!;
+  assert.equal(report.kind, "expansion");
+  assert.equal(report.stoppedReason, "completed");
+  assert.ok(report.requestsUsed <= ADS_PROBE_EXPANSION_MAX_REQUESTS);
+  for (const r of seen) {
+    assert.equal(r.method, "GET");
+    assert.equal(r.path, ADS_PROBE_ENDPOINTS[r.endpoint]);
+  }
+  // limit 100 → pages of 100 + 20, then has_next_page=false
+  assert.deepEqual(s.pageSizeTried, [100, 100]);
+  assert.equal(s.pagesFetched, 2);
+  assert.equal(s.campaignsScanned, 120);
+  assert.equal(s.hasNextPageAtEnd, false);
+  assert.equal(s.coverageComplete, true);
+  // every campaign's daily row for yesterday, in batches of at most 50
+  const daily = seen.filter((r) => r.endpoint === "campaign_daily_performance" && r.params.start_date === "27-10-2026" && r.params.end_date === "27-10-2026");
+  assert.equal(daily.length, 3);
+  assert.ok(daily.every((r) => String(r.params.campaign_id_list).split(",").length <= 50));
+  const rec = s.reconciliation!;
+  assert.equal(rec.campaignsWithRows, 120);
+  assert.deepEqual(rec.delta, { expense: 0, impression: 0, clicks: 0, direct_order: 0, broad_order: 0, direct_gmv: 0, broad_gmv: 0 });
+  assert.equal(s.nonZeroCampaigns, 40);
+  assert.deepEqual(s.statusCounts, { ongoing: 40, ended: 80 });
+  assert.equal(s.budgetZero + s.budgetPositive, 120);
+  assert.equal(s.roasTargetZero + s.roasTargetPositive, 120);
+  // non-zero sample: top 5 spenders over 7 days, then one hourly
+  const sample = seen.find((r) => r.endpoint === "campaign_daily_performance" && r.params.start_date === "21-10-2026")!;
+  assert.equal(String(sample.params.campaign_id_list).split(",").length, 5);
+  assert.equal(String(sample.params.campaign_id_list).split(",")[0], String(shop.ids[117]));
+  assert.ok(seen.some((r) => r.endpoint === "campaign_hourly_performance"));
+  // restatement / range: shop daily 7 + 30 days, campaign 7 days
+  assert.deepEqual(
+    s.rangeChecks.map((c) => [c.endpoint, c.days, c.rows].join(":")),
+    ["campaign_daily_performance:7:7", "shop_daily_performance:7:7", "shop_daily_performance:30:30"],
+  );
+  // names / ids masked, fixtures prefixed and clean
+  assert.doesNotMatch(JSON.stringify(report), /real name|\b5117\b/);
+  assert.deepEqual(findFixtureSecrets(report), []);
+  const fixtures = adsProbeFixtures(report);
+  assert.ok(fixtures.length > 0 && fixtures.every((f) => f.name.startsWith("exp-")));
+});
+
+test("expansion: shop/campaign mismatch is reported as an exact delta (never hidden)", async () => {
+  const { transport } = stub(fakeAdsShop(30, { shopDelta: 7 }).answer);
+  const report = await runAdsProbeExpansion({ environment: "sandbox", shopLabel: "s", transport, now: NOW, sleep: noSleep });
+  assert.equal(report.summary!.reconciliation!.delta!.expense, 7);
+  assert.equal(report.summary!.coverageComplete, true);
+});
+
+test("expansion: page-size fallback 100 -> 50 on a parameter error; the 5-page / 250-campaign cap marks coverage partial", async () => {
+  const { seen, transport } = stub(fakeAdsShop(400, { rejectLimitAbove: 50 }).answer);
+  const report = await runAdsProbeExpansion({ environment: "sandbox", shopLabel: "s", transport, now: NOW, sleep: noSleep });
+  const s = report.summary!;
+  assert.deepEqual(s.pageSizeTried, [100, 50, 50, 50, 50, 50]);
+  assert.equal(s.pagesFetched, 5);
+  assert.equal(s.campaignsScanned, 250);
+  assert.equal(s.hasNextPageAtEnd, true);
+  assert.equal(s.coverageComplete, false, "capped: reconciliation is only partial");
+  assert.equal(seen.filter((r) => r.endpoint === "campaign_id_list").length, 6);
+  assert.ok(report.requestsUsed <= ADS_PROBE_EXPANSION_MAX_REQUESTS);
+});
+
+test("expansion: request budget and production confirmation are enforced", async () => {
+  const a = stub(fakeAdsShop(120).answer);
+  const small = await runAdsProbeExpansion({ environment: "sandbox", shopLabel: "s", transport: a.transport, sleep: noSleep, maxRequests: 4 });
+  assert.equal(a.seen.length, 4);
+  assert.equal(small.stoppedReason, "budget");
+  const b = stub(fakeAdsShop(10).answer);
+  const big = await runAdsProbeExpansion({ environment: "sandbox", shopLabel: "s", transport: b.transport, sleep: noSleep, maxRequests: 999 });
+  assert.equal(big.requestBudget, ADS_PROBE_EXPANSION_MAX_REQUESTS);
+  await assert.rejects(runAdsProbeExpansion({ environment: "production", shopLabel: "s", transport: b.transport, sleep: noSleep }), AdsProbeGuardError);
 });

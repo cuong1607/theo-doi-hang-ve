@@ -45,6 +45,7 @@ function download(name: string, data: unknown) {
 export function AdsProbePanel({ shops }: { shops: Array<{ id: string; name: string; status: string | null }> }) {
   const [shopId, setShopId] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [kind, setKind] = useState<"baseline" | "expansion">("baseline");
   const [report, setReport] = useState<AdsProbeReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -52,7 +53,7 @@ export function AdsProbePanel({ shops }: { shops: Array<{ id: string; name: stri
   const run = () =>
     start(async () => {
       setError(null);
-      const res = await runAdsProbeAction({ shopId, confirm });
+      const res = await runAdsProbeAction({ shopId, confirm, kind });
       if (res.ok) setReport(res.report);
       else setError(res.message);
     });
@@ -61,7 +62,7 @@ export function AdsProbePanel({ shops }: { shops: Array<{ id: string; name: stri
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 rounded-lg border p-4 sm:grid-cols-[1fr_12rem_auto] sm:items-end">
+      <div className="grid gap-3 rounded-lg border p-4 sm:grid-cols-[1fr_14rem_12rem_auto] sm:items-end">
         <label className="space-y-1 text-sm">
           <span className="font-medium">Shop thí điểm (đang chạy quảng cáo)</span>
           <select
@@ -77,6 +78,13 @@ export function AdsProbePanel({ shops }: { shops: Array<{ id: string; name: stri
                 {s.status !== "connected" ? ` (${s.status ?? "chưa kết nối"})` : ""}
               </option>
             ))}
+          </select>
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="font-medium">Loại probe</span>
+          <select value={kind} onChange={(e) => setKind(e.target.value as "baseline" | "expansion")} className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm" aria-label="Loại probe">
+            <option value="baseline">Cơ bản (ADS-1A, ≤25 request)</option>
+            <option value="expansion">Mở rộng (ADS-1A.1, ≤30 request)</option>
           </select>
         </label>
         <label className="space-y-1 text-sm">
@@ -103,6 +111,18 @@ export function AdsProbePanel({ shops }: { shops: Array<{ id: string; name: stri
           >
             Truy cập Ads: <strong>{report.adsAccess ?? "—"}</strong> · {STOP_LABEL[report.stoppedReason]} · {report.requestsUsed}/{report.requestBudget} request · ngày (giờ shop): hôm qua {report.dates.yesterday}
           </Callout>
+
+          {report.summary && (
+            <div className="rounded-lg border p-3 text-sm" aria-label="Tóm tắt probe mở rộng">
+              <p className="font-medium">Tóm tắt mở rộng</p>
+              <p className="text-muted-foreground">
+                {report.summary.pagesFetched} trang · {report.summary.campaignsScanned} chiến dịch · has_next_page cuối: {String(report.summary.hasNextPageAtEnd)} · độ phủ {report.summary.coverageComplete ? "ĐỦ" : "CHƯA ĐỦ"} · {report.summary.nonZeroCampaigns} chiến dịch có chi tiêu ngày {report.dates.yesterday}
+              </p>
+              {report.summary.reconciliation?.delta && (
+                <pre className="mt-2 overflow-x-auto rounded bg-muted p-2 text-xs">{JSON.stringify({ shop: report.summary.reconciliation.shop, sumCampaigns: report.summary.reconciliation.sumCampaigns, delta: report.summary.reconciliation.delta }, null, 2)}</pre>
+              )}
+            </div>
+          )}
 
           <div className="overflow-x-auto rounded-lg border">
             <Table className="min-w-[900px]">
