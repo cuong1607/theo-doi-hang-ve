@@ -1,0 +1,202 @@
+{
+  "_meta": {
+    "endpoint": "/api/v2/ads/get_product_level_campaign_id_list",
+    "method": "GET",
+    "params": {
+      "ad_type": "all",
+      "offset": 100,
+      "limit": 100
+    },
+    "purpose": "Campaign list page 2 (offset 100, limit 100)",
+    "environment": "production",
+    "captured_at": "2026-10-28T09:25:42.117Z",
+    "http_status": 200,
+    "latency_ms": 300,
+    "truncated_arrays": [],
+    "note": "Sanitized real response: credentials and shop/partner ids removed; names and provider ids replaced by stable placeholders (consistent across this probe run); metrics untouched."
+  },
+  "response": {
+    "response": {
+      "region": "VN",
+      "has_next_page": false,
+      "campaign_list": [
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000101
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000102
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000103
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000104
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000105
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000106
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000107
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000108
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000109
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000110
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000111
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000112
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000113
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000114
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000115
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000116
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000117
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000118
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000119
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000120
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000121
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000122
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000123
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000124
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000125
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000126
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000127
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000128
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000129
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000130
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000131
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000132
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000133
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000134
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000135
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000136
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000137
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000138
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000139
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000140
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000141
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000142
+        },
+        {
+          "ad_type": "manual",
+          "campaign_id": 900000143
+        }
+      ]
+    },
+    "request_id": "e3e3e7f35ee325c66274c46a7c0a9300",
+    "error": "",
+    "message": "",
+    "warning": ""
+  }
+}

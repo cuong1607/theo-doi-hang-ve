@@ -1,0 +1,1017 @@
+{
+  "_meta": {
+    "endpoint": "/api/v2/ads/get_product_level_campaign_setting_info",
+    "method": "GET",
+    "params": {
+      "info_type_list": "1,2,3,4",
+      "campaign_id_list": "900000101,900000102,900000103,900000104,900000105,900000106,900000107,900000108,900000109,900000110,900000111,900000112,900000113,900000114,900000115,900000116,900000117,900000118,900000119,900000120,900000121,900000122,900000123,900000124,900000125,900000126,900000127,900000128,900000129,900000130,900000131,900000132,900000133,900000134,900000135,900000136,900000137,900000138,900000139,900000140,900000141,900000142,900000143"
+    },
+    "purpose": "Settings, all scanned campaigns (batch 3)",
+    "environment": "production",
+    "captured_at": "2026-10-28T09:25:42.117Z",
+    "http_status": 200,
+    "latency_ms": 332,
+    "truncated_arrays": [],
+    "note": "Sanitized real response: credentials and shop/partner ids removed; names and provider ids replaced by stable placeholders (consistent across this probe run); metrics untouched."
+  },
+  "response": {
+    "response": {
+      "region": "VN",
+      "campaign_list": [
+        {
+          "campaign_id": 900000101,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #101",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 0,
+            "campaign_duration": {
+              "start_time": 1764867600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000223
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 15
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000102,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #102",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1764867600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000224
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 20
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000103,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #103",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 0,
+            "campaign_duration": {
+              "start_time": 1764867600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000225
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 20
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000104,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #104",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 400000,
+            "campaign_duration": {
+              "start_time": 1764867600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000226
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 25
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000105,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #105",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 0,
+            "campaign_duration": {
+              "start_time": 1764954000,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000227
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 14
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000106,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #106",
+            "campaign_status": "ended",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1765299600,
+              "end_time": 1781857542
+            },
+            "item_id_list": [
+              900000228
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 14.6
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000107,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #107",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 0,
+            "campaign_duration": {
+              "start_time": 1765818000,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000147
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 18
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000108,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #108",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 30000,
+            "campaign_duration": {
+              "start_time": 1766336400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000229
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 18
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000109,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #109",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1766336400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000230
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 18
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000110,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #110",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1766336400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000218
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 25
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000111,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #111",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 0,
+            "campaign_duration": {
+              "start_time": 1766336400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000231
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 14.6
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000112,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #112",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1766336400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000232
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 18
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000113,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #113",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 200000,
+            "campaign_duration": {
+              "start_time": 1766336400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000233
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 20
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000114,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #114",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 300000,
+            "campaign_duration": {
+              "start_time": 1766336400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000144
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 15
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000115,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #115",
+            "campaign_status": "closed",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1766336400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000182
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 18
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000116,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #116",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1766682000,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000234
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 16
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000117,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #117",
+            "campaign_status": "closed",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1766682000,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000235
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 22
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000118,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #118",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 200000,
+            "campaign_duration": {
+              "start_time": 1767373200,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000236
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 16
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000119,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #119",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 120000,
+            "campaign_duration": {
+              "start_time": 1774890000,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000149
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 16
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000120,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #120",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1774890000,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000237
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 15
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000121,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #121",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 300000,
+            "campaign_duration": {
+              "start_time": 1774890000,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000238
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 14
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000122,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #122",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 400000,
+            "campaign_duration": {
+              "start_time": 1783270800,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000219
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 14
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000123,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #123",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1783270800,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000239
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 15
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000124,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #124",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 200000,
+            "campaign_duration": {
+              "start_time": 1783270800,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000240
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 18
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000125,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #125",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1783270800,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000241
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 13
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000126,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #126",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 400000,
+            "campaign_duration": {
+              "start_time": 1783270800,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000156
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 17
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000127,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #127",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1785690000,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000208
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 22
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000128,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #128",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1786381200,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000193
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 15
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000129,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #129",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 400000,
+            "campaign_duration": {
+              "start_time": 1786640400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000242
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 18
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000130,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #130",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 500000,
+            "campaign_duration": {
+              "start_time": 1786726800,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000231
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 12
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000131,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #131",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 400000,
+            "campaign_duration": {
+              "start_time": 1787936400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000243
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 20
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000132,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #132",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 400000,
+            "campaign_duration": {
+              "start_time": 1788454800,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000226
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 18
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000133,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #133",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 400000,
+            "campaign_duration": {
+              "start_time": 1788454800,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000179
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 22.5
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000134,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #134",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 400000,
+            "campaign_duration": {
+              "start_time": 1788454800,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000170
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 18
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000135,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #135",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 400000,
+            "campaign_duration": {
+              "start_time": 1788454800,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000171
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 20
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000136,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #136",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 400000,
+            "campaign_duration": {
+              "start_time": 1788454800,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000206
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 20
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000137,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #137",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 400000,
+            "campaign_duration": {
+              "start_time": 1788454800,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000217
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 17.5
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000138,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #138",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 200000,
+            "campaign_duration": {
+              "start_time": 1788541200,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000215
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 24
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000139,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #139",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 400000,
+            "campaign_duration": {
+              "start_time": 1788541200,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000208
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 25
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000140,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #140",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 200000,
+            "campaign_duration": {
+              "start_time": 1789059600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000194
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 20
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000141,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #141",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 200000,
+            "campaign_duration": {
+              "start_time": 1789146000,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000161
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 17
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000142,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #142",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 400000,
+            "campaign_duration": {
+              "start_time": 1789578000,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000244
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 20
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000143,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #143",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 200000,
+            "campaign_duration": {
+              "start_time": 1790960400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000216
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 20
+          },
+          "auto_product_ads_info": null
+        }
+      ]
+    },
+    "request_id": "e3e3e7f35ee3267410540f68e9952400",
+    "error": "",
+    "message": "",
+    "warning": ""
+  }
+}

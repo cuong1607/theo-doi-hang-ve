@@ -4,6 +4,7 @@
 >
 > - **Sandbox:** no Ads backend (see §2).
 > - **Production:** probe run once, 2026-10-28 08:58 UTC, on shop "CTV Bedding & decor Store". It used 12 GET requests and the result was **Ads AVAILABLE**: all 9 endpoints `VERIFIED_PROD` (see §3).
+> - Expansion probe (ADS-1A.1), 09:25 UTC, 12 GET requests: full campaign coverage (143), reconciliation, budget / status / field formulas (see §3.5).
 > - Fixtures: `src/lib/channels/shopee/ads/__fixtures__/provider/`.
 > - Confidence labels used below:
 >   - **VERIFIED**: proven by the payload or by arithmetic on it.
@@ -183,16 +184,16 @@ Shop-level rows (`get_all_cpc_ads_*`) and campaign-level rows (`metrics_list`) u
 | `direct_conversions` / `broad_conversions` | ✓ | — | number (4 dp) | direct_order / clicks, broad_order / clicks | VERIFIED |
 | `direct_roas` / `broad_roas` | ✓ | — | number (2 dp) | gmv / expense | VERIFIED; ratio-of-sums of hourly = provider daily (10.367 vs 10.37); the average of hourly ratios (9.376) is wrong |
 | `cost_per_conversion` | ✓ | — | number (2 dp) | expense / **broad**_order (computed on the unrounded expense) | VERIFIED |
-| `broad_order_amount`, `direct_order_amount` | — | ✓ | integer | UNKNOWN (amount vs gmv?) | UNKNOWN (all 0 in the sample) |
-| `broad_roi`, `direct_roi` | — | ✓ | number | LIKELY gmv / expense | LIKELY (all 0) |
-| `broad_cir`, `direct_cir` | — | ✓ | number | LIKELY expense / gmv (ACOS) | LIKELY (all 0) |
-| `cr`, `direct_cr` | — | ✓ | number | LIKELY conversion rate | LIKELY (all 0) |
-| `cpc` | — | ✓ | number | LIKELY expense / clicks | LIKELY (all 0) |
-| `cpdc` | — | ✓ | number | UNKNOWN (cost per direct conversion?) | UNKNOWN (all 0) |
+| `broad_order_amount`, `direct_order_amount` | — | ✓ | integer | units sold (≥ orders on every row; Σ campaigns 51 / 42 vs shop `*_item_sold` 54 / 43, the same gap as orders) | LIKELY (1A.1) |
+| `broad_roi`, `direct_roi` | — | ✓ | number (2 dp) | round2(gmv / expense) = ROAS | VERIFIED 99/99 rows (1A.1) |
+| `broad_cir`, `direct_cir` | — | ✓ | number (2 dp) | round2(expense / gmv) = ACOS, too coarse to keep | VERIFIED 100/100 (1A.1) |
+| `cr`, `direct_cr` | — | ✓ | number (4 dp) | broad_order / clicks, direct_order / clicks | VERIFIED 100/100 (1A.1) |
+| `cpc` | — | ✓ | number | **expense / broad_order** (cost per broad conversion; 0 when there are no orders). **It is NOT cost per click**, despite the name. | VERIFIED 100/100 (1A.1) |
+| `cpdc` | — | ✓ | number | expense / direct_order (cost per direct conversion) | VERIFIED 100/100 (1A.1) |
 
 **Provider ratio vs derived ratio.** At shop level all 5 ratios equal the derived value to the provider's rounding, on all 4 days. A future sync should store the primitives (impression, clicks, expense, orders, gmv) and derive ratios as ratio-of-sums. Provider ratios are rounded and must never be averaged.
 
-**Campaign-level values are unverified.** The 5 sampled campaigns are the oldest ones (ended April 2025), and every metric is 0. Non-zero campaign rows and Σ campaigns = shop total are still unproven.
+**Campaign-level values: verified in 1A.1.** The test covered 100 non-zero rows: 43 campaigns for 27/10, a 7-day sample of 5 campaigns, and 24 hourly rows. Σ hourly = daily for one campaign, exactly except `expense` (−2 đ, rounding). Σ campaigns ≠ shop total; see §3.5.
 
 ### 3.3 Money, currency, attribution, delay
 
@@ -220,12 +221,76 @@ CTV Bedding, orders by `created_at_channel` (VN date):
 
 The units agree, but the Ads numbers are not a subset of the same-day shop orders. Label the metrics with Shopee's own terms (direct/broad) and never present them as "the shop's revenue".
 
+## 3.5 Expansion probe findings (ADS-1A.1, 2026-10-28 09:25 UTC, CTV Bedding, 12 GET requests)
+
+Fixtures: `exp-*.json` and `_probe-report-expansion.json`.
+
+**Pagination: VERIFIED.**
+- `limit=100` is accepted. Page 1 returned 100 rows with `has_next_page: true`; `offset=100` returned 43 rows with `has_next_page: false`.
+- Termination is `has_next_page=false`. The shop has **143 campaigns**.
+- The maximum `limit` is UNKNOWN; 100 is verified. Up to 50 ids per `campaign_id_list` call is verified for both setting and performance.
+
+**Date ranges: VERIFIED.**
+- Shop daily: 7 days gave 7 rows, 30 days gave 30 rows. 30 days covers the dashboard preset.
+- Campaign daily: 7 days gave 7 rows per campaign.
+- Longer ranges were not tested.
+
+**Campaign vs shop reconciliation (27/10, FULL coverage: 143/143 campaigns, `has_next_page=false`):**
+
+| metric | shop `get_all_cpc_ads_daily_performance` | Σ 143 product campaigns | delta (shop − Σ) |
+|---|---|---|---|
+| expense | 1,104,162 | 1,072,671 | **31,491** (2.9 %) |
+| impression | 36,145 | 29,727 | **6,418** (17.8 %) |
+| clicks | 1,042 | 960 | **82** (7.9 %) |
+| direct_order | 41 | 40 | 1 |
+| broad_order | 52 | 49 | 3 |
+| direct_gmv | 10,966,208 | 10,921,748 | 44,460 |
+| broad_gmv | 11,447,308 | 11,140,148 | 307,160 |
+
+**Conclusion: VERIFIED that the shop-level "all CPC ads" total is larger than the sum of product-level campaigns.** Coverage is complete, so the gap is not a pagination problem. What the remainder is remains UNKNOWN: other CPC ad types such as shop/search ads, or deleted campaigns. Consequences:
+- **Shop totals must be stored separately** and never derived from campaign sums.
+- Campaign rows are a **breakdown**, not a partition, of the shop total.
+
+**Status: VERIFIED raw values** `ongoing` (43), `paused` (57), `closed` (17), `ended` (26).
+- All 43 `ongoing` campaigns spent on 27/10, and **no campaign with another status spent**. So `ongoing` means running.
+- `ended`: `end_time` is always set and in the past, so it LIKELY means the end date passed.
+- `closed`: 12 have `end_time` = 0 and 5 have it set. How `closed` differs from `paused` is UNKNOWN.
+- `end_time` = 0 means no end date (VERIFIED on all `ongoing` and `paused`).
+
+**Type, bidding, placement (raw values):**
+- `ad_type`: only `manual` (143/143).
+- `bidding_method`: `auto` (126) or `manual` (17).
+- `campaign_placement`: `all`, `search` or `discovery`. Search/discovery appear only with manual bidding.
+
+**Budget:**
+- **`campaign_budget` is a DAILY cap (VERIFIED by behaviour).** Campaign #40 (budget 300,000) spent exactly 300,000 on 26/10 and on 27/10, while its 7-day spend is 1,036,190, more than the budget, so the budget is not a lifetime total.
+- All running campaigns have a budget > 0. `campaign_budget = 0` appears only on paused/closed/ended campaigns (16); its meaning (unlimited?) is UNKNOWN.
+
+**`roas_target`:**
+- Present only when `bidding_method = auto` (`auto_bidding_info`). With manual bidding, `auto_bidding_info` is null.
+- 0 appears only on the 5 oldest auto campaigns (2025-03); its meaning is UNKNOWN.
+- Achieved ROAS is often below the target, so the target does not bind the reported values.
+
+**Manual bidding details (read-only):**
+- `manual_bidding_info.selected_keywords[]` with `{keyword, status active|deleted, match_type exact|broad, bid_price_per_click}`.
+- `discovery_ads_locations[]` with `{location daily_discover|you_may_also_like, status active|inactive, bid_price}`.
+- `enhanced_cpc` (only false was seen).
+- Bids are integers, VND by consistency.
+- Keyword text is masked in fixtures. These are child settings of a campaign, not performance entities.
+
+**Products:** every campaign has exactly **1** item (`item_id_list` length is always 1). 101 distinct items; 29 items are advertised by more than one campaign.
+
+**Anomaly:** one campaign row has `broad_order = 1` with `broad_gmv = 0`. The row is still valid (orders without GMV); the reason is UNKNOWN.
+
+**Restatement:** 25, 26 and 27/10 are **UNCHANGED** between 08:58 and 09:25 UTC (27 min) on every primitive field and ratio. Both reads were made on the same day, so this is **INSUFFICIENT_EVIDENCE** for cross-day restatement. 22–27/10 also match across the 7- and 30-day calls.
+
+**Latency / rate limit:** 300–800 ms per call (the first call ~800 ms). 12 sequential calls took 22 s with no throttling.
+
 ## 4. Unknowns still open (for ADS-1B)
 
-1. Attribution window, and whether orders are attributed to the click date. Whether cancelled or unpaid orders are included.
-2. Restatement: re-read 25–27/10 on a later day and compare with the fixtures.
-3. The full `campaign_status`, `ad_type` and `bidding_method` enums; the semantics of `campaign_budget` (daily or total; 0); the meaning of `roas_target` = 0.
-4. Campaign-level metrics on active campaigns: non-zero values, and Σ campaigns vs `get_all_cpc_ads_*` (does "all CPC ads" equal the sum of product-level campaigns? Are GMS/auto included?).
-5. Pagination limits: maximum `limit`, ordering, total count; the maximum `campaign_id_list` size; the maximum date range.
-6. Rate limits (none observed in 12 calls).
-7. The meaning of the campaign-level fields `*_order_amount`, `*_roi`, `*_cir`, `cr`, `cpc`, `cpdc`.
+1. Attribution window and attribution date (click date?). Whether cancelled or unpaid orders are counted.
+2. Cross-day restatement: run the expansion probe again on a later day and compare 21–27/10 with the `exp-` fixtures. Until then, the **temporary** overlap policy is to re-fetch D-7 … D-1 on every sync.
+3. What makes up the shop-minus-campaigns remainder (§3.5).
+4. `closed` vs `paused`; `campaign_budget = 0`; `roas_target = 0`; whether `ad_type = auto` campaigns exist anywhere.
+5. Maximum `limit`, maximum ids per call, maximum date range beyond 30 days.
+6. Rate limits: none observed in 24 calls across both probes.

@@ -1,0 +1,4666 @@
+{
+  "_meta": {
+    "endpoint": "/api/v2/ads/get_product_level_campaign_setting_info",
+    "method": "GET",
+    "params": {
+      "info_type_list": "1,2,3,4",
+      "campaign_id_list": "900000001,900000002,900000003,900000004,900000005,900000006,900000007,900000008,900000009,900000010,900000011,900000012,900000013,900000014,900000015,900000016,900000017,900000018,900000019,900000020,900000021,900000022,900000023,900000024,900000025,900000026,900000027,900000028,900000029,900000030,900000031,900000032,900000033,900000034,900000035,900000036,900000037,900000038,900000039,900000040,900000041,900000042,900000043,900000044,900000045,900000046,900000047,900000048,900000049,900000050"
+    },
+    "purpose": "Settings, all scanned campaigns (batch 1)",
+    "environment": "production",
+    "captured_at": "2026-10-28T09:25:42.117Z",
+    "http_status": 200,
+    "latency_ms": 401,
+    "truncated_arrays": [],
+    "note": "Sanitized real response: credentials and shop/partner ids removed; names and provider ids replaced by stable placeholders (consistent across this probe run); metrics untouched."
+  },
+  "response": {
+    "response": {
+      "region": "VN",
+      "campaign_list": [
+        {
+          "campaign_id": 900000001,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #1",
+            "campaign_status": "ended",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 10000,
+            "campaign_duration": {
+              "start_time": 1743354000,
+              "end_time": 1743499125
+            },
+            "item_id_list": [
+              900000144
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 0
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000002,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #2",
+            "campaign_status": "ended",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 10000,
+            "campaign_duration": {
+              "start_time": 1743354000,
+              "end_time": 1743499125
+            },
+            "item_id_list": [
+              900000145
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 0
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000003,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #3",
+            "campaign_status": "ended",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 10000,
+            "campaign_duration": {
+              "start_time": 1743354000,
+              "end_time": 1743499125
+            },
+            "item_id_list": [
+              900000146
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 0
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000004,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #4",
+            "campaign_status": "ended",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 10000,
+            "campaign_duration": {
+              "start_time": 1743354000,
+              "end_time": 1743499125
+            },
+            "item_id_list": [
+              900000147
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 0
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000005,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #5",
+            "campaign_status": "ended",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 10000,
+            "campaign_duration": {
+              "start_time": 1743354000,
+              "end_time": 1743499125
+            },
+            "item_id_list": [
+              900000148
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 0
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000006,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #6",
+            "campaign_status": "paused",
+            "bidding_method": "manual",
+            "campaign_placement": "search",
+            "campaign_budget": 50000,
+            "campaign_duration": {
+              "start_time": 1743440400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000147
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [
+              {
+                "keyword": "Keyword #1",
+                "status": "deleted",
+                "match_type": "broad",
+                "bid_price_per_click": 800
+              },
+              {
+                "keyword": "Keyword #2",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 823
+              },
+              {
+                "keyword": "Keyword #3",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #4",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 871
+              },
+              {
+                "keyword": "Keyword #5",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 836
+              },
+              {
+                "keyword": "Keyword #6",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #7",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 871
+              },
+              {
+                "keyword": "Keyword #8",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 871
+              },
+              {
+                "keyword": "Keyword #9",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #10",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #11",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 871
+              },
+              {
+                "keyword": "Keyword #12",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #13",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 844
+              },
+              {
+                "keyword": "Keyword #14",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 844
+              },
+              {
+                "keyword": "Keyword #15",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 844
+              },
+              {
+                "keyword": "Keyword #16",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 844
+              },
+              {
+                "keyword": "Keyword #17",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 844
+              },
+              {
+                "keyword": "Keyword #18",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #19",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 996
+              },
+              {
+                "keyword": "Keyword #20",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 996
+              },
+              {
+                "keyword": "Keyword #21",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #22",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #23",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #24",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #25",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #26",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #27",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #28",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1023
+              },
+              {
+                "keyword": "Keyword #29",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 2555
+              },
+              {
+                "keyword": "Keyword #30",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1023
+              },
+              {
+                "keyword": "Keyword #31",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #32",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #33",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1023
+              },
+              {
+                "keyword": "Keyword #34",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #35",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1023
+              },
+              {
+                "keyword": "Keyword #36",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1023
+              },
+              {
+                "keyword": "Keyword #37",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 720
+              },
+              {
+                "keyword": "Keyword #38",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #39",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #40",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #41",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 957
+              },
+              {
+                "keyword": "Keyword #42",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #43",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 952
+              },
+              {
+                "keyword": "Keyword #44",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 1500
+              },
+              {
+                "keyword": "Keyword #45",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 901
+              },
+              {
+                "keyword": "Keyword #46",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 792
+              },
+              {
+                "keyword": "Keyword #47",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1047
+              },
+              {
+                "keyword": "Keyword #48",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 901
+              },
+              {
+                "keyword": "Keyword #49",
+                "status": "deleted",
+                "match_type": "broad",
+                "bid_price_per_click": 1200
+              },
+              {
+                "keyword": "Keyword #50",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 871
+              },
+              {
+                "keyword": "Keyword #51",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1023
+              }
+            ],
+            "discovery_ads_locations": []
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000007,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #7",
+            "campaign_status": "paused",
+            "bidding_method": "manual",
+            "campaign_placement": "discovery",
+            "campaign_budget": 42000,
+            "campaign_duration": {
+              "start_time": 1743440400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000147
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [],
+            "discovery_ads_locations": [
+              {
+                "location": "daily_discover",
+                "status": "inactive",
+                "bid_price": 1235
+              },
+              {
+                "location": "you_may_also_like",
+                "status": "active",
+                "bid_price": 720
+              }
+            ]
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000008,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #8",
+            "campaign_status": "ended",
+            "bidding_method": "manual",
+            "campaign_placement": "discovery",
+            "campaign_budget": 50000,
+            "campaign_duration": {
+              "start_time": 1743613200,
+              "end_time": 1746242293
+            },
+            "item_id_list": [
+              900000144
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [],
+            "discovery_ads_locations": [
+              {
+                "location": "daily_discover",
+                "status": "inactive",
+                "bid_price": 1235
+              },
+              {
+                "location": "you_may_also_like",
+                "status": "active",
+                "bid_price": 480
+              }
+            ]
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000009,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #9",
+            "campaign_status": "ended",
+            "bidding_method": "manual",
+            "campaign_placement": "discovery",
+            "campaign_budget": 10000,
+            "campaign_duration": {
+              "start_time": 1743613200,
+              "end_time": 1746242293
+            },
+            "item_id_list": [
+              900000149
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [],
+            "discovery_ads_locations": [
+              {
+                "location": "daily_discover",
+                "status": "inactive",
+                "bid_price": 1235
+              },
+              {
+                "location": "you_may_also_like",
+                "status": "active",
+                "bid_price": 480
+              }
+            ]
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000010,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #10",
+            "campaign_status": "ended",
+            "bidding_method": "manual",
+            "campaign_placement": "search",
+            "campaign_budget": 10000,
+            "campaign_duration": {
+              "start_time": 1743613200,
+              "end_time": 1746242293
+            },
+            "item_id_list": [
+              900000149
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [
+              {
+                "keyword": "Keyword #52",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #53",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 688
+              },
+              {
+                "keyword": "Keyword #54",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #55",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #56",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #57",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #58",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #59",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #60",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #61",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #62",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #63",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #64",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #65",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #66",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #67",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 688
+              },
+              {
+                "keyword": "Keyword #68",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #69",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #70",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #71",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #72",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #73",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #74",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #75",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #76",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #77",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #78",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #79",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #80",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #81",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #82",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              },
+              {
+                "keyword": "Keyword #83",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 888
+              }
+            ],
+            "discovery_ads_locations": []
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000011,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #11",
+            "campaign_status": "closed",
+            "bidding_method": "manual",
+            "campaign_placement": "search",
+            "campaign_budget": 30000,
+            "campaign_duration": {
+              "start_time": 1745341200,
+              "end_time": 1746242293
+            },
+            "item_id_list": [
+              900000150
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [
+              {
+                "keyword": "Keyword #84",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #85",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #86",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 699
+              },
+              {
+                "keyword": "Keyword #87",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #88",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #89",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #90",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #91",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #92",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #93",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #94",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #95",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #96",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #97",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #98",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #99",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #100",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #101",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #102",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #103",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #104",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 699
+              },
+              {
+                "keyword": "Keyword #105",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #106",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #107",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #108",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #109",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #110",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #111",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #112",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #113",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #114",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #115",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #116",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #117",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #118",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #119",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #120",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #121",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #122",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #123",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #124",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #125",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #126",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #127",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #128",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #129",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #130",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #131",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #132",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #133",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #134",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #135",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #136",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #137",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #138",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #139",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #140",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #141",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #142",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #143",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #144",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #145",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #146",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #147",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #148",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #149",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #150",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #151",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #152",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #153",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #154",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              }
+            ],
+            "discovery_ads_locations": []
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000012,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #12",
+            "campaign_status": "closed",
+            "bidding_method": "manual",
+            "campaign_placement": "discovery",
+            "campaign_budget": 50000,
+            "campaign_duration": {
+              "start_time": 1745341200,
+              "end_time": 1746242293
+            },
+            "item_id_list": [
+              900000150
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [],
+            "discovery_ads_locations": [
+              {
+                "location": "daily_discover",
+                "status": "inactive",
+                "bid_price": 1235
+              },
+              {
+                "location": "you_may_also_like",
+                "status": "active",
+                "bid_price": 480
+              }
+            ]
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000013,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #13",
+            "campaign_status": "closed",
+            "bidding_method": "manual",
+            "campaign_placement": "search",
+            "campaign_budget": 30000,
+            "campaign_duration": {
+              "start_time": 1745341200,
+              "end_time": 1746242293
+            },
+            "item_id_list": [
+              900000151
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [
+              {
+                "keyword": "Keyword #86",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 699
+              },
+              {
+                "keyword": "Keyword #91",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 680
+              },
+              {
+                "keyword": "Keyword #93",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #155",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #94",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #156",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #157",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #96",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #97",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #100",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 880
+              },
+              {
+                "keyword": "Keyword #101",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #158",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #104",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 699
+              },
+              {
+                "keyword": "Keyword #106",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #107",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #159",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #160",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #111",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #113",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #161",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #114",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #115",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #116",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #117",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #119",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #120",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #162",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #124",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #125",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #163",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #127",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #128",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #129",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #130",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #131",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #134",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #135",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 880
+              },
+              {
+                "keyword": "Keyword #136",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #138",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #164",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #139",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #141",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #165",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #143",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #151",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #166",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #167",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #11",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 699
+              }
+            ],
+            "discovery_ads_locations": []
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000014,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #14",
+            "campaign_status": "closed",
+            "bidding_method": "manual",
+            "campaign_placement": "search",
+            "campaign_budget": 50000,
+            "campaign_duration": {
+              "start_time": 1745341200,
+              "end_time": 1746242293
+            },
+            "item_id_list": [
+              900000151
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [
+              {
+                "keyword": "Keyword #86",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 880
+              },
+              {
+                "keyword": "Keyword #91",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 880
+              },
+              {
+                "keyword": "Keyword #93",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #155",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #94",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #156",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #157",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #97",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #100",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 880
+              },
+              {
+                "keyword": "Keyword #101",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #158",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 880
+              },
+              {
+                "keyword": "Keyword #104",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 880
+              },
+              {
+                "keyword": "Keyword #106",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #107",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #159",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #160",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #111",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #168",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #113",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #161",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #114",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #115",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #116",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #117",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #119",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #120",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #162",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #125",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #163",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #127",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #128",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #129",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #130",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #131",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #134",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #135",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #136",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #138",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #139",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #141",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #165",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #143",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #148",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 880
+              },
+              {
+                "keyword": "Keyword #151",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 880
+              },
+              {
+                "keyword": "Keyword #166",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1120
+              },
+              {
+                "keyword": "Keyword #11",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 880
+              }
+            ],
+            "discovery_ads_locations": []
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000015,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #15",
+            "campaign_status": "ended",
+            "bidding_method": "manual",
+            "campaign_placement": "search",
+            "campaign_budget": 50000,
+            "campaign_duration": {
+              "start_time": 1745600400,
+              "end_time": 1746242293
+            },
+            "item_id_list": [
+              900000152
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [
+              {
+                "keyword": "Keyword #169",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #170",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #171",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #172",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #173",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #174",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #175",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #176",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #177",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #178",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #179",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #53",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #180",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #56",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #181",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #59",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #182",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #183",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #184",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #64",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #67",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #185",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #68",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #186",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #70",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #187",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #72",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #188",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #189",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #73",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #190",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #75",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #191",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #192",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #193",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #194",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #195",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #79",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #80",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #196",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #82",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #197",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #198",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #199",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #200",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #201",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #202",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              },
+              {
+                "keyword": "Keyword #203",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 999
+              }
+            ],
+            "discovery_ads_locations": []
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000016,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #16",
+            "campaign_status": "ended",
+            "bidding_method": "manual",
+            "campaign_placement": "search",
+            "campaign_budget": 50000,
+            "campaign_duration": {
+              "start_time": 1745600400,
+              "end_time": 1746242293
+            },
+            "item_id_list": [
+              900000153
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [
+              {
+                "keyword": "Keyword #204",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #86",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #205",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #206",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #207",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #208",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #209",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #210",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #211",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #212",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #213",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #214",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #215",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #216",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #217",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #218",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #219",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #220",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #221",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #222",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #223",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #224",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #225",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #226",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #227",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #228",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #229",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #230",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #231",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #232",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #233",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #234",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #235",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #236",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #237",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #238",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #239",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #240",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #241",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #242",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #243",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 480
+              },
+              {
+                "keyword": "Keyword #244",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #245",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #246",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #247",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #248",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #249",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #250",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #251",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #252",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #11",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #253",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #17",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #254",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #255",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #24",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #256",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #26",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #257",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #258",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #259",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #260",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #261",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #262",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #263",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #154",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              }
+            ],
+            "discovery_ads_locations": []
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000017,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #17",
+            "campaign_status": "ended",
+            "bidding_method": "manual",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1748278800,
+              "end_time": 1748408281
+            },
+            "item_id_list": [
+              900000153
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [
+              {
+                "keyword": "Keyword #204",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #86",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #205",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #87",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #206",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #207",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #209",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #210",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #211",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #212",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #213",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #214",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #215",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #216",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #217",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #218",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #219",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #220",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #221",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #222",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #223",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #224",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #225",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #226",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #227",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #228",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #229",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #230",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #231",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #232",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #233",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 989
+              },
+              {
+                "keyword": "Keyword #234",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #235",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #236",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #237",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #238",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #239",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #240",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #241",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #242",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #243",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #244",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #245",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #246",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #247",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #248",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #249",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #250",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #251",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #252",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #11",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 599
+              },
+              {
+                "keyword": "Keyword #253",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #17",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #254",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #255",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #24",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #256",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #26",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #257",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #258",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #259",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #260",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #261",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #262",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #263",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #154",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #264",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              }
+            ],
+            "discovery_ads_locations": [
+              {
+                "location": "daily_discover",
+                "status": "inactive",
+                "bid_price": 480
+              },
+              {
+                "location": "you_may_also_like",
+                "status": "active",
+                "bid_price": 480
+              }
+            ]
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000018,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #18",
+            "campaign_status": "ended",
+            "bidding_method": "manual",
+            "campaign_placement": "search",
+            "campaign_budget": 40000,
+            "campaign_duration": {
+              "start_time": 1745600400,
+              "end_time": 1746242293
+            },
+            "item_id_list": [
+              900000154
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [
+              {
+                "keyword": "Keyword #265",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #266",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #11",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #267",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #268",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #12",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #13",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #269",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #15",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #270",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #253",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #271",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #272",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #16",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #273",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #274",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #275",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #17",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #254",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #18",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #276",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #19",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #20",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #21",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #277",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #23",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #255",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #24",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #25",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #278",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #279",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #280",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #281",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #282",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #283",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #38",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #40",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #41",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 599
+              },
+              {
+                "keyword": "Keyword #42",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #284",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #48",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #50",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #285",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #286",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1199
+              },
+              {
+                "keyword": "Keyword #287",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #288",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              }
+            ],
+            "discovery_ads_locations": []
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000019,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #19",
+            "campaign_status": "ended",
+            "bidding_method": "manual",
+            "campaign_placement": "search",
+            "campaign_budget": 50000,
+            "campaign_duration": {
+              "start_time": 1745600400,
+              "end_time": 1746242293
+            },
+            "item_id_list": [
+              900000154
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [
+              {
+                "keyword": "Keyword #265",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #266",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #11",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #267",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #268",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #12",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #13",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #269",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #14",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #15",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #270",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #253",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #271",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #289",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #272",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #16",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #273",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #274",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #275",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #17",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #254",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #18",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #276",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #19",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #20",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #21",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #277",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #23",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #255",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #24",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #25",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #278",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #290",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #291",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #292",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #280",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #281",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #283",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #38",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #40",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #41",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #42",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #284",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #48",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #50",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #285",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 799
+              },
+              {
+                "keyword": "Keyword #286",
+                "status": "active",
+                "match_type": "broad",
+                "bid_price_per_click": 1099
+              }
+            ],
+            "discovery_ads_locations": []
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000020,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #20",
+            "campaign_status": "ended",
+            "bidding_method": "manual",
+            "campaign_placement": "discovery",
+            "campaign_budget": 20000,
+            "campaign_duration": {
+              "start_time": 1745600400,
+              "end_time": 1746242293
+            },
+            "item_id_list": [
+              900000154
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [],
+            "discovery_ads_locations": [
+              {
+                "location": "daily_discover",
+                "status": "inactive",
+                "bid_price": 1235
+              },
+              {
+                "location": "you_may_also_like",
+                "status": "active",
+                "bid_price": 480
+              }
+            ]
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000021,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #21",
+            "campaign_status": "closed",
+            "bidding_method": "manual",
+            "campaign_placement": "search",
+            "campaign_budget": 5000,
+            "campaign_duration": {
+              "start_time": 1748365200,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000155
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [
+              {
+                "keyword": "Keyword #210",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 815
+              },
+              {
+                "keyword": "Keyword #212",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #293",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 920
+              },
+              {
+                "keyword": "Keyword #214",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 920
+              },
+              {
+                "keyword": "Keyword #215",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #294",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 875
+              },
+              {
+                "keyword": "Keyword #218",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #219",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 920
+              },
+              {
+                "keyword": "Keyword #221",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 699
+              },
+              {
+                "keyword": "Keyword #295",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 720
+              },
+              {
+                "keyword": "Keyword #296",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 745
+              },
+              {
+                "keyword": "Keyword #225",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #297",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 720
+              },
+              {
+                "keyword": "Keyword #298",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 763
+              },
+              {
+                "keyword": "Keyword #299",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 1099
+              },
+              {
+                "keyword": "Keyword #226",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 763
+              },
+              {
+                "keyword": "Keyword #227",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 899
+              },
+              {
+                "keyword": "Keyword #300",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 763
+              },
+              {
+                "keyword": "Keyword #301",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 734
+              },
+              {
+                "keyword": "Keyword #233",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 1668
+              },
+              {
+                "keyword": "Keyword #235",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 1866
+              },
+              {
+                "keyword": "Keyword #237",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 763
+              },
+              {
+                "keyword": "Keyword #302",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 972
+              },
+              {
+                "keyword": "Keyword #303",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1231
+              },
+              {
+                "keyword": "Keyword #304",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 1103
+              },
+              {
+                "keyword": "Keyword #305",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 1668
+              },
+              {
+                "keyword": "Keyword #306",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 826
+              },
+              {
+                "keyword": "Keyword #307",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 826
+              },
+              {
+                "keyword": "Keyword #247",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 1410
+              },
+              {
+                "keyword": "Keyword #308",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 875
+              },
+              {
+                "keyword": "Keyword #309",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 875
+              },
+              {
+                "keyword": "Keyword #310",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 875
+              },
+              {
+                "keyword": "Keyword #311",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 744
+              },
+              {
+                "keyword": "Keyword #11",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 699
+              },
+              {
+                "keyword": "Keyword #26",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 875
+              },
+              {
+                "keyword": "Keyword #27",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 938
+              },
+              {
+                "keyword": "Keyword #37",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 864
+              },
+              {
+                "keyword": "Keyword #261",
+                "status": "deleted",
+                "match_type": "exact",
+                "bid_price_per_click": 1524
+              },
+              {
+                "keyword": "Keyword #262",
+                "status": "active",
+                "match_type": "exact",
+                "bid_price_per_click": 720
+              }
+            ],
+            "discovery_ads_locations": []
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000022,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #22",
+            "campaign_status": "closed",
+            "bidding_method": "manual",
+            "campaign_placement": "discovery",
+            "campaign_budget": 20000,
+            "campaign_duration": {
+              "start_time": 1748365200,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000155
+            ]
+          },
+          "manual_bidding_info": {
+            "enhanced_cpc": false,
+            "selected_keywords": [],
+            "discovery_ads_locations": [
+              {
+                "location": "daily_discover",
+                "status": "inactive",
+                "bid_price": 720
+              },
+              {
+                "location": "you_may_also_like",
+                "status": "active",
+                "bid_price": 720
+              }
+            ]
+          },
+          "auto_bidding_info": null,
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000023,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #23",
+            "campaign_status": "closed",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 50000,
+            "campaign_duration": {
+              "start_time": 1749574800,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000155
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 6.1
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000024,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #24",
+            "campaign_status": "closed",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 0,
+            "campaign_duration": {
+              "start_time": 1750870800,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000155
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 14
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000025,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #25",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 50000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000156
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 20
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000026,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #26",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 500000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000148
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 15
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000027,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #27",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 250000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000147
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 15
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000028,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #28",
+            "campaign_status": "closed",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000151
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 20
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000029,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #29",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 120000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000157
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 14.5
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000030,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #30",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 300000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000153
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 22
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000031,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #31",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 25000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000158
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 18
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000032,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #32",
+            "campaign_status": "closed",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 0,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000159
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 18
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000033,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #33",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 150000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000160
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 14
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000034,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #34",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 200000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000161
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 17
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000035,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #35",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 130000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000162
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 14.6
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000036,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #36",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 50000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000163
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 18
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000037,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #37",
+            "campaign_status": "closed",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 50000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000164
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 20
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000038,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #38",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000165
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 14.5
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000039,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #39",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 0,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000145
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 14
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000040,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #40",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 300000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000166
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 15
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000041,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #41",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 25000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000167
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 18
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000042,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #42",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000168
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 16.6
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000043,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #43",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000169
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 17
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000044,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #44",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 120000,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000170
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 18.5
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000045,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #45",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 0,
+            "campaign_duration": {
+              "start_time": 1751043600,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000146
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 14.6
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000046,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #46",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1752944400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000171
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 25
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000047,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #47",
+            "campaign_status": "closed",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 50000,
+            "campaign_duration": {
+              "start_time": 1753376400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000172
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 17
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000048,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #48",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 150000,
+            "campaign_duration": {
+              "start_time": 1753549200,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000173
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 16
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000049,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #49",
+            "campaign_status": "paused",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1753549200,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000174
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 15
+          },
+          "auto_product_ads_info": null
+        },
+        {
+          "campaign_id": 900000050,
+          "common_info": {
+            "ad_type": "manual",
+            "ad_name": "Ad #50",
+            "campaign_status": "ongoing",
+            "bidding_method": "auto",
+            "campaign_placement": "all",
+            "campaign_budget": 100000,
+            "campaign_duration": {
+              "start_time": 1753808400,
+              "end_time": 0
+            },
+            "item_id_list": [
+              900000175
+            ]
+          },
+          "manual_bidding_info": null,
+          "auto_bidding_info": {
+            "roas_target": 16.4
+          },
+          "auto_product_ads_info": null
+        }
+      ]
+    },
+    "request_id": "e3e3e7f35ee326396da553e990cc5a00",
+    "error": "",
+    "message": "",
+    "warning": ""
+  }
+}

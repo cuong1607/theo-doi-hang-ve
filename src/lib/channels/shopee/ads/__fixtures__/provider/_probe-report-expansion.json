@@ -1,0 +1,533 @@
+{
+  "kind": "expansion",
+  "environment": "production",
+  "mode": "READ_ONLY",
+  "shopLabel": "CTV Bedding & decor Store",
+  "startedAt": "2026-10-28T09:25:42.117Z",
+  "finishedAt": "2026-10-28T09:26:04.082Z",
+  "timeZone": "Asia/Ho_Chi_Minh",
+  "dates": {
+    "today": "28-10-2026",
+    "yesterday": "27-10-2026",
+    "threeDaysAgo": "25-10-2026",
+    "sevenDaysAgo": "21-10-2026",
+    "thirtyDaysAgo": "28-09-2026"
+  },
+  "requestBudget": 30,
+  "requestsUsed": 12,
+  "stoppedReason": "completed",
+  "adsAccess": "AVAILABLE",
+  "calls": [
+    {
+      "step": 1,
+      "endpoint": "campaign_id_list",
+      "purpose": "Campaign list page 1 (offset 0, limit 100)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_product_level_campaign_id_list",
+      "params": {
+        "ad_type": "all",
+        "offset": 0,
+        "limit": 100
+      },
+      "httpStatus": 200,
+      "latencyMs": 798,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee325ae6b4bfaf9cd792a00",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "shop_id",
+        "region",
+        "has_next_page",
+        "campaign_list"
+      ],
+      "arrayLengths": {
+        "campaign_list": 100
+      },
+      "paginationHints": {
+        "has_next_page": true
+      },
+      "truncatedArrays": [],
+      "body": "see exp-campaign-id-list*.json"
+    },
+    {
+      "step": 2,
+      "endpoint": "campaign_id_list",
+      "purpose": "Campaign list page 2 (offset 100, limit 100)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_product_level_campaign_id_list",
+      "params": {
+        "ad_type": "all",
+        "offset": 100,
+        "limit": 100
+      },
+      "httpStatus": 200,
+      "latencyMs": 300,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee325c66274c46a7c0a9300",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "shop_id",
+        "region",
+        "has_next_page",
+        "campaign_list"
+      ],
+      "arrayLengths": {
+        "campaign_list": 43
+      },
+      "paginationHints": {
+        "has_next_page": false
+      },
+      "truncatedArrays": [],
+      "body": "see exp-campaign-id-list*.json"
+    },
+    {
+      "step": 3,
+      "endpoint": "campaign_daily_performance",
+      "purpose": "All campaigns, 27-10-2026 (batch 1/3)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_product_campaign_daily_performance",
+      "params": {
+        "start_date": "27-10-2026",
+        "end_date": "27-10-2026",
+        "campaign_id_list": "900000001,900000002,900000003,900000004,900000005,900000006,900000007,900000008,900000009,900000010,900000011,900000012,900000013,900000014,900000015,900000016,900000017,900000018,900000019,900000020,900000021,900000022,900000023,900000024,900000025,900000026,900000027,900000028,900000029,900000030,900000031,900000032,900000033,900000034,900000035,900000036,900000037,900000038,900000039,900000040,900000041,900000042,900000043,900000044,900000045,900000046,900000047,900000048,900000049,900000050"
+      },
+      "httpStatus": 200,
+      "latencyMs": 379,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee325e4c3fa513d345ab400",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "shop_id",
+        "region",
+        "campaign_list"
+      ],
+      "arrayLengths": {
+        "campaign_list": 50,
+        "campaign_list[0].metrics_list": 1
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see exp-campaign-daily-performance*.json"
+    },
+    {
+      "step": 4,
+      "endpoint": "campaign_daily_performance",
+      "purpose": "All campaigns, 27-10-2026 (batch 2/3)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_product_campaign_daily_performance",
+      "params": {
+        "start_date": "27-10-2026",
+        "end_date": "27-10-2026",
+        "campaign_id_list": "900000051,900000052,900000053,900000054,900000055,900000056,900000057,900000058,900000059,900000060,900000061,900000062,900000063,900000064,900000065,900000066,900000067,900000068,900000069,900000070,900000071,900000072,900000073,900000074,900000075,900000076,900000077,900000078,900000079,900000080,900000081,900000082,900000083,900000084,900000085,900000086,900000087,900000088,900000089,900000090,900000091,900000092,900000093,900000094,900000095,900000096,900000097,900000098,900000099,900000100"
+      },
+      "httpStatus": 200,
+      "latencyMs": 378,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee326077c35ac5d03244b00",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "shop_id",
+        "region",
+        "campaign_list"
+      ],
+      "arrayLengths": {
+        "campaign_list": 50,
+        "campaign_list[0].metrics_list": 1
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see exp-campaign-daily-performance*.json"
+    },
+    {
+      "step": 5,
+      "endpoint": "campaign_daily_performance",
+      "purpose": "All campaigns, 27-10-2026 (batch 3/3)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_product_campaign_daily_performance",
+      "params": {
+        "start_date": "27-10-2026",
+        "end_date": "27-10-2026",
+        "campaign_id_list": "900000101,900000102,900000103,900000104,900000105,900000106,900000107,900000108,900000109,900000110,900000111,900000112,900000113,900000114,900000115,900000116,900000117,900000118,900000119,900000120,900000121,900000122,900000123,900000124,900000125,900000126,900000127,900000128,900000129,900000130,900000131,900000132,900000133,900000134,900000135,900000136,900000137,900000138,900000139,900000140,900000141,900000142,900000143"
+      },
+      "httpStatus": 200,
+      "latencyMs": 370,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee326207f2bb0b5d8069200",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "shop_id",
+        "region",
+        "campaign_list"
+      ],
+      "arrayLengths": {
+        "campaign_list": 43,
+        "campaign_list[0].metrics_list": 1
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see exp-campaign-daily-performance*.json"
+    },
+    {
+      "step": 6,
+      "endpoint": "campaign_setting_info",
+      "purpose": "Settings, all scanned campaigns (batch 1)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_product_level_campaign_setting_info",
+      "params": {
+        "info_type_list": "1,2,3,4",
+        "campaign_id_list": "900000001,900000002,900000003,900000004,900000005,900000006,900000007,900000008,900000009,900000010,900000011,900000012,900000013,900000014,900000015,900000016,900000017,900000018,900000019,900000020,900000021,900000022,900000023,900000024,900000025,900000026,900000027,900000028,900000029,900000030,900000031,900000032,900000033,900000034,900000035,900000036,900000037,900000038,900000039,900000040,900000041,900000042,900000043,900000044,900000045,900000046,900000047,900000048,900000049,900000050"
+      },
+      "httpStatus": 200,
+      "latencyMs": 401,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee326396da553e990cc5a00",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "shop_id",
+        "region",
+        "campaign_list"
+      ],
+      "arrayLengths": {
+        "campaign_list": 50,
+        "campaign_list[0].common_info.item_id_list": 1
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see exp-campaign-setting-info*.json"
+    },
+    {
+      "step": 7,
+      "endpoint": "campaign_setting_info",
+      "purpose": "Settings, all scanned campaigns (batch 2)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_product_level_campaign_setting_info",
+      "params": {
+        "info_type_list": "1,2,3,4",
+        "campaign_id_list": "900000051,900000052,900000053,900000054,900000055,900000056,900000057,900000058,900000059,900000060,900000061,900000062,900000063,900000064,900000065,900000066,900000067,900000068,900000069,900000070,900000071,900000072,900000073,900000074,900000075,900000076,900000077,900000078,900000079,900000080,900000081,900000082,900000083,900000084,900000085,900000086,900000087,900000088,900000089,900000090,900000091,900000092,900000093,900000094,900000095,900000096,900000097,900000098,900000099,900000100"
+      },
+      "httpStatus": 200,
+      "latencyMs": 468,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee326530aa71626746f7400",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "shop_id",
+        "region",
+        "campaign_list"
+      ],
+      "arrayLengths": {
+        "campaign_list": 50,
+        "campaign_list[0].common_info.item_id_list": 1
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see exp-campaign-setting-info*.json"
+    },
+    {
+      "step": 8,
+      "endpoint": "campaign_setting_info",
+      "purpose": "Settings, all scanned campaigns (batch 3)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_product_level_campaign_setting_info",
+      "params": {
+        "info_type_list": "1,2,3,4",
+        "campaign_id_list": "900000101,900000102,900000103,900000104,900000105,900000106,900000107,900000108,900000109,900000110,900000111,900000112,900000113,900000114,900000115,900000116,900000117,900000118,900000119,900000120,900000121,900000122,900000123,900000124,900000125,900000126,900000127,900000128,900000129,900000130,900000131,900000132,900000133,900000134,900000135,900000136,900000137,900000138,900000139,900000140,900000141,900000142,900000143"
+      },
+      "httpStatus": 200,
+      "latencyMs": 332,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee3267410540f68e9952400",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "shop_id",
+        "region",
+        "campaign_list"
+      ],
+      "arrayLengths": {
+        "campaign_list": 43,
+        "campaign_list[0].common_info.item_id_list": 1
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see exp-campaign-setting-info*.json"
+    },
+    {
+      "step": 9,
+      "endpoint": "campaign_daily_performance",
+      "purpose": "Top 5 spending campaigns, 7 days (21-10-2026 → 27-10-2026)",
+      "method": "GET",
+      "path": "/api/v2/ads/get_product_campaign_daily_performance",
+      "params": {
+        "start_date": "21-10-2026",
+        "end_date": "27-10-2026",
+        "campaign_id_list": "900000040,900000026,900000062,900000027,900000077"
+      },
+      "httpStatus": 200,
+      "latencyMs": 373,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee3269387cd50c4ff952d00",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "shop_id",
+        "region",
+        "campaign_list"
+      ],
+      "arrayLengths": {
+        "campaign_list": 5,
+        "campaign_list[0].metrics_list": 7
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see exp-campaign-daily-performance*.json"
+    },
+    {
+      "step": 10,
+      "endpoint": "campaign_hourly_performance",
+      "purpose": "Top spending campaign, hourly 27-10-2026",
+      "method": "GET",
+      "path": "/api/v2/ads/get_product_campaign_hourly_performance",
+      "params": {
+        "performance_date": "27-10-2026",
+        "campaign_id_list": "900000040"
+      },
+      "httpStatus": 200,
+      "latencyMs": 388,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee326ac6f9195f314f97f00",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [
+        "shop_id",
+        "region",
+        "campaign_list"
+      ],
+      "arrayLengths": {
+        "campaign_list": 1,
+        "campaign_list[0].metrics_list": 24
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see exp-campaign-hourly-performance*.json"
+    },
+    {
+      "step": 11,
+      "endpoint": "shop_daily_performance",
+      "purpose": "Shop daily, 7 days (21-10-2026 → 27-10-2026) — restatement + range",
+      "method": "GET",
+      "path": "/api/v2/ads/get_all_cpc_ads_daily_performance",
+      "params": {
+        "start_date": "21-10-2026",
+        "end_date": "27-10-2026"
+      },
+      "httpStatus": 200,
+      "latencyMs": 361,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee326cc28074f915872c900",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [],
+      "arrayLengths": {
+        "$": 7
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see exp-shop-daily-performance*.json"
+    },
+    {
+      "step": 12,
+      "endpoint": "shop_daily_performance",
+      "purpose": "Shop daily, 30 days (28-09-2026 → 27-10-2026) — range limit",
+      "method": "GET",
+      "path": "/api/v2/ads/get_all_cpc_ads_daily_performance",
+      "params": {
+        "start_date": "28-09-2026",
+        "end_date": "27-10-2026"
+      },
+      "httpStatus": 200,
+      "latencyMs": 363,
+      "classification": "AVAILABLE",
+      "errorCode": null,
+      "message": null,
+      "requestId": "e3e3e7f35ee326ebebfe9b623eb54a00",
+      "envelopeKeys": [
+        "response",
+        "request_id",
+        "error",
+        "message",
+        "warning"
+      ],
+      "responseKeys": [],
+      "arrayLengths": {
+        "$": 30
+      },
+      "paginationHints": {},
+      "truncatedArrays": [],
+      "body": "see exp-shop-daily-performance*.json"
+    }
+  ],
+  "summary": {
+    "pagesFetched": 2,
+    "pageSizeTried": [
+      100,
+      100
+    ],
+    "campaignsScanned": 143,
+    "hasNextPageAtEnd": false,
+    "coverageComplete": true,
+    "reconciliation": {
+      "date": "27-10-2026",
+      "campaignsWithRows": 143,
+      "shop": {
+        "expense": 1104162,
+        "impression": 36145,
+        "clicks": 1042,
+        "direct_order": 41,
+        "broad_order": 52,
+        "direct_gmv": 10966208,
+        "broad_gmv": 11447308
+      },
+      "sumCampaigns": {
+        "expense": 1072671,
+        "impression": 29727,
+        "clicks": 960,
+        "direct_order": 40,
+        "broad_order": 49,
+        "direct_gmv": 10921748,
+        "broad_gmv": 11140148
+      },
+      "delta": {
+        "expense": 31491,
+        "impression": 6418,
+        "clicks": 82,
+        "direct_order": 1,
+        "broad_order": 3,
+        "direct_gmv": 44460,
+        "broad_gmv": 307160
+      }
+    },
+    "nonZeroCampaigns": 43,
+    "statusCounts": {
+      "ended": 26,
+      "paused": 57,
+      "closed": 17,
+      "ongoing": 43
+    },
+    "adTypeCounts": {
+      "manual": 143
+    },
+    "biddingCounts": {
+      "auto": 126,
+      "manual": 17
+    },
+    "budgetZero": 16,
+    "budgetPositive": 127,
+    "roasTargetZero": 22,
+    "roasTargetPositive": 121,
+    "rangeChecks": [
+      {
+        "endpoint": "campaign_daily_performance",
+        "days": 7,
+        "classification": "AVAILABLE",
+        "rows": 7
+      },
+      {
+        "endpoint": "shop_daily_performance",
+        "days": 7,
+        "classification": "AVAILABLE",
+        "rows": 7
+      },
+      {
+        "endpoint": "shop_daily_performance",
+        "days": 30,
+        "classification": "AVAILABLE",
+        "rows": 30
+      }
+    ]
+  }
+}

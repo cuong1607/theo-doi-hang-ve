@@ -1,0 +1,1479 @@
+{
+  "_meta": {
+    "endpoint": "/api/v2/ads/get_product_campaign_daily_performance",
+    "method": "GET",
+    "params": {
+      "start_date": "27-10-2026",
+      "end_date": "27-10-2026",
+      "campaign_id_list": "900000051,900000052,900000053,900000054,900000055,900000056,900000057,900000058,900000059,900000060,900000061,900000062,900000063,900000064,900000065,900000066,900000067,900000068,900000069,900000070,900000071,900000072,900000073,900000074,900000075,900000076,900000077,900000078,900000079,900000080,900000081,900000082,900000083,900000084,900000085,900000086,900000087,900000088,900000089,900000090,900000091,900000092,900000093,900000094,900000095,900000096,900000097,900000098,900000099,900000100"
+    },
+    "purpose": "All campaigns, 27-10-2026 (batch 2/3)",
+    "environment": "production",
+    "captured_at": "2026-10-28T09:25:42.117Z",
+    "http_status": 200,
+    "latency_ms": 378,
+    "truncated_arrays": [],
+    "note": "Sanitized real response: credentials and shop/partner ids removed; names and provider ids replaced by stable placeholders (consistent across this probe run); metrics untouched."
+  },
+  "response": {
+    "response": {
+      "region": "VN",
+      "campaign_list": [
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000051,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #51"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000052,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #52"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 146,
+              "clicks": 6,
+              "ctr": 0.0411,
+              "expense": 4744,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000053,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #53"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000054,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #54"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000055,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #55"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000056,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #56"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000057,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #57"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000058,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #58"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000059,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #59"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000060,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #60"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000061,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #61"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 2971,
+              "clicks": 71,
+              "ctr": 0.0239,
+              "expense": 56989,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000062,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #62"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 358,
+              "clicks": 11,
+              "ctr": 0.0307,
+              "expense": 4074,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000063,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #63"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000064,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #64"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000065,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #65"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000066,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #66"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000067,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #67"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000068,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #68"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000069,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #69"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000070,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #70"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000071,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #71"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000072,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #72"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 896,
+              "clicks": 20,
+              "ctr": 0.0223,
+              "expense": 13818,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000073,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #73"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000074,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #74"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000075,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #75"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000076,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #76"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 1097,
+              "clicks": 22,
+              "ctr": 0.0201,
+              "expense": 51904,
+              "broad_gmv": 469000,
+              "broad_order": 7,
+              "broad_order_amount": 7,
+              "broad_roi": 9.04,
+              "broad_cir": 0.11,
+              "cr": 0.3182,
+              "cpc": 7414.91,
+              "direct_order": 7,
+              "direct_order_amount": 7,
+              "direct_gmv": 469000,
+              "direct_roi": 9.04,
+              "direct_cir": 0.11,
+              "direct_cr": 0.3182,
+              "cpdc": 7414.91
+            }
+          ],
+          "campaign_id": 900000077,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #77"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000078,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #78"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 49,
+              "clicks": 2,
+              "ctr": 0.0408,
+              "expense": 312,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000079,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #79"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000080,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #80"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000081,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #81"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000082,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #82"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000083,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #83"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000084,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #84"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000085,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #85"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 116,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 350,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000086,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #86"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000087,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #87"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000088,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #88"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000089,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #89"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000090,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #90"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 716,
+              "clicks": 20,
+              "ctr": 0.0279,
+              "expense": 17850,
+              "broad_gmv": 242640,
+              "broad_order": 1,
+              "broad_order_amount": 1,
+              "broad_roi": 13.59,
+              "broad_cir": 0.07,
+              "cr": 0.05,
+              "cpc": 17849.99,
+              "direct_order": 1,
+              "direct_order_amount": 1,
+              "direct_gmv": 242640,
+              "direct_roi": 13.59,
+              "direct_cir": 0.07,
+              "direct_cr": 0.05,
+              "cpdc": 17849.99
+            }
+          ],
+          "campaign_id": 900000091,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #91"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000092,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #92"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000093,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #93"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000094,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #94"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000095,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #95"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000096,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #96"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 801,
+              "clicks": 36,
+              "ctr": 0.0449,
+              "expense": 49268,
+              "broad_gmv": 633420,
+              "broad_order": 1,
+              "broad_order_amount": 1,
+              "broad_roi": 12.86,
+              "broad_cir": 0.08,
+              "cr": 0.0278,
+              "cpc": 49267.51,
+              "direct_order": 1,
+              "direct_order_amount": 1,
+              "direct_gmv": 633420,
+              "direct_roi": 12.86,
+              "direct_cir": 0.08,
+              "direct_cr": 0.0278,
+              "cpdc": 49267.51
+            }
+          ],
+          "campaign_id": 900000097,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #97"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000098,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #98"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000099,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #99"
+        },
+        {
+          "metrics_list": [
+            {
+              "date": "27-10-2026",
+              "impression": 0,
+              "clicks": 0,
+              "ctr": 0,
+              "expense": 0,
+              "broad_gmv": 0,
+              "broad_order": 0,
+              "broad_order_amount": 0,
+              "broad_roi": 0,
+              "broad_cir": 0,
+              "cr": 0,
+              "cpc": 0,
+              "direct_order": 0,
+              "direct_order_amount": 0,
+              "direct_gmv": 0,
+              "direct_roi": 0,
+              "direct_cir": 0,
+              "direct_cr": 0,
+              "cpdc": 0
+            }
+          ],
+          "campaign_id": 900000100,
+          "ad_type": "manual",
+          "campaign_placement": "all",
+          "ad_name": "Ad #100"
+        }
+      ]
+    },
+    "request_id": "e3e3e7f35ee326077c35ac5d03244b00",
+    "error": "",
+    "message": "",
+    "warning": ""
+  }
+}
