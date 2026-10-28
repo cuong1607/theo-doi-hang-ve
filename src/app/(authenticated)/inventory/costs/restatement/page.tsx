@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 import { RestateCogsButton } from "./restate-button";
+import { getShopeeFlags } from "@/lib/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +26,7 @@ const PREVIEW_LIMIT = 500;
  * admin confirms; amounts are computed in SQL (NUMERIC) and shown as-is.
  */
 export default async function CogsRestatementPage() {
+  const legacyShopee = getShopeeFlags().legacyModulesEnabled;
   await requirePermission("cost:manage");
   const engine = new CostEngine({ db: createAdminClient(), logger: () => {} });
   const [summary, candidates] = await Promise.all([engine.restatementSummary(), engine.restatementCandidates(PREVIEW_LIMIT)]);
@@ -96,9 +98,13 @@ export default async function CogsRestatementPage() {
                   <TableRow key={c.orderItemId}>
                     <TableCell className="text-xs text-muted-foreground">{formatDateTime(c.createdAtChannel)}</TableCell>
                     <TableCell className="font-mono text-xs">
-                      <Link href={`/shopee/orders/${c.orderId}`} className="rounded text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
-                        {c.externalOrderSn}
-                      </Link>
+                      {legacyShopee ? (
+                        <Link href={`/shopee/orders/${c.orderId}`} className="rounded text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
+                          {c.externalOrderSn}
+                        </Link>
+                      ) : (
+                        c.externalOrderSn
+                      )}
                     </TableCell>
                     <TableCell className="font-mono text-xs" title={c.productName ?? ""}>
                       {c.sku ?? "—"}

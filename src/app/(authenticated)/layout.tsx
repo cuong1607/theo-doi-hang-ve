@@ -5,6 +5,7 @@ import { AppHeader } from "@/components/app-header";
 import { Toaster } from "@/components/patterns/toast";
 import { requireActiveUser } from "@/lib/auth/session";
 import { displayLogin } from "@/lib/auth/login-identifier";
+import { getShopeeFlags } from "@/lib/feature-flags";
 
 // Layouts don't re-render on client-side navigation, so this check is NOT
 // what protects pages — the proxy (every request) and each page's own
@@ -20,7 +21,7 @@ export default async function AuthenticatedLayout({
   return (
     <TooltipProvider>
       <SidebarProvider>
-        <AppSidebar role={profile.role} />
+        <AppSidebar role={profile.role} shopeeAdsEnabled={getShopeeFlags().adsEnabled} />
         {/* min-w-0: a wide table scrolls inside its own container instead of widening the whole page. */}
         <SidebarInset className="min-w-0">
           <AppHeader

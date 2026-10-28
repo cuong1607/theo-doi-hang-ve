@@ -10,7 +10,7 @@
 //
 // Field names follow the documented v2 schema; sandbox confirmed the list
 // envelope { response: { return: [], more } }. Detail fields still to be
-// confirmed on a real return (docs/shopee-returns.md checklist).
+// confirmed on a real return (docs/archive/shopee-legacy/shopee-returns.md checklist).
 // Pure: no I/O.
 // ============================================================
 import { createHash } from "node:crypto";

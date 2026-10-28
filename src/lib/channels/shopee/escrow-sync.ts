@@ -56,7 +56,7 @@ export function isOrderEligibleForEscrowEstimate(order: { orderStatus: string })
 /**
  * Provider answers meaning "no settlement for this order (yet)". Matched on
  * the error code / message wording; confirmed codes are listed in
- * docs/shopee-financial-validation.md.
+ * docs/archive/shopee-legacy/shopee-financial-validation.md.
  */
 export function isEscrowNotReady(err: unknown): boolean {
   if (!(err instanceof ShopeeApiError)) return false;

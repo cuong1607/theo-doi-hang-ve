@@ -22,6 +22,10 @@ import { runShopeeWorkerBursts } from "@/lib/channels/shopee/server";
 import { runShopeeSchedulerTick } from "@/lib/channels/shopee/sync-service";
 import { runReturnNotificationTickSafe } from "@/lib/return-operations/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getShopeeFlags } from "@/lib/feature-flags";
+import { activeSyncTypes, retiredSyncTypes } from "@/lib/channels/core/sync-domains";
+import { getShopee } from "@/lib/channels/shopee/server";
+import { keepShopeeTokensAlive } from "@/lib/channels/shopee/token-keepalive";
 
 export const dynamic = "force-dynamic";
 // Tick (~1 s) + worker bursts (SHOPEE_SYNC_WORKER_BUDGET_MS, default 45 s) + margin.
@@ -38,7 +42,9 @@ async function handle(request: Request) {
 
   try {
     const db = createAdminClient();
-    const tick = await runShopeeSchedulerTick(db, { config, providerMode: mode });
+    // SHOPEE-ADS-0: only active domains are scheduled; retired types are cancelled (history kept)
+    const flags = getShopeeFlags();
+    const tick = await runShopeeSchedulerTick(db, { config, providerMode: mode, syncTypes: activeSyncTypes(flags), retiredSyncTypes: retiredSyncTypes(flags) });
     console.info(
       JSON.stringify({
         source: "sync-scheduler",
@@ -57,7 +63,9 @@ async function handle(request: Request) {
     );
     for (const e of tick.enqueued) console.info(JSON.stringify({ source: "sync-scheduler", event: "job_enqueued", jobId: e.jobId, shopId: e.shopId, syncType: e.syncType }));
     // SHOPEE-6B: scheduled "hàng hoàn đã giao" notifications (pre-sync + generate); never throws
-    const notifications = await runReturnNotificationTickSafe(db);
+    const notifications = flags.legacyModulesEnabled ? await runReturnNotificationTickSafe(db) : null;
+    // keep shop tokens alive while nothing else calls Shopee (live mode only; never throws)
+    const keepalive = mode === "live" ? await runTokenKeepalive(db) : null;
     if (notifications && notifications.presyncEnqueued > 0) tick.workDue = true;
     // §14: say WHY queued jobs are held back (logged only when something is blocked).
     const pending = await diagnosePendingQueue(db, config).catch(() => []);
@@ -74,10 +82,21 @@ async function handle(request: Request) {
         after(() => runShopeeWorkerBursts({ bursts: config.schedulerWorkerTriggers, timeBudgetMs, source: "scheduler" }).then(() => undefined));
       }
     }
-    return NextResponse.json({ ok: true, ...tick, workerTriggered, returnNotifications: notifications, pending: pending.map(({ jobId, syncType, status, reason, detail }) => ({ jobId, syncType, status, reason, detail })), configWarnings: config.warnings });
+    return NextResponse.json({ ok: true, ...tick, workerTriggered, returnNotifications: notifications, tokenKeepalive: keepalive, flags, pending: pending.map(({ jobId, syncType, status, reason, detail }) => ({ jobId, syncType, status, reason, detail })), configWarnings: config.warnings });
   } catch (err) {
     console.error(JSON.stringify({ source: "sync-scheduler", event: "SYNC_SCHEDULER_FAILED", message: err instanceof Error ? err.message.slice(0, 300) : String(err) }));
     return NextResponse.json({ ok: false, error: "scheduler_failed" }, { status: 500 });
+  }
+}
+
+async function runTokenKeepalive(db: ReturnType<typeof createAdminClient>) {
+  try {
+    const r = await keepShopeeTokensAlive(db, getShopee().service, { maxIdleHours: Number(process.env.SHOPEE_TOKEN_KEEPALIVE_HOURS) || 24 });
+    if (r.refreshed.length > 0 || r.failed.length > 0) console.info(JSON.stringify({ source: "sync-scheduler", event: "token_keepalive", refreshed: r.refreshed.length, failed: r.failed }));
+    return r;
+  } catch (err) {
+    console.error(JSON.stringify({ source: "sync-scheduler", event: "token_keepalive_failed", message: err instanceof Error ? err.message.slice(0, 200) : String(err) }));
+    return null;
   }
 }
 

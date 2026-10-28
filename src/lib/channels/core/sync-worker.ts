@@ -81,6 +81,7 @@ export class SyncWorker {
   private readonly random?: () => number;
   private readonly log: WorkerLogger;
   private readonly region: string;
+  private readonly syncTypes: readonly string[];
 
   constructor(deps: {
     db: SupabaseClient;
@@ -94,8 +95,11 @@ export class SyncWorker {
     logger?: WorkerLogger;
     /** Where this worker runs (VERCEL_REGION) — tagged on every slice for the region benchmark. */
     region?: string;
+    /** SHOPEE-ADS-0: job types this worker may claim (default: every runnable type). Empty = claims nothing. */
+    syncTypes?: readonly string[];
   }) {
     this.region = deps.region ?? "local";
+    this.syncTypes = deps.syncTypes ?? RUNNABLE_SYNC_TYPES;
     this.db = deps.db;
     this.config = deps.config;
     this.workerId = deps.workerId;
@@ -126,9 +130,10 @@ export class SyncWorker {
 
   /** Claims one job and runs one slice of it. Null when nothing is claimable. */
   async runOne(timeLeftMs: number = this.config.sliceTimeBudgetMs): Promise<SliceReport | null> {
+    if (this.syncTypes.length === 0) return null; // no domain active (e.g. legacy retired, Ads not built yet)
     const job = await claimNextSyncJob(this.db, this.workerId, {
       maxRunning: this.config.globalWorkers,
-      syncTypes: RUNNABLE_SYNC_TYPES,
+      syncTypes: this.syncTypes,
       shopIds: this.config.shopAllowlist,
       maxPerShop: this.config.maxRunningPerShop,
     });

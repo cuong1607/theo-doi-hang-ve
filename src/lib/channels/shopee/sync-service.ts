@@ -37,6 +37,7 @@ import { MAX_REPAIR_RETURN_SNS, ReturnSyncJobRunner, ShopeeReturnSyncService } f
 import { EscrowSyncJobRunner, MAX_REPAIR_ESCROW_ORDERS, ShopeeEscrowSyncService } from "./escrow-sync.ts";
 import type { ShopeePaymentProvider } from "./payment-provider.ts";
 import { JobRefusedError } from "./sync-errors.ts";
+import { LEGACY_DISABLED_CODE } from "../core/sync-domains.ts";
 
 export interface ShopeeSyncRequest {
   shopId: string;
@@ -256,7 +257,18 @@ const UNUSABLE_CONNECTIONS = new Set(["disconnected", "expired", "revoked"]);
  * A type is due when neither a success nor a finished attempt happened
  * within its interval (a failing shop is not hammered every minute).
  */
-export async function runShopeeSyncScheduler(db: SupabaseClient, options: { config: SyncConfig; providerMode: ProviderMode; now?: Date }): Promise<SchedulerResult> {
+export interface SchedulerOptions {
+  config: SyncConfig;
+  providerMode: ProviderMode;
+  now?: Date;
+  /** SHOPEE-ADS-0: job types allowed to be enqueued (default: every scheduled type). */
+  syncTypes?: readonly RunnableSyncType[];
+  /** SHOPEE-ADS-0: retired job types: their pending / retry jobs are cancelled every tick (history kept). */
+  retiredSyncTypes?: readonly string[];
+}
+
+export async function runShopeeSyncScheduler(db: SupabaseClient, options: SchedulerOptions): Promise<SchedulerResult> {
+  const scheduled = (options.syncTypes ?? SCHEDULED_TYPES).filter((t) => SCHEDULED_TYPES.includes(t));
   const now = options.now ?? new Date();
   const result: SchedulerResult = { recovered: 0, enqueued: [], alreadyQueued: [], notDue: 0, skippedShops: [] };
   result.recovered = (await recoverStaleSyncJobs(db, options.config.staleJobMinutes)).length;
@@ -311,14 +323,14 @@ export async function runShopeeSyncScheduler(db: SupabaseClient, options: { conf
     .from("channel_sync_states")
     .select("shop_id, sync_type, last_success_at, metadata")
     .in("shop_id", eligible)
-    .in("sync_type", [...SCHEDULED_TYPES]);
+    .in("sync_type", [...scheduled]);
   if (stateError) throw new Error(`Không đọc được sync state: ${stateError.message}`);
   const stateByKey = new Map(
     ((states ?? []) as Array<{ shop_id: string; sync_type: string; last_success_at: string | null; metadata: Record<string, unknown> | null }>).map((s) => [`${s.shop_id}|${s.sync_type}`, s]),
   );
 
   for (const shopId of eligible) {
-    for (const syncType of SCHEDULED_TYPES) {
+    for (const syncType of scheduled) {
       if (options.config.disabledSyncTypes.includes(syncType)) continue;
       const intervalMs = intervalMinutes(options.config, syncType) * 60_000;
       const state = stateByKey.get(`${shopId}|${syncType}`);
@@ -348,6 +360,8 @@ export interface SchedulerTickResult extends SchedulerResult {
   /** Finished jobs older than config.jobRetentionDays deleted this run. */
   pruned: number;
   pruneError: string | null;
+  /** SHOPEE-ADS-0: pending / retry jobs of retired types cancelled this run. */
+  retiredCancelled: number;
   /** SHOPEE-9A: rows removed by the retention policy this run. */
   retention: { snapshots: number; logs: number; error: string | null };
   /** At least one job is claimable now → the caller starts worker burst(s). */
@@ -364,7 +378,7 @@ const PRUNE_BATCH = 500;
  *   jobs → heartbeat "success" (or "error", then rethrow).
  * Starting workers is the caller's job (route: after() bursts).
  */
-export async function runShopeeSchedulerTick(db: SupabaseClient, options: { config: SyncConfig; providerMode: ProviderMode; now?: Date }): Promise<SchedulerTickResult> {
+export async function runShopeeSchedulerTick(db: SupabaseClient, options: SchedulerOptions): Promise<SchedulerTickResult> {
   const started = Date.now();
   const now = options.now ?? new Date();
   await markHeartbeatRun(db, SCHEDULER_HEARTBEAT, now);
@@ -378,8 +392,9 @@ export async function runShopeeSchedulerTick(db: SupabaseClient, options: { conf
     else pruned = Number(prunedRows ?? 0);
     // SHOPEE-9A retention: raw snapshot history + operational logs only (canonical data never)
     const retention = await pruneRetention(db, options.config);
-    const workDue = await hasDueSyncJobs(db);
-    const tick: SchedulerTickResult = { ...result, pruned, pruneError, retention, workDue, durationMs: Date.now() - started };
+    const retiredCancelled = await cancelRetiredSyncJobs(db, options.retiredSyncTypes ?? []);
+    const workDue = await hasDueSyncJobs(db, new Date(), options.syncTypes);
+    const tick: SchedulerTickResult = { ...result, pruned, pruneError, retention, retiredCancelled, workDue, durationMs: Date.now() - started };
     await markHeartbeatSuccess(db, SCHEDULER_HEARTBEAT, {
       recovered: tick.recovered,
       enqueued: tick.enqueued.length,
@@ -416,12 +431,34 @@ export async function pruneRetention(db: SupabaseClient, config: SyncConfig): Pr
 }
 
 /** True when at least one job is claimable now (used to decide whether to chain another worker run). */
-export async function hasDueSyncJobs(db: SupabaseClient, now: Date = new Date()): Promise<boolean> {
-  const { count, error } = await db
+export async function hasDueSyncJobs(db: SupabaseClient, now: Date = new Date(), syncTypes?: readonly string[]): Promise<boolean> {
+  if (syncTypes && syncTypes.length === 0) return false;
+  let q = db
     .from("channel_sync_jobs")
     .select("id", { count: "exact", head: true })
     .in("status", ["pending", "retry"])
     .or(`next_attempt_at.is.null,next_attempt_at.lte.${now.toISOString()}`);
+  if (syncTypes) q = q.in("sync_type", [...syncTypes]);
+  const { count, error } = await q;
   if (error) throw new Error(`Không đọc được hàng đợi: ${error.message}`);
   return (count ?? 0) > 0;
+}
+
+/**
+ * SHOPEE-ADS-0: pending / retry jobs of retired types → cancelled with the
+ * reason (rows kept as history). Running ones are never interrupted: the
+ * worker no longer claims retired types, and a continued slice comes back as
+ * pending → cancelled by the next tick. Idempotent, one UPDATE.
+ */
+export async function cancelRetiredSyncJobs(db: SupabaseClient, retired: readonly string[]): Promise<number> {
+  if (retired.length === 0) return 0;
+  const nowIso = new Date().toISOString();
+  const { data, error } = await db
+    .from("channel_sync_jobs")
+    .update({ status: "cancelled", finished_at: nowIso, cancelled_at: nowIso, next_attempt_at: null, error_code: LEGACY_DISABLED_CODE, error_message: "Module Shopee cũ đã ngừng (SHOPEE_LEGACY_MODULES_ENABLED=false)." })
+    .in("sync_type", [...retired])
+    .in("status", ["pending", "retry"])
+    .select("id");
+  if (error) throw new Error(`Không huỷ được job của module đã ngừng: ${error.message}`);
+  return (data ?? []).length;
 }

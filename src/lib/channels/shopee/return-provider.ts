@@ -33,7 +33,7 @@ export const RETURN_PATHS = {
   detail: "/api/v2/returns/get_return_detail",
 } as const;
 
-/** Documented: time range ≤ 15 days, page_size ≤ 100 — UNVERIFIED on Go-Live (docs/shopee-returns.md). */
+/** Documented: time range ≤ 15 days, page_size ≤ 100 — UNVERIFIED on Go-Live (docs/archive/shopee-legacy/shopee-returns.md). */
 export const MAX_RETURN_WINDOW_SECONDS = 15 * 24 * 60 * 60;
 export const RETURN_LIST_PAGE_SIZE = 50;
 

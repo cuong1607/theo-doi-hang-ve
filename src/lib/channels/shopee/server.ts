@@ -30,6 +30,8 @@ import { FixtureShopeeReturnProvider, loadReturnFixtures, RealShopeeReturnProvid
 import { FixtureShopeeIncomeProvider, RealShopeeIncomeProvider } from "./income-provider.ts";
 import { FixtureShopeeReturnLogisticsProvider, loadReturnLogisticsFixtures, RealShopeeReturnLogisticsProvider } from "./return-logistics-provider.ts";
 import { getShopeeProviderMode } from "./provider-mode.ts";
+import { getShopeeFlags } from "../../feature-flags.ts";
+import { activeSyncTypes } from "../core/sync-domains.ts";
 
 let cached: { config: ShopeeConfig; client: ShopeeClient; service: ShopeeConnectionService } | null = null;
 
@@ -101,6 +103,8 @@ export function getShopeeSyncWorker(): SyncWorker {
     config,
     workerId: `${region}-${randomUUID().slice(0, 8)}`,
     createRunner: createShopeeRunnerFactory({ db, config, providers }),
+    // SHOPEE-ADS-0: only job types of active domains are claimed (legacy retired = none)
+    syncTypes: activeSyncTypes(getShopeeFlags()),
     classifyError: toJobFailure,
     region,
   });

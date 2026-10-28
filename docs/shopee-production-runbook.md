@@ -1,6 +1,8 @@
 # Shopee — runbook vận hành production (SHOPEE-9A)
 
-Trang theo dõi chính: **`/shopee/system-health`** (admin). Bảng job chi tiết: `/shopee/sync`.
+> **SHOPEE-ADS-0 (28/10/2026):** các module Shopee cũ đã ngừng (`SHOPEE_LEGACY_MODULES_ENABLED=false`) — trang `/shopee/system-health` và `/shopee/sync` chuyển về `/shopee/ads`, scheduler không còn job cũ. Phần queue / scheduler / worker / token / retention / rate limit dưới đây vẫn đúng và sẽ dùng cho Ads. Xem [shopee-ads-migration.md](shopee-ads-migration.md).
+
+Trang theo dõi chính: **`/shopee/system-health`** (admin; chỉ khi bật module cũ). Bảng job chi tiết: `/shopee/sync`.
 Kiến trúc: pg_cron (mỗi phút) → `/api/internal/shopee/sync-scheduler` → tick (heartbeat, thu hồi job treo, lên lịch job đến hạn, dọn dữ liệu, thông báo hàng hoàn) → worker bursts trong `after()`. Không gì gọi Shopee khi render trang; mọi nút bấm chỉ đưa job vào hàng đợi.
 
 ## 0. Mục tiêu độ mới (SLO) và ngưỡng cảnh báo

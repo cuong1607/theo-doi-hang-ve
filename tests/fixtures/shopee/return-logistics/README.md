@@ -5,7 +5,7 @@ Hand-written from the **documented** field names of
 `v2.logistics.get_tracking_info` — **not** captured from a real VN shop.
 Status values (`LOGISTICS_DELIVERY_DONE`, `RETURNED`, …) are the documented enums
 and are CANDIDATES until a real payload confirms them
-(docs/shopee-return-operations.md §API validation). Replace / add real sanitized
+(docs/archive/shopee-legacy/shopee-return-operations.md §API validation). Replace / add real sanitized
 payloads captured with `npm run shopee:live -- returns --save` / `failed --save`.
 
 Loaded by `loadReturnLogisticsFixtures()` (fixture provider mode):

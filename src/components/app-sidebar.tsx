@@ -2,30 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  HeartPulse,
-  LayoutDashboard,
-  PackageCheck,
-  PackagePlus,
-  History,
-  FileText,
-  PackageSearch,
-  Box,
-  Truck,
-  Users,
-  Wallet,
-  Receipt,
-  Bell,
-  Store,
-  ShoppingBag,
-  ReceiptText,
-  Calculator,
-  RefreshCw,
-  Undo2,
-  Landmark,
-  Gauge,
-  ChartColumn,
-} from "lucide-react";
+import { LayoutDashboard, Megaphone, PackagePlus, History, FileText, PackageSearch, Box, Truck, Users, Wallet, Receipt, Bell, Store, Calculator } from "lucide-react";
 
 import {
   Sidebar,
@@ -52,6 +29,8 @@ type NavItem = {
   // Menu visibility only (UX). Pages/actions enforce the same permission
   // server-side.
   permission?: Permission;
+  /** Feature flag the item depends on (SHOPEE-ADS-0). */
+  flag?: "shopeeAds";
 };
 
 const navGroups: { label?: string; items: NavItem[] }[] = [
@@ -127,61 +106,17 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
     ],
   },
   {
+    // SHOPEE-ADS-0: the legacy Shopee modules (dashboard, analytics, products,
+    // orders, returns, return operations, payouts, sync, system health) are
+    // retired and removed from navigation; only the Ads module remains.
     label: "SHOPEE",
     items: [
       {
-        title: "Dashboard Shopee",
-        href: "/shopee/dashboard",
-        icon: Gauge,
+        title: "Quảng cáo Shopee",
+        href: "/shopee/ads",
+        icon: Megaphone,
         permission: "channel:view",
-      },
-      {
-        title: "Phân tích Shopee",
-        href: "/shopee/analytics",
-        icon: ChartColumn,
-        permission: "channel:view",
-      },
-      {
-        title: "Sản phẩm Shopee",
-        href: "/shopee/products",
-        icon: ShoppingBag,
-        permission: "channel:view",
-      },
-      {
-        title: "Đơn hàng Shopee",
-        href: "/shopee/orders",
-        icon: ReceiptText,
-        permission: "channel:view",
-      },
-      {
-        title: "Trả hàng Shopee",
-        href: "/shopee/returns",
-        icon: Undo2,
-        permission: "channel:view",
-      },
-      {
-        title: "Hàng hoàn đã giao",
-        href: "/shopee/returns/operations",
-        icon: PackageCheck,
-        permission: "channel:view",
-      },
-      {
-        title: "Giải ngân & payout",
-        href: "/shopee/payouts",
-        icon: Landmark,
-        permission: "channel:view",
-      },
-      {
-        title: "Đồng bộ Shopee",
-        href: "/shopee/sync",
-        icon: RefreshCw,
-        permission: "channel:view",
-      },
-      {
-        title: "Sức khoẻ hệ thống",
-        href: "/shopee/system-health",
-        icon: HeartPulse,
-        permission: "channel:manage",
+        flag: "shopeeAds",
       },
     ],
   },
@@ -210,12 +145,12 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
   },
 ];
 
-export function AppSidebar({ role }: { role: Role }) {
+export function AppSidebar({ role, shopeeAdsEnabled = false }: { role: Role; shopeeAdsEnabled?: boolean }) {
   const pathname = usePathname();
   const visibleGroups = navGroups
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) => !item.permission || hasPermission(role, item.permission)),
+      items: group.items.filter((item) => (!item.permission || hasPermission(role, item.permission)) && (item.flag !== "shopeeAds" || shopeeAdsEnabled)),
     }))
     .filter((group) => group.items.length > 0);
   // Exactly one active item: the longest href matching the path

@@ -1138,7 +1138,7 @@ get_escrow_detail ─► ShopeePaymentProvider ─► escrow-adapter (+ financia
 - **Từ điển** `src/lib/channels/shopee/financial-dictionary.ts` là nơi duy nhất
   hiểu tên trường tiền của Shopee: cột đích, category, tác động
   (inflow/outflow/signed/info), ai chịu, có thuộc công thức không, đã kiểm chứng
-  chưa. Kiểm chứng: `docs/shopee-financial-validation.md`.
+  chưa. Kiểm chứng: `docs/archive/shopee-legacy/shopee-financial-validation.md`.
 - **Thu nhập thực tế** = `escrow_amount_after_adjustment ?? escrow_amount` (cột
   generated `actual_shopee_income`) — không bao giờ tự cộng lại từ component.
 - `calculated_settlement` = Σ component `included_in_settlement` (= thuộc công
@@ -1183,7 +1183,7 @@ dữ liệu khi deploy). Phiên bản: tài chính `shopee-fin-v3`, giá vốn
   tái tạo từ phí; không dùng `buyer_total_amount`, không dùng `channel_total_amount`.
   Hằng số `ESTIMATED_ORDER_REVENUE_FIELD` (financial-dictionary.ts).
   **Trạng thái mapping: ứng viên — chờ so với Seller Center**
-  (`docs/shopee-financial-validation.md` §10).
+  (`docs/archive/shopee-legacy/shopee-financial-validation.md` §10).
 - **Cột** `order_financials.estimated_order_revenue numeric(18,2)` +
   `estimated_revenue_source` (`escrow_estimate` | `escrow_settlement`),
   `estimated_revenue_synced_at`, `estimate_last_attempt_at/_error_code/_error_message`.

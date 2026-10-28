@@ -11,7 +11,7 @@
 //             package-level logistics_status (LOGISTICS_*)
 //
 // EVERY provider value below is a CANDIDATE taken from the documented enums —
-// NOT yet confirmed on a real VN payload (docs/shopee-return-operations.md
+// NOT yet confirmed on a real VN payload (docs/archive/shopee-legacy/shopee-return-operations.md
 // §API validation). Unknown values map to "unknown" (shown raw, flagged
 // needs_attention), never to a guessed status. Description text is NEVER
 // parsed for meaning.

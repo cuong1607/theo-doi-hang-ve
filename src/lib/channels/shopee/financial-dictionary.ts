@@ -18,7 +18,7 @@
 //   fundedBy    who bears it
 //   settlement  part of the escrow formula used for calculated_settlement
 //   verified    meaning confirmed on REAL Vietnam payloads
-//               (docs/shopee-financial-validation.md). A component is
+//               (docs/archive/shopee-legacy/shopee-financial-validation.md). A component is
 //               included in calculated_settlement only if settlement AND
 //               verified — uncertain fields are stored, never summed.
 //
@@ -189,7 +189,7 @@ export const IGNORED_FIELD_PATTERNS: readonly RegExp[] = [/_pri$/, /^order_charg
 
 /**
  * v1  first release, nothing verified (calculated_settlement always NULL)
- * v2  formula verified on real VN payloads (docs/shopee-financial-validation.md).
+ * v2  formula verified on real VN payloads (docs/archive/shopee-legacy/shopee-financial-validation.md).
  * v3  estimated order revenue (escrow_amount → order_financials.estimated_order_revenue)
  *     + estimated profit against VAT-adjusted COGS (migration 00052).
  * Bumping the version makes every synced order a candidate for re-fetch +
@@ -202,6 +202,6 @@ export const FINANCIAL_CALCULATION_VERSION = "shopee-fin-v3";
  * (Shopee: the amount the seller is expected to receive; it can change until
  * the order completes). Taken as-is — never rebuilt from fees. Mapping
  * status: candidate, pending the Seller Center comparison in
- * docs/shopee-financial-validation.md §10.
+ * docs/archive/shopee-legacy/shopee-financial-validation.md §10.
  */
 export const ESTIMATED_ORDER_REVENUE_FIELD = "escrow_amount" as const;

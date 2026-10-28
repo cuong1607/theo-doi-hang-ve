@@ -10,6 +10,7 @@ import { escapeIlikeTerm } from "@/lib/supabase/search";
 
 import type { CostEventType, CostLedgerEntry, PurchaseCostBasis } from "./types.ts";
 import type { ProductCostState } from "./engine.ts";
+import { getShopeeFlags } from "../feature-flags.ts";
 
 export interface ProductCostOverviewRow {
   productId: string;
@@ -182,7 +183,8 @@ export async function getLedgerSourceLinks(entries: CostLedgerEntry[]): Promise<
     orderItemIds.length ? db.from("channel_order_items").select("id, order_id").in("id", orderItemIds) : Promise.resolve({ data: [] }),
   ]);
   for (const r of (receipts.data ?? []) as Array<{ id: string; receipt_id: string }>) links.set(r.id, `/receipts/${r.receipt_id}`);
-  for (const o of (orders.data ?? []) as Array<{ id: string; order_id: string }>) links.set(o.id, `/shopee/orders/${o.order_id}`);
+  // SHOPEE-ADS-0: the order detail page belongs to the retired modules — no dead link
+  if (getShopeeFlags().legacyModulesEnabled) for (const o of (orders.data ?? []) as Array<{ id: string; order_id: string }>) links.set(o.id, `/shopee/orders/${o.order_id}`);
   return links;
 }
 

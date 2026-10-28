@@ -9,6 +9,7 @@ import { getShopeeConnectionHealth, type ShopeeConnectionHealth, type TokenStatu
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
+import { DisconnectButton } from "./disconnect-button";
 import { TestConnectionButton } from "./test-connection-button";
 
 // Connection state is read fresh on every visit and the ?shopee=… banner
@@ -105,8 +106,13 @@ export default async function ShopeeSettingsPage({
       <div>
         <h1 className="text-2xl font-semibold">Tích hợp Shopee</h1>
         <p className="text-sm text-muted-foreground">
-          Kết nối shop Shopee (giai đoạn thí điểm: 1 shop). Chưa đồng bộ sản phẩm / đơn hàng ở bước này.
+          Kết nối / kết nối lại / ngắt kết nối các shop Shopee. Kết nối này được dùng cho module Quảng cáo Shopee; token được tự làm mới định kỳ.
         </p>
+        {shops.length > 0 && (
+          <div className="mt-3">
+            <ConnectButton disabled={!canConnect} label="Kết nối thêm shop" variant="outline" />
+          </div>
+        )}
       </div>
 
       {params.shopee === "connected" || params.shopee === "reconnected" ? (
@@ -190,6 +196,7 @@ export default async function ShopeeSettingsPage({
                     variant={needsReconnect ? "primary" : "outline"}
                   />
                   <TestConnectionButton shopId={shop.id} disabled={!canConnect || health.tokenStatus === "missing"} />
+                  {health.connectionStatus !== "disconnected" && <DisconnectButton shopId={shop.id} shopName={shop.shopName} />}
                 </div>
               </CardContent>
             </Card>

@@ -247,7 +247,8 @@ test("sidebar: exactly one active item (longest match); header title for nested 
   assert.equal(activeNavHref("/receipts/abc/edit", hrefs), "/receipts");
   assert.equal(activeNavHref("/shopee/orders/123", hrefs), "/shopee/orders");
   assert.equal(activeNavHref("/shopee/orderstuff", hrefs), null, "segment match only");
-  assert.equal(pageTitleFor("/shopee/orders/9f0c", "BRAND"), "Đơn hàng Shopee");
+  assert.equal(pageTitleFor("/shopee/ads/campaigns", "BRAND"), "Quảng cáo Shopee");
+  assert.equal(pageTitleFor("/shopee/orders/9f0c", "BRAND"), "BRAND", "SHOPEE-ADS-0: retired module has no title");
   assert.equal(pageTitleFor("/inventory/costs/abc", "BRAND"), "Giá vốn");
   assert.equal(pageTitleFor("/unknown", "BRAND"), "BRAND");
 });

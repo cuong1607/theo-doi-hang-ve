@@ -6,7 +6,7 @@
 //   v2.logistics.get_tracking_number       (Hoàn Hủy: tracking number)
 //   v2.logistics.get_tracking_info         (Hoàn Hủy: event history)
 // Field names follow the documented v2 schema — NOT yet confirmed on a real
-// VN payload (docs/shopee-return-operations.md §API validation). Tolerant:
+// VN payload (docs/archive/shopee-legacy/shopee-return-operations.md §API validation). Tolerant:
 // unknown fields ignored, missing optional fields → null, never a guess.
 //
 // delivered_to_seller_at rules (also in the docs):

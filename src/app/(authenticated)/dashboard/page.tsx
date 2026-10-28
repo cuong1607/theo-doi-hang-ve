@@ -51,6 +51,7 @@ import {
 import { DashboardFilters } from "./dashboard-filters";
 import { ShopeeCashflow } from "./shopee-cashflow";
 import { ShopeeKpis } from "./shopee-kpis";
+import { getShopeeFlags } from "@/lib/feature-flags";
 
 const SHIFT_LABELS: Record<string, string> = {
   morning: "Ca sáng",
@@ -95,7 +96,8 @@ export default async function DashboardPage({
   }>;
 }) {
   const auth = await requirePermission("dashboard:view");
-  const canSeeShopee = hasPermission(auth.profile.role, "channel:view");
+  // SHOPEE-ADS-0: the Shopee KPI / cash-flow widgets belong to the retired modules
+  const canSeeShopee = getShopeeFlags().legacyModulesEnabled && hasPermission(auth.profile.role, "channel:view");
   const params = await searchParams;
   const range: RangePreset = isRangePreset(params.range ?? "") ? (params.range as RangePreset) : "today";
   const supplierId = (params.supplier ?? "").trim();

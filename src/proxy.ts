@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
+import { getShopeeFlags, isLegacyShopeeApi, isLegacyShopeePage, legacyRedirectTarget } from "@/lib/feature-flags";
+
 // ============================================================
 // First line of defense, on every request (pages, RSC navigations, API):
 //   1. refresh the Supabase session cookie (required for Server Components),
@@ -121,6 +123,21 @@ export async function proxy(request: NextRequest) {
     if (isServerAction) return supabaseResponse;
     if (isApi) return deny(403, "Tài khoản đã bị vô hiệu hóa.");
     return redirectTo("/account-disabled");
+  }
+
+  // SHOPEE-ADS-0: retired Shopee modules. One policy for every entry point:
+  // pages → redirect to /shopee/ads (or /dashboard); APIs, server actions and
+  // any non-GET → 404 with a clear reason. Nothing behind them runs (no DB
+  // query, no Shopee call).
+  const flags = getShopeeFlags();
+  if (!flags.legacyModulesEnabled && (isLegacyShopeePage(pathname) || isLegacyShopeeApi(pathname))) {
+    if (isApi || isServerAction || request.method !== "GET") {
+      return withCookies(NextResponse.json({ success: false, errorCode: "legacy_module_disabled", errorMessage: "Module Shopee này đã ngừng sử dụng." }, { status: 404 }));
+    }
+    return redirectTo(legacyRedirectTarget(flags));
+  }
+  if (!flags.adsEnabled && (pathname === "/shopee/ads" || pathname.startsWith("/shopee/ads/"))) {
+    return isApi || isServerAction ? withCookies(NextResponse.json({ success: false, errorCode: "ads_disabled", errorMessage: "Quảng cáo Shopee đang tắt." }, { status: 404 })) : redirectTo("/dashboard");
   }
 
   // Protected content must not be served from shared caches.

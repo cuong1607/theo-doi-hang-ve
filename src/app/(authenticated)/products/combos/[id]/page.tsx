@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 import { ComboActions } from "../combo-actions";
+import { getShopeeFlags } from "@/lib/feature-flags";
 
 export const dynamic = "force-dynamic";
 
@@ -198,9 +199,13 @@ export default async function ComboDetailPage({ params }: { params: Promise<{ id
                   <TableRow key={l.id}>
                     <TableCell className="text-xs">{formatDateTime(l.channel_orders.created_at_channel)}</TableCell>
                     <TableCell className="font-mono text-xs">
-                      <Link href={`/shopee/orders/${l.order_id}`} className="text-primary underline-offset-4 hover:underline">
-                        {l.channel_orders.external_order_sn}
-                      </Link>
+                      {getShopeeFlags().legacyModulesEnabled ? (
+                        <Link href={`/shopee/orders/${l.order_id}`} className="text-primary underline-offset-4 hover:underline">
+                          {l.channel_orders.external_order_sn}
+                        </Link>
+                      ) : (
+                        l.channel_orders.external_order_sn
+                      )}
                     </TableCell>
                     <TableCell className="text-right">{formatQuantity(l.quantity)}</TableCell>
                     <TableCell className="text-right">

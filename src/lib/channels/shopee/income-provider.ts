@@ -11,7 +11,7 @@
 //   get_wallet_transaction_list wallet ledger — LOCAL shops' payouts are the
 //                               withdrawals in it
 // get_income_detail is NOT used: on the sandbox the released mode rejected
-// every release_time_from/to form (docs/shopee-payouts.md).
+// every release_time_from/to form (docs/archive/shopee-legacy/shopee-payouts.md).
 // ============================================================
 import type { ShopeeClient } from "./client.ts";
 import { ShopeeApiError } from "./errors.ts";
