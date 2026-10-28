@@ -1,30 +1,74 @@
 # Shopee Ads API — verified inventory (SHOPEE-ADS-1)
 
-> Status 2026-10-28: **discovery BLOCKED in the local environment.** The local
-> connection is the Shopee **sandbox** (test partner 1247294, shop 227974291),
-> and the sandbox has **no Ads service behind its gateway**. No Ads payload has
-> been seen yet, so this file records route-level evidence only. No field,
-> unit, grain, enum or semantic below is a verified fact unless it is marked ✅.
+> **Status 2026-10-28**
+>
+> - **Sandbox:** no Ads backend (see §2).
+> - **Production:** the read-only probe (ADS-1A, §1) is built and deployable, but it has **not been run yet**. Every production endpoint is `NOT_TESTED`.
+> - Nothing below is a verified fact unless it is marked ✅ or `VERIFIED_PROD`.
 
-## 1. How to discover (tool)
+## 1. Production read-only probe (SHOPEE-ADS-1A)
 
-`scripts/shopee/ads-discovery.ts` (`npm run shopee:ads -- …`, Git Bash: prefix
-`MSYS_NO_PATHCONV=1`):
+The production partner key and encryption key exist only on Vercel ("Sensitive" env vars). The probe therefore runs **inside the app**.
 
-| command | what it does |
+**Page:** `/shopee/ads/probe`
+- Admin only (`channel:manage`); staff and viewer are sent to `/forbidden`. Not linked from the navigation.
+- The admin picks ONE connected live shop, types `READ-ONLY`, then presses "Chạy probe chỉ đọc".
+- The browser never calls Shopee; every call is made by the server.
+- The sanitized report comes back to the browser and is downloaded as JSON.
+- **Nothing is written** (no Ads tables, no snapshots, no jobs). The only possible write is the normal token refresh of the app's existing token flow.
+
+**Code:**
+
+| file | role |
 |---|---|
-| `shops [--prod]` | lists connected live shops |
-| `probe <path> ['{json}'] [--save name]` | one signed GET; prints HTTP status, latency, request id, provider error, raw body if not JSON, sanitized payload |
-| `survey [--save] [--days N]` | control path + every candidate below with the smallest safe params; chains **real** campaign ids from the list into setting / performance calls; summary table |
+| `src/lib/channels/shopee/ads/probe.ts` | Pure core: allowlist, guard, runner, classification, fixture builder |
+| `src/lib/channels/shopee/ads/probe-server.ts` | Server transport: `getShopee()` + `getValidAccessToken` + `client.signedUrl` + plain fetch |
+| `src/app/(authenticated)/shopee/ads/probe/` | Admin page and server action |
+| `src/lib/channels/shopee/ads/sanitize.ts` | Fixture sanitizer + `findFixtureSecrets` (review step) |
 
-Safety rules:
-- Only `GET /api/v2/ads/get_*` can be called. Create, edit, status, bid, budget and delete endpoints are refused before any request is sent; this was checked with `create_manual_product_ads` and a non-Ads path.
-- No retries, and at most one call per second.
-- The signed URL is never printed. Token and partner key are scrubbed from response text. Secret-looking keys, and the shop and partner ids, are dropped from saved fixtures.
-- Default mode uses the **local** connection only.
-- `--prod` reads production tokens from the cloud DB **read-only** and never refreshes them, the same as `npm run shopee:live`. It refuses a sandbox host.
+**Guards** (fail closed; tested in `probe.test.ts`):
+- GET only, and only the 9 exact allowlisted paths (`ADS_PROBE_ENDPOINTS`). No caller-supplied path is accepted. Mutation-named paths and non-Ads paths are rejected before any request.
+- Production needs explicit confirmation: the typed `READ-ONLY` in the UI, `confirmProduction` in the core, `--prod` in the CLI.
+- At most **25 requests per run** (a hard ceiling that callers can only lower), sent sequentially with a 1 s gap.
+- Circuit breaker: stops after 3 consecutive 5xx / rate-limit / unavailable / auth answers, or after 2 auth errors.
+- Logs carry metadata only: shop id, endpoint label, method, status, latency, classification, provider error code, request id, record counts. They never contain the URL, a body, or a token or key.
+- Each call is classified as `AVAILABLE`, `PERMISSION_DENIED`, `REAUTH_REQUIRED`, `SHOP_NOT_ELIGIBLE`, `ENDPOINT_UNAVAILABLE`, `PARAM_ERROR`, `PROVIDER_ERROR` or `UNKNOWN`, and keeps the exact HTTP status, provider error code and message.
 
-Fixtures go to `src/lib/channels/shopee/ads/__fixtures__/provider/<name>.json`, holding `_meta` (endpoint, params, environment, latency) plus the sanitized response. Only successful answers are saved.
+**Sanitizer**, applied to every saved body:
+- Drops credential-like keys (token / secret / password / authorization / cookie / sign / headers) and shop / partner ids.
+- Replaces names (campaign / item / keyword …) and provider ids with **stable placeholders**: the same real value always gets the same placeholder within one run, so relationships across endpoints survive. Types are kept (a number id stays a number).
+- Leaves metrics, money, statuses and dates untouched.
+- Arrays are cut to 50 items, and the cut is noted in the output.
+
+**Probe sequence.** Dates are in the shop timezone. The `DD-MM-YYYY` format and the params come from the v2 Ads module listing; a provider parameter error is recorded, never brute-forced.
+
+| # | endpoint | params | purpose |
+|---|---|---|---|
+| 1 | `get_shop_toggle_info` | — | Ads available? token permission, shop Ads state |
+| 2 | `get_total_balance` | — | account / money representation |
+| 3 | `get_product_level_campaign_id_list` | `ad_type=all, offset=0, limit=50` | entity ids, pagination hints |
+| 4 | `get_product_level_campaign_setting_info` | `info_type_list=1,2,3,4`, ≤5 real ids from #3 | status / budget / bid / schedule / type / products |
+| 5 | `get_all_cpc_ads_daily_performance` | yesterday → yesterday | shop-level daily metrics |
+| 6 | `get_product_campaign_daily_performance` | yesterday, ids | campaign daily metrics |
+| 7 | `get_all_cpc_ads_daily_performance` | D-3 → D-1 | row grain over a range |
+| 8 | `get_all_cpc_ads_daily_performance` | yesterday again | stability (`identicalTo`) |
+| 9 | `get_all_cpc_ads_hourly_performance` | yesterday | hourly grain (only if daily works) |
+| 10 | `get_product_campaign_hourly_performance` | yesterday, ids | hourly grain per campaign |
+| 11 | `get_all_cpc_ads_daily_performance` | today | is today partial? |
+| 12 | `get_recommended_item_list` | — | product relation |
+
+**After a run:**
+1. Download the report from the page.
+2. `npm run shopee:ads -- import <ads-probe-report.json>`. The import runs a secret scan and refuses to write if anything is flagged. It then writes `src/lib/channels/shopee/ads/__fixtures__/provider/_probe-report.json` plus one `<endpoint>.json` per successful call.
+3. Review the files, then commit them. This is the human review checkpoint before ADS-1B.
+
+**CLI** (`scripts/shopee/ads-discovery.ts`): `survey` runs the same core with a local or `--prod` (read-only token) transport. `probe <path>` allows any `get_*` path locally, but with `--prod` only allowlisted paths.
+
+**Local verification** (sandbox shop, `next dev`, Playwright, 17/17):
+- The admin run stopped with the circuit breaker after 3 × `ENDPOINT_UNAVAILABLE`.
+- Staff and viewer were sent to `/forbidden`.
+- The downloaded report contained no token, signature or shop id.
+- Sync job count, snapshot count and tables were unchanged; there was no browser request to Shopee.
 
 ## 2. Evidence collected (sandbox, 2026-10-28)
 

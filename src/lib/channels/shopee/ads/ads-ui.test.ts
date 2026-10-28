@@ -263,10 +263,13 @@ function filesUnder(dir: string, pred: (p: string) => boolean): string[] {
 }
 
 test("64. no real Ads API call: Ads UI code never imports the Shopee client / fetches", () => {
+  // ADS-1A: the admin-only read-only probe (probe*.ts + /shopee/ads/probe) is the ONE place allowed
+  // to call Shopee; the dashboard code must stay provider-free and must not import it.
+  const isProbe = (p: string) => /[\\/]probe(-server)?\.ts$|[\\/]probe[\\/]/.test(p);
   const files = [
-    ...filesUnder("src/lib/channels/shopee/ads", (p) => /\.tsx?$/.test(p) && !p.endsWith(".test.ts")),
+    ...filesUnder("src/lib/channels/shopee/ads", (p) => /\.tsx?$/.test(p) && !p.endsWith(".test.ts") && !isProbe(p)),
     ...filesUnder("src/components/ads", (p) => /\.tsx?$/.test(p)),
-    ...filesUnder("src/app/(authenticated)/shopee/ads", (p) => /\.tsx?$/.test(p)),
+    ...filesUnder("src/app/(authenticated)/shopee/ads", (p) => /\.tsx?$/.test(p) && !isProbe(p)),
   ];
   assert.ok(files.length >= 15, `${files.length} files`);
   for (const f of files) {
@@ -274,6 +277,7 @@ test("64. no real Ads API call: Ads UI code never imports the Shopee client / fe
     assert.doesNotMatch(src, /\bfetch\(/, f);
     assert.doesNotMatch(src, /from ["'][^"']*shopee\/(client|connection|server|signing|real-provider)/, f);
     assert.doesNotMatch(src, /\/api\/v2\/(ads|marketing)/i, `${f}: no guessed Ads endpoint`);
+    assert.doesNotMatch(src, /ads\/probe/, `${f}: dashboard must not use the probe`);
   }
 });
 
