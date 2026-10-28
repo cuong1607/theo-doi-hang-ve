@@ -22,6 +22,7 @@
 // CANDIDATES: a provider parameter error is recorded as evidence, never
 // "fixed" by trying random combinations.
 // ============================================================
+import { isAdsReadOnlyRequest } from "./read-only-policy.ts";
 import { createAdsFixtureSanitizer, type AdsFixtureSanitizer } from "./sanitize.ts";
 
 export const ADS_PROBE_ENDPOINTS = {
@@ -57,9 +58,9 @@ export class AdsProbeGuardError extends Error {
   }
 }
 
-/** Fail-closed request guard: GET + exact allowlisted Ads path. */
+/** Fail-closed request guard: the read-only policy (GET, read path) + exact allowlisted Ads path. */
 export function assertAdsProbeRequest(method: string, path: string): void {
-  if (method !== "GET") throw new AdsProbeGuardError(`Probe Ads chỉ cho phép GET (nhận ${method}).`);
+  if (method !== "GET" || !isAdsReadOnlyRequest(method, path)) throw new AdsProbeGuardError(`Probe Ads chỉ cho phép GET đọc (nhận ${method} ${path}).`);
   if (!ALLOWED_PATHS.has(path)) throw new AdsProbeGuardError(`Đường dẫn không nằm trong allowlist probe Ads: ${path}`);
 }
 

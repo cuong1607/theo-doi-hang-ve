@@ -1,6 +1,8 @@
 // SHOPEE-ADS-UI-1: friendly insight card (demo insights from fixtures —
 // not a recommendation engine). Icon + short title + one sentence + a
 // semantic tint; the tone is also spelled out for screen readers.
+// READ-ONLY POLICY: insights are ADVISORY text only — never an "Áp dụng" /
+// "Optimize" / "Update campaign" action (read-only-guard.test.ts).
 import { AlertTriangle, Info, OctagonAlert, TrendingUp, type LucideIcon } from "lucide-react";
 import { cn } from "cn";
 

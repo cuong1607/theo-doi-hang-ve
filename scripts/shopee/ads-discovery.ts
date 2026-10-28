@@ -37,6 +37,7 @@ import { getShopeeConfig, type ShopeeConfig } from "../../src/lib/channels/shope
 import { ShopeeConnectionService, type ShopeeTokenSource } from "../../src/lib/channels/shopee/token.ts";
 import { adsProbeFixtures, isAllowlistedAdsPath, runAdsProbe, type AdsProbeReport, type AdsProbeTransport } from "../../src/lib/channels/shopee/ads/probe.ts";
 import { findFixtureSecrets, sanitizeAdsPayload } from "../../src/lib/channels/shopee/ads/sanitize.ts";
+import { assertAdsReadOnlyRequest, isAdsReadOnlyPath } from "../../src/lib/channels/shopee/ads/read-only-policy.ts";
 import { cloudDb, fail, ReadOnlyTokenSource } from "./cloud-readonly.ts";
 
 const FIXTURE_DIR = path.join(process.cwd(), "src/lib/channels/shopee/ads/__fixtures__/provider");
@@ -92,6 +93,7 @@ async function pickShop(ctx: Ctx): Promise<Shop> {
 /** Same transport contract as the server one: plain fetch (non-JSON answers kept), URL never printed, secrets scrubbed. */
 function cliTransport(ctx: Ctx, shop: Shop): AdsProbeTransport {
   return async (req) => {
+    assertAdsReadOnlyRequest(req.method, req.path); // read-only policy: GET + read path, always
     let accessToken: string;
     try {
       accessToken = await ctx.tokens.getValidAccessToken(shop.id);
@@ -173,7 +175,7 @@ async function main() {
   }
   if (cmd === "probe") {
     const apiPath = argv[1] ?? fail("thiếu apiPath");
-    if (!/^\/api\/v2\/ads\/get_[a-z0-9_]+$/.test(apiPath)) fail(`Từ chối "${apiPath}": chỉ cho phép GET /api/v2/ads/get_* (read-only).`);
+    if (!isAdsReadOnlyPath(apiPath)) fail(`Từ chối "${apiPath}": chỉ cho phép GET /api/v2/ads/get_* không chứa động từ ghi (read-only policy).`);
     if (PROD && !isAllowlistedAdsPath(apiPath)) fail(`Từ chối "${apiPath}": production chỉ cho phép endpoint trong allowlist (probe.ts).`);
     const rawParams = argv[2] && !argv[2].startsWith("--") ? argv[2] : "{}";
     let params: Record<string, string | number>;

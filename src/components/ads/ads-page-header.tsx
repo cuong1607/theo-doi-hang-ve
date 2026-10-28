@@ -78,8 +78,9 @@ export function AdsPageHeader({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <AdsPeriodMenu preset={preset} rangeLabel={rangeLabel} />
+          {/* Internal connection settings only — never edits Shopee campaigns (read-only policy). */}
           {canManage && (
-            <Link href="/settings/shopee" className={cn(buttonVariants({ variant: "outline" }), "rounded-full border-ads-border bg-card/80 backdrop-blur-sm transition-[transform,background-color] duration-(--ads-dur-fast) hover:-translate-y-px active:scale-[0.97]")}>
+            <Link href="/settings/shopee" title="Cấu hình kết nối Shopee (nội bộ) — quảng cáo chỉ đọc" className={cn(buttonVariants({ variant: "outline" }), "rounded-full border-ads-border bg-card/80 backdrop-blur-sm transition-[transform,background-color] duration-(--ads-dur-fast) hover:-translate-y-px active:scale-[0.97]")}>
               <Settings aria-hidden="true" /> Cấu hình
             </Link>
           )}

@@ -12,6 +12,13 @@
 // come from the official Shopee Ads API docs the user will provide — none
 // are guessed here. Until then the only implementation refuses to run.
 // ============================================================
+//
+// READ-ONLY POLICY (./read-only-policy.ts): this contract exposes READ
+// methods only (get… / list…). No create / update / pause / resume / delete
+// campaign, no budget / bid / status / settings method may ever be added;
+// every real implementation must pass each request through
+// assertAdsReadOnlyRequest() (GET + allowlisted read path). Pinned by
+// read-only-guard.test.ts.
 import type { ProductProviderContext, ProviderMode, ProviderPayload } from "../product-provider.ts";
 
 export type AdsProviderContext = ProductProviderContext;

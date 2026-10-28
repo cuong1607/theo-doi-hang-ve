@@ -46,7 +46,7 @@ Cố ý **không có** cờ "tắt toàn bộ Shopee": Ads cần kết nối Sho
 - Trước: 8 loại job (`order`, `product`, `escrow`, `return`, `return_logistics`, `failed_delivery`, `income`, `payout`) + thông báo hàng hoàn mỗi phút.
 - Sau (cờ mặc định): **0 loại** được lên lịch / nhận. Tick vẫn chạy mỗi phút: heartbeat, thu hồi job treo, retention, **huỷ** job cũ còn `pending` / `retry` (`error_code = legacy_module_disabled`, giữ lịch sử), keepalive token. Job đang `running` không bị cắt ngang — worker không nhận lại nữa, lượt tiếp theo về `pending` và bị huỷ ở tick sau.
 - Lưu lượng Shopee mong đợi: chỉ làm mới token (≤ 1 lần / shop / ngày khi shop không dùng) và bấm "Kiểm tra kết nối". **Không** còn lời gọi đơn / sản phẩm / trả hàng / payout.
-- Loại job Ads dự kiến (chưa chạy được, chưa có trong ràng buộc DB): `ads_campaign`, `ads_performance`, `ads_budget`, `ads_product` (`src/lib/channels/core/sync-domains.ts`).
+- Loại job Ads dự kiến (chưa chạy được, chưa có trong ràng buộc DB): `ads_campaign_read`, `ads_performance_read`, `ads_settings_read` (`src/lib/channels/core/sync-domains.ts`). Chỉ job đọc — xem [shopee-ads-read-only-policy.md](shopee-ads-read-only-policy.md).
 
 ## 4. Token khi không ai gọi Shopee
 
@@ -76,6 +76,10 @@ Giữ nguyên tất cả: `SHOPEE_PARTNER_ID`, `SHOPEE_PARTNER_KEY`, `SHOPEE_API
 ## 8. Tài liệu cũ
 
 Đã chuyển vào `docs/archive/shopee-legacy/` (trả hàng, payout, phân tích, hàng hoàn, đối chiếu tài chính). Vẫn hiệu lực: `docs/shopee-auth-runbook.md`, `docs/shopee-sync-operations.md`, `docs/shopee-production-runbook.md` (queue / scheduler / token), `docs/shopee-financial-core.md` (lược đồ).
+
+## 8b. Chính sách CHỈ ĐỌC (áp dụng lâu dài)
+
+Toàn bộ module Ads chỉ được ĐỌC từ Shopee: không tạo, sửa, tạm dừng hay xoá chiến dịch, không đổi ngân sách, giá thầu hay trạng thái. Chi tiết và các lớp bảo vệ: [shopee-ads-read-only-policy.md](shopee-ads-read-only-policy.md).
 
 ## 9. Điều kiện cho phase tiếp theo
 

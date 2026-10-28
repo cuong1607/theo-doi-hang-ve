@@ -19,6 +19,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getShopee } from "../server.ts";
 import { ShopeeApiError } from "../errors.ts";
 import { runAdsProbe, type AdsProbeReport, type AdsProbeTransport } from "./probe.ts";
+import { assertAdsReadOnlyRequest } from "./read-only-policy.ts";
 
 const REQUEST_TIMEOUT_MS = 15_000;
 const running = new Set<string>();
@@ -69,6 +70,7 @@ export async function runAdsProbeForShop(shopId: string): Promise<AdsProbeReport
   const secrets = [config.partnerKey];
 
   const transport: AdsProbeTransport = async (req) => {
+    assertAdsReadOnlyRequest(req.method, req.path); // defense in depth (the runner already checked the allowlist)
     let accessToken: string;
     try {
       accessToken = await service.getValidAccessToken(shop.id);

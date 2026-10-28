@@ -265,7 +265,8 @@ function filesUnder(dir: string, pred: (p: string) => boolean): string[] {
 test("64. no real Ads API call: Ads UI code never imports the Shopee client / fetches", () => {
   // ADS-1A: the admin-only read-only probe (probe*.ts + /shopee/ads/probe) is the ONE place allowed
   // to call Shopee; the dashboard code must stay provider-free and must not import it.
-  const isProbe = (p: string) => /[\\/]probe(-server)?\.ts$|[\\/]probe[\\/]/.test(p);
+  // (read-only-policy.ts only names endpoint patterns to REFUSE them.)
+  const isProbe = (p: string) => /[\\/](probe|probe-server|read-only-policy)\.ts$|[\\/]probe[\\/]/.test(p);
   const files = [
     ...filesUnder("src/lib/channels/shopee/ads", (p) => /\.tsx?$/.test(p) && !p.endsWith(".test.ts") && !isProbe(p)),
     ...filesUnder("src/components/ads", (p) => /\.tsx?$/.test(p)),

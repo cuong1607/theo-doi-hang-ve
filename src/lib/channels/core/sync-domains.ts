@@ -14,8 +14,12 @@ import { RUNNABLE_SYNC_TYPES, type RunnableSyncType } from "./sync-jobs.ts";
 
 export const LEGACY_SYNC_TYPES: readonly RunnableSyncType[] = RUNNABLE_SYNC_TYPES;
 
-/** Reserved for SHOPEE-ADS-1 (no handler, no DB constraint value, never enqueued yet). */
-export const PLANNED_ADS_SYNC_TYPES = ["ads_campaign", "ads_performance", "ads_budget", "ads_product"] as const;
+/**
+ * Reserved Ads job types (no handler, no DB constraint value, never enqueued yet).
+ * READ-ONLY POLICY: Ads jobs are read/sync jobs only (ads_<what>_read) — never
+ * *_update / *_set / budget / bid / status writes (shopee/ads/read-only-policy.ts).
+ */
+export const PLANNED_ADS_SYNC_TYPES = ["ads_campaign_read", "ads_performance_read", "ads_settings_read"] as const;
 export type PlannedAdsSyncType = (typeof PLANNED_ADS_SYNC_TYPES)[number];
 
 /** Job types the scheduler may enqueue and the worker may claim right now. */
