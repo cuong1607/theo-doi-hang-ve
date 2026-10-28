@@ -20,7 +20,8 @@
 //   .env.local        SHOPEE_PARTNER_ID, SHOPEE_PARTNER_KEY, APP_ENCRYPTION_KEY (the PROD key)
 //   .env.cloud.local  NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY of the cloud project
 //
-// Safety rules (why this exists instead of pointing the app at prod):
+// Safety rules (why this exists instead of pointing the app at prod;
+// the read-only token source lives in ./cloud-readonly.ts, shared with ads-discovery.ts):
 //   * NEVER refreshes a token. Shopee refresh tokens are single-use: a refresh
 //     from this machine would invalidate the token production holds. When the
 //     stored access token is close to expiry the tool stops — production
@@ -32,84 +33,27 @@
 //   * Saved payloads go through the production sanitizers (buyer identity,
 //     seller tax id removed); .shopee-live/ is git-ignored.
 // ============================================================
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { parseEnv } from "node:util";
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { decryptSecret, parseEncryptionKey } from "../../src/lib/security/secrets.ts";
+import { parseEncryptionKey } from "../../src/lib/security/secrets.ts";
 import { ShopeeClient } from "../../src/lib/channels/shopee/client.ts";
 import { getShopeeConfig } from "../../src/lib/channels/shopee/config.ts";
-import { TOKEN_REFRESH_BUFFER_SECONDS } from "../../src/lib/channels/shopee/constants.ts";
 import { estimatedOrderRevenue, parseEscrowDetail } from "../../src/lib/channels/shopee/escrow-adapter.ts";
 import { ESCROW_ESTIMATE_STATUSES } from "../../src/lib/channels/shopee/escrow-sync.ts";
 import { RealShopeeOrderProvider } from "../../src/lib/channels/shopee/order-provider.ts";
 import { RealShopeePaymentProvider } from "../../src/lib/channels/shopee/payment-provider.ts";
-import { tokenContext, type ShopeeTokenSource } from "../../src/lib/channels/shopee/token.ts";
+import type { ShopeeTokenSource } from "../../src/lib/channels/shopee/token.ts";
 import { parseReturnListPage, sanitizeReturnPayload } from "../../src/lib/channels/shopee/return-adapter.ts";
 import { RealShopeeReturnProvider } from "../../src/lib/channels/shopee/return-provider.ts";
 import { parseFailedDeliveryTracking, parseReverseTrackingInfo, parseTrackingNumber, type ReturnLogisticsFacts } from "../../src/lib/channels/shopee/return-logistics-adapter.ts";
 import { RealShopeeReturnLogisticsProvider } from "../../src/lib/channels/shopee/return-logistics-provider.ts";
+import { cloudDb, fail, ReadOnlyTokenSource } from "./cloud-readonly.ts";
 
 const OUT_DIR = path.join(process.cwd(), ".shopee-live");
 const ORDER_PII_KEYS = new Set(["buyer_username", "buyer_user_name", "buyer_user_id", "recipient_address", "buyer_cpf_id", "buyer_cancel_reason", "message_to_seller", "note"]);
 
-function fail(message: string): never {
-  console.error(`✖ ${message}`);
-  process.exit(1);
-}
-
-function cloudDb(): SupabaseClient {
-  let env: Record<string, string | undefined>;
-  try {
-    env = parseEnv(readFileSync(path.join(process.cwd(), ".env.cloud.local"), "utf8"));
-  } catch {
-    fail("Không đọc được .env.cloud.local (URL + service role key của project cloud).");
-  }
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) fail(".env.cloud.local thiếu NEXT_PUBLIC_SUPABASE_URL hoặc SUPABASE_SERVICE_ROLE_KEY.");
-  if (/localhost|127\.0\.0\.1/.test(url)) fail(".env.cloud.local đang trỏ về DB local — token shop thật chỉ có trên cloud.");
-  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
-}
-
-/** Token source that only READS the production connection. No refresh, no writes. */
-class ReadOnlyTokenSource implements ShopeeTokenSource {
-  private readonly db: SupabaseClient;
-  private readonly key: Buffer;
-
-  constructor(db: SupabaseClient, key: Buffer) {
-    this.db = db;
-    this.key = key;
-  }
-
-  async getValidAccessToken(shopId: string): Promise<string> {
-    const { data, error } = await this.db
-      .from("shop_connections")
-      .select("shop_id, connection_status, access_token_encrypted, access_token_expires_at")
-      .eq("shop_id", shopId)
-      .maybeSingle<{ shop_id: string; connection_status: string; access_token_encrypted: string | null; access_token_expires_at: string | null }>();
-    if (error) fail(`Không đọc được kết nối shop: ${error.message}`);
-    if (!data?.access_token_encrypted || !data.access_token_expires_at) fail(`Shop ${shopId} chưa có access token (trạng thái ${data?.connection_status ?? "không có"}).`);
-    const minutesLeft = (new Date(data.access_token_expires_at).getTime() - Date.now()) / 60_000;
-    if (minutesLeft * 60 < TOKEN_REFRESH_BUFFER_SECONDS) {
-      fail(
-        `Access token của prod còn ${Math.max(0, Math.floor(minutesLeft))} phút (< ${TOKEN_REFRESH_BUFFER_SECONDS / 60}). ` +
-          "Công cụ này KHÔNG làm mới token (refresh token Shopee dùng 1 lần — làm mới ở đây sẽ làm hỏng kết nối của prod). " +
-          "Đợi prod đồng bộ (tự làm mới) rồi chạy lại.",
-      );
-    }
-    try {
-      return decryptSecret(data.access_token_encrypted, this.key, tokenContext(data.shop_id, "access_token"));
-    } catch {
-      fail("Giải mã token thất bại — APP_ENCRYPTION_KEY trong .env.local không phải khóa của production.");
-    }
-  }
-
-  async recordApiFailure(): Promise<void> {
-    // Read-only: never touch the production connection row.
-  }
-}
 
 function sanitizeOrder(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sanitizeOrder);

@@ -79,11 +79,13 @@ Giữ nguyên tất cả: `SHOPEE_PARTNER_ID`, `SHOPEE_PARTNER_KEY`, `SHOPEE_API
 
 ## 9. Điều kiện cho phase tiếp theo
 
-**SHOPEE-ADS-UI-1** (giao diện Ads):
-- Thiết kế màn hình (danh sách chiến dịch, hiệu quả theo ngày, so sánh shop) + bộ lọc mong muốn.
-- Có thể làm trên dữ liệu fixture trước, không cần API thật.
+**SHOPEE-ADS-UI-1** (giao diện Ads): ✅ xong trên dữ liệu fixture. Xem [shopee-ads-ui.md](shopee-ads-ui.md), mục 4 liệt kê các giả định đang chờ field thật.
 
-**SHOPEE-ADS-1** (đồng bộ Ads thật):
+**SHOPEE-ADS-1** (đồng bộ Ads thật): ⛔ **dừng ở bước khám phá endpoint** (28/10/2026).
+- Sandbox local trả HTTP 503 `ERROR_SP_SERVICE_NOT_FOUND` cho mọi endpoint Ads (route có trên gateway, nhưng sandbox không có service Ads). Bằng chứng và tool khám phá: [shopee-ads-api.md](shopee-ads-api.md).
+- Để đi tiếp cần payload thật từ shop production. Người dùng tự chạy `ads-discovery.ts survey --prod --save` (chỉ-đọc).
+
+Danh sách điều kiện ban đầu:
 - Tài liệu chính thức Shopee Ads API (endpoint, tham số, phân trang, giới hạn tần suất, độ trễ số liệu, múi giờ báo cáo).
 - App Shopee được cấp quyền Ads (scope / permission) — nếu phải ủy quyền lại, các shop bấm "Kết nối lại" ở Cài đặt → Tích hợp Shopee.
 - Payload thật (đọc bằng tool chỉ-đọc như `scripts/shopee/live-readonly.ts`) để chốt mapping + thiết kế bảng.

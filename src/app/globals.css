@@ -42,6 +42,40 @@
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
   --color-info-text: var(--info-text);
+  /* SHOPEE-ADS-UI-1 Ads module palette (only the Ads screens use these).
+     Each metric has a solid (icon, line, bar) and a -text variant that
+     stays readable on its own 10–15 % tint. Never raw palette classes. */
+  --color-ads-primary: var(--ads-primary);
+  --color-ads-primary-text: var(--ads-primary-text);
+  --color-ads-secondary: var(--ads-secondary);
+  --color-ads-secondary-text: var(--ads-secondary-text);
+  --color-ads-accent: var(--ads-accent);
+  --color-ads-accent-text: var(--ads-accent-text);
+  --color-ads-surface: var(--ads-surface);
+  --color-ads-surface-strong: var(--ads-surface-strong);
+  --color-ads-border: var(--ads-border);
+  --color-ads-muted: var(--ads-muted);
+  --color-metric-spend: var(--metric-spend);
+  --color-metric-spend-text: var(--metric-spend-text);
+  --color-metric-revenue: var(--metric-revenue);
+  --color-metric-revenue-text: var(--metric-revenue-text);
+  --color-metric-roas: var(--metric-roas);
+  --color-metric-roas-text: var(--metric-roas-text);
+  --color-metric-orders: var(--metric-orders);
+  --color-metric-orders-text: var(--metric-orders-text);
+  --color-metric-clicks: var(--metric-clicks);
+  --color-metric-clicks-text: var(--metric-clicks-text);
+  --color-metric-impressions: var(--metric-impressions);
+  --color-metric-impressions-text: var(--metric-impressions-text);
+  --color-metric-ctr: var(--metric-ctr);
+  --color-metric-ctr-text: var(--metric-ctr-text);
+  --color-metric-cpc: var(--metric-cpc);
+  --color-metric-cpc-text: var(--metric-cpc-text);
+  --color-metric-acos: var(--metric-acos);
+  --color-metric-acos-text: var(--metric-acos-text);
+  --color-metric-cr: var(--metric-cr);
+  --color-metric-cr-text: var(--metric-cr-text);
+  --ease-ads: cubic-bezier(0.22, 1, 0.36, 1);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -113,9 +147,79 @@
   --sidebar-accent-foreground: oklch(0.36 0.15 355);
   --sidebar-border: oklch(0.87 0.022 355);
   --sidebar-ring: oklch(0.6 0.17 355);
+
+  /* SHOPEE-ADS-UI-1: warm coral primary, violet secondary, cyan accent. */
+  --ads-primary: oklch(0.67 0.19 37);
+  --ads-primary-text: oklch(0.5 0.17 35);
+  --ads-secondary: oklch(0.57 0.2 295);
+  --ads-secondary-text: oklch(0.46 0.19 295);
+  --ads-accent: oklch(0.68 0.13 222);
+  --ads-accent-text: oklch(0.46 0.11 228);
+  --ads-surface: oklch(0.992 0.006 45);
+  --ads-surface-strong: oklch(0.972 0.016 40);
+  --ads-border: oklch(0.9 0.028 40);
+  --ads-muted: oklch(0.5 0.03 40);
+  --metric-spend: oklch(0.68 0.18 42);
+  --metric-spend-text: oklch(0.5 0.15 40);
+  --metric-revenue: oklch(0.64 0.13 168);
+  --metric-revenue-text: oklch(0.44 0.1 168);
+  --metric-roas: oklch(0.58 0.2 295);
+  --metric-roas-text: oklch(0.46 0.19 295);
+  --metric-orders: oklch(0.6 0.17 256);
+  --metric-orders-text: oklch(0.46 0.16 258);
+  --metric-clicks: oklch(0.7 0.12 212);
+  --metric-clicks-text: oklch(0.47 0.1 218);
+  --metric-impressions: oklch(0.55 0.17 277);
+  --metric-impressions-text: oklch(0.45 0.16 277);
+  --metric-ctr: oklch(0.64 0.19 340);
+  --metric-ctr-text: oklch(0.5 0.18 340);
+  --metric-cpc: oklch(0.76 0.15 72);
+  --metric-cpc-text: oklch(0.5 0.12 62);
+  --metric-acos: oklch(0.62 0.2 28);
+  --metric-acos-text: oklch(0.5 0.19 27);
+  --metric-cr: oklch(0.66 0.14 190);
+  --metric-cr-text: oklch(0.46 0.1 195);
+  /* Motion tokens: fast hover/press, normal state change, slow entrance. */
+  /* Hero gradient stops: deep enough for white text (>= 4.5:1 at the large value). */
+  --ads-hero-from: oklch(0.56 0.19 33);
+  --ads-hero-to: oklch(0.46 0.2 293);
+  --ads-dur-fast: 140ms;
+  --ads-dur-normal: 200ms;
+  --ads-dur-slow: 300ms;
+  --ads-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .dark {
+  --ads-primary: oklch(0.75 0.16 40);
+  --ads-primary-text: oklch(0.84 0.11 42);
+  --ads-secondary: oklch(0.72 0.16 295);
+  --ads-secondary-text: oklch(0.84 0.1 295);
+  --ads-accent: oklch(0.76 0.11 220);
+  --ads-accent-text: oklch(0.85 0.08 220);
+  --ads-surface: oklch(0.2 0.012 40);
+  --ads-surface-strong: oklch(0.24 0.02 40);
+  --ads-border: oklch(1 0 0 / 13%);
+  --ads-muted: oklch(0.72 0.03 40);
+  --metric-spend: oklch(0.76 0.15 45);
+  --metric-spend-text: oklch(0.85 0.1 45);
+  --metric-revenue: oklch(0.74 0.12 168);
+  --metric-revenue-text: oklch(0.85 0.09 168);
+  --metric-roas: oklch(0.72 0.16 295);
+  --metric-roas-text: oklch(0.84 0.1 295);
+  --metric-orders: oklch(0.72 0.14 256);
+  --metric-orders-text: oklch(0.84 0.09 256);
+  --metric-clicks: oklch(0.78 0.11 212);
+  --metric-clicks-text: oklch(0.86 0.08 212);
+  --metric-impressions: oklch(0.7 0.14 277);
+  --metric-impressions-text: oklch(0.83 0.09 277);
+  --metric-ctr: oklch(0.74 0.15 340);
+  --metric-ctr-text: oklch(0.85 0.1 340);
+  --metric-cpc: oklch(0.82 0.13 78);
+  --metric-cpc-text: oklch(0.88 0.1 80);
+  --metric-acos: oklch(0.72 0.16 30);
+  --metric-acos-text: oklch(0.84 0.11 30);
+  --metric-cr: oklch(0.76 0.12 190);
+  --metric-cr-text: oklch(0.86 0.08 190);
   --background: oklch(0.17 0.008 355);
   --foreground: oklch(0.95 0.012 355);
   --heading: oklch(0.82 0.09 355);
@@ -241,6 +345,148 @@
   animation: toast-in 180ms ease-out both;
 }
 
+/* ------------------------------------------------------------------
+   SHOPEE-ADS-UI-1 motion. Entrances play ONCE on mount (stagger via
+   --ads-delay, ≤ ~250 ms total); value changes use short fades; nothing
+   loops except the loading shimmer / refresh spinner. Gradients live here
+   so components never carry raw colours.
+   ------------------------------------------------------------------ */
+@keyframes ads-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ads-fade-in {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes ads-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ads-glow {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes ads-reveal {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes ads-fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes ads-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+@utility animate-ads-rise {
+  animation: ads-rise var(--ads-dur-slow) var(--ads-ease) both;
+  animation-delay: var(--ads-delay, 0ms);
+}
+
+@utility animate-ads-fade-in {
+  animation: ads-fade-in var(--ads-dur-normal) var(--ads-ease) both;
+}
+
+@utility animate-ads-pop {
+  animation: ads-pop var(--ads-dur-fast) var(--ads-ease) both;
+}
+
+@utility animate-ads-glow {
+  animation: ads-glow 900ms var(--ads-ease) both;
+}
+
+@utility animate-ads-reveal {
+  animation: ads-reveal 650ms var(--ads-ease) both;
+}
+
+@utility animate-ads-fill {
+  transform-origin: left center;
+  animation: ads-fill 700ms var(--ads-ease) both;
+  animation-delay: var(--ads-delay, 120ms);
+}
+
+@utility ads-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in oklch, var(--ads-primary) 7%, transparent) 0%,
+    color-mix(in oklch, var(--ads-secondary) 13%, transparent) 50%,
+    color-mix(in oklch, var(--ads-primary) 7%, transparent) 100%
+  );
+  background-size: 200% 100%;
+  animation: ads-shimmer 1.8s ease-in-out infinite;
+}
+
+/* Interactive card: slight lift + tinted border on hover / focus-within. */
+@utility ads-card {
+  transition:
+    transform var(--ads-dur-normal) var(--ads-ease),
+    box-shadow var(--ads-dur-normal) var(--ads-ease),
+    border-color var(--ads-dur-normal) var(--ads-ease);
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px -14px color-mix(in oklch, var(--ads-primary) 45%, transparent);
+    border-color: color-mix(in oklch, var(--ads-primary) 35%, var(--ads-border));
+  }
+  &:hover [data-ads-icon] {
+    transform: scale(1.08);
+  }
+}
+
+/* Soft hero wash: tinted, never saturated. */
+@utility ads-gradient-hero {
+  background:
+    radial-gradient(60% 120% at 0% 0%, color-mix(in oklch, var(--ads-primary) 16%, transparent), transparent 70%),
+    radial-gradient(50% 120% at 100% 0%, color-mix(in oklch, var(--ads-secondary) 14%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--ads-surface-strong), var(--ads-surface));
+}
+
+/* Vivid brand gradient: hero KPI, active indicators, small accents only. */
+@utility ads-gradient-primary {
+  background: linear-gradient(120deg, var(--ads-hero-from), color-mix(in oklch, var(--ads-hero-from) 45%, var(--ads-hero-to)) 55%, var(--ads-hero-to));
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   ::before,
@@ -248,5 +494,13 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+  /* Ads: no stagger wait, no hover lift. */
+  [data-ads-root],
+  [data-ads-root] * {
+    animation-delay: 0ms !important;
+  }
+  .ads-card:hover {
+    transform: none;
   }
 }
