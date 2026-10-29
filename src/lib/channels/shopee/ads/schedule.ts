@@ -23,7 +23,7 @@
 // ============================================================
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { ADS_PRIORITY, adsBackfillRange, adsColdRange, adsHotRange, adsWarmRange, enqueueAdsJob, type AdsCampaignScope, type AdsStrategy, type AdsSyncConfig } from "./sync.ts";
+import { ADS_PRIORITY, adsBackfillRange, adsBackfillStatus, adsColdRange, adsHotRange, adsWarmRange, enqueueAdsJob, type AdsCampaignScope, type AdsStrategy, type AdsSyncConfig } from "./sync.ts";
 import type { AdsDateRange } from "./provider.ts";
 import type { AdsSyncType } from "./read-only-policy.ts";
 
@@ -122,8 +122,10 @@ export function planAdsShop(input: {
   config: AdsSyncConfig;
   /** Campaign catalogue exists in the DB. */
   hasCampaigns: boolean;
-  /** A campaign-performance AND a shop-performance read have succeeded at least once. */
+  /** The 30-day backfill of campaign performance AND of shop performance has finished. */
   performanceSynced: boolean;
+  /** Per type (when known): only the missing backfill is re-read. */
+  backfilled?: { shop: boolean; campaign: boolean };
 }): AdsPlannedSlot[] {
   const { now, timeZone, offsetMinutes: off, slots, config } = input;
   const out: AdsPlannedSlot[] = [];
@@ -147,8 +149,8 @@ export function planAdsShop(input: {
   if (!input.performanceSynced) {
     const range = adsBackfillRange(now, timeZone, config);
     add("backfill", "last_warm_slot_at", warmSlot, [
-      { syncType: "ads_shop_performance_read", strategy: "backfill", priority: ADS_PRIORITY.backfill, range },
-      { syncType: "ads_campaign_performance_read", strategy: "backfill", priority: ADS_PRIORITY.backfill, range, scope: "all" },
+      ...(input.backfilled?.shop ? [] : [{ syncType: "ads_shop_performance_read" as const, strategy: "backfill" as const, priority: ADS_PRIORITY.backfill, range }]),
+      ...(input.backfilled?.campaign ? [] : [{ syncType: "ads_campaign_performance_read" as const, strategy: "backfill" as const, priority: ADS_PRIORITY.backfill, range, scope: "all" as const }]),
     ]);
   } else {
     const range = adsWarmRange(now, timeZone, config);
@@ -287,13 +289,12 @@ export async function runAdsSchedulerTick(db: SupabaseClient, options: { config:
   return result;
 }
 
-async function shopFacts(db: SupabaseClient, shopId: string): Promise<{ hasCampaigns: boolean; performanceSynced: boolean }> {
+async function shopFacts(db: SupabaseClient, shopId: string): Promise<{ hasCampaigns: boolean; performanceSynced: boolean; backfilled: { shop: boolean; campaign: boolean } }> {
   const { count, error } = await db.from("shopee_ads_campaigns").select("id", { count: "exact", head: true }).eq("shop_id", shopId);
   if (error) throw new Error(`Không đọc được danh mục chiến dịch: ${error.message}`);
-  const { data: states, error: stateError } = await db.from("channel_sync_states").select("sync_type, last_success_at").eq("shop_id", shopId).in("sync_type", ["ads_campaign_performance_read", "ads_shop_performance_read"]);
-  if (stateError) throw new Error(`Không đọc được trạng thái đồng bộ Ads: ${stateError.message}`);
-  const ok = new Set(((states ?? []) as Array<{ sync_type: string; last_success_at: string | null }>).filter((s) => s.last_success_at).map((s) => s.sync_type));
-  return { hasCampaigns: (count ?? 0) > 0, performanceSynced: ok.has("ads_campaign_performance_read") && ok.has("ads_shop_performance_read") };
+  // a HOT success is not a backfill (a failed backfill must be re-run, not forgotten)
+  const backfilled = await adsBackfillStatus(db, shopId);
+  return { hasCampaigns: (count ?? 0) > 0, performanceSynced: backfilled.shop && backfilled.campaign, backfilled };
 }
 
 /** Conditional UPDATE: true only for the ONE tick that moves the slot forward. */

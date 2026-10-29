@@ -8,7 +8,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { adsJitterMs, adsShopOffsets, latestAdsSlot, latestColdSlot, planAdsShop, type AdsSlotState } from "./schedule.ts";
-import { ADS_PRIORITY, getAdsSyncConfig } from "./sync.ts";
+import { ShopeeApiError } from "../errors.ts";
+import { ADS_PRIORITY, getAdsSyncConfig, invalidAdsCampaignIds } from "./sync.ts";
 
 const TZ = "Asia/Ho_Chi_Minh";
 const config = { ...getAdsSyncConfig({}), autoSyncEnabled: true };
@@ -142,4 +143,23 @@ test("WARM can be disabled (ADS_WARM_RESTATEMENT_DAYS=0) without touching HOT", 
   const now = new Date("2026-10-28T09:30:00Z");
   const plan = planAdsShop({ now, timeZone: TZ, offsetMinutes: 0, slots: { last_cold_slot_at: now.toISOString(), last_metadata_slot_at: now.toISOString() }, config: { ...config, warmRestatementDays: 0 }, hasCampaigns: true, performanceSynced: true });
   assert.deepEqual(plan.map((p) => p.kind), ["hot_shop", "hot_campaign"]);
+});
+
+test("ADS-2.1: a failed backfill is re-planned even after HOT succeeded; only the missing type is re-read; no COLD before it", () => {
+  const now = new Date("2026-10-29T04:05:30Z");
+  const plan = planAdsShop({ now, timeZone: TZ, offsetMinutes: 0, slots: {}, config, hasCampaigns: true, performanceSynced: false, backfilled: { shop: true, campaign: false } });
+  const backfill = plan.find((p) => p.kind === "backfill");
+  assert.ok(backfill, "backfill slot planned");
+  assert.deepEqual(backfill.jobs.map((j) => [j.syncType, j.strategy, j.scope]), [["ads_campaign_performance_read", "backfill", "all"]]);
+  assert.equal(plan.find((p) => p.kind === "warm"), undefined);
+  assert.deepEqual(plan.find((p) => p.kind === "cold")?.jobs ?? [], []);
+});
+
+test("ADS-2.1: Shopee's 'invalid product ads campaign ids' error names the ids to drop (only ids of the batch)", () => {
+  const err = (message: string) => new ShopeeApiError({ apiPath: "/api/v2/ads/get_product_campaign_daily_performance", errorCode: "error_param", message });
+  assert.deepEqual(invalidAdsCampaignIds(err("Wrong parameters. campaign_id_list: has invalid product ads campaign ids- 20932764;"), ["1", "20932764"]), ["20932764"]);
+  assert.deepEqual(invalidAdsCampaignIds(err("campaign_id_list: has invalid product ads campaign ids- 5, 6;"), ["5", "6", "7"]), ["5", "6"]);
+  assert.deepEqual(invalidAdsCampaignIds(err("has invalid product ads campaign ids- 99;"), ["5"]), [], "an id outside the batch is never dropped");
+  assert.deepEqual(invalidAdsCampaignIds(err("Wrong parameters. start_date invalid"), ["5"]), []);
+  assert.deepEqual(invalidAdsCampaignIds(new Error("has invalid product ads campaign ids- 5"), ["5"]), [], "only a provider error");
 });

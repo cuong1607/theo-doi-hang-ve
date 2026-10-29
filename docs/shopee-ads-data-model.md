@@ -76,6 +76,11 @@ Grain: **shop × report_date**, an independent fact. Unique key: `(shop_id, repo
   | `ads_sync_freshness` | read | dashboard freshness |
   | `get_ads_sync_metrics` | read | SLA metrics |
 
+## ADS-2.1 additions (migration `00066_shopee_ads_backfill_markers.sql`)
+- **`shopee_ads_shop_settings.shop_backfill_completed_at` / `campaign_backfill_completed_at`:** set when a BACKFILL job of that type finishes. The scheduler and the manual refresh re-run the 30-day backfill until the marker is set. A later HOT success no longer counts as a backfill: that bug left congtrangbedding without campaign data for 6–25/10. The migration seeds the markers from successful backfill jobs, or from stored data covering ≥ 28 days.
+- **`shopee_ads_campaigns.performance_unsupported_at`:** Shopee rejects a whole performance batch when one id is not a product-ads campaign. Seen 2026-10-29 on campaign 20932764, the only `ad_type = auto` campaign of 1135. The runner drops such ids, re-reads the batch and records them here; later jobs never send them again.
+- **Dashboard RPCs are read in ordered pages of 1000.** PostgREST caps every response at 1000 rows, RPCs included. With five shops (~1,900 campaigns) the campaign table was silently truncated, and "Ngoài chiến dịch sản phẩm" was inflated.
+
 ## Raw snapshots
 - Stored in the existing `channel_api_snapshots` with `entity_type = 'ads'` and `api_name` = the endpoint path.
 - The key is the request shape (e.g. `campaign_daily:2026-10-21:2026-10-27:<first id>:<n>`).

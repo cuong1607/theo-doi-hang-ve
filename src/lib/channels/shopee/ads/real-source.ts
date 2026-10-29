@@ -73,6 +73,8 @@ export const ADS_SYNC_LABELS: Record<(typeof ADS_SYNC_TYPES)[number], string> = 
 };
 
 const NO_SHOP = "00000000-0000-0000-0000-000000000000";
+/** PostgREST max_rows (supabase/config.toml and the cloud default). */
+const RPC_PAGE = 1000;
 
 export interface AdsShopFreshness {
   shopId: string;
@@ -152,10 +154,21 @@ export class RealAdsDashboardSource implements AdsDashboardSource {
     this.now = opts.now ?? (() => new Date());
   }
 
-  private async rpc<T>(fn: string, args: Record<string, unknown>): Promise<T[]> {
-    const { data, error } = await this.db.rpc(fn, args);
-    if (error) throw new AdsDataUnavailableError(new Error(`${fn}: ${error.message}`));
-    return (data ?? []) as T[];
+  /**
+   * PostgREST returns at most 1000 rows per request (also for set-returning
+   * RPCs): five shops have ~2000 campaigns, so the result is read in ordered
+   * pages — a silently truncated campaign list hid campaigns and inflated
+   * "Ngoài chiến dịch sản phẩm".
+   */
+  private async rpc<T>(fn: string, args: Record<string, unknown>, orderBy: string): Promise<T[]> {
+    const out: T[] = [];
+    for (let from = 0; ; from += RPC_PAGE) {
+      const { data, error } = await this.db.rpc(fn, args).order(orderBy).range(from, from + RPC_PAGE - 1);
+      if (error) throw new AdsDataUnavailableError(new Error(`${fn}: ${error.message}`));
+      const rows = (data ?? []) as T[];
+      out.push(...rows);
+      if (rows.length < RPC_PAGE) return out;
+    }
   }
 
   async load(input: AdsFilters): Promise<AdsDashboardData> {
@@ -174,9 +187,9 @@ export class RealAdsDashboardSource implements AdsDashboardSource {
     // three independent reads, bounded fan-out (repo rule: no Promise.all in Shopee code)
     const [curDaily, prevDaily, campaignAgg] = (await mapWithConcurrency<() => Promise<unknown[]>, unknown[]>(
       [
-        () => this.rpc<ShopDailyRow>("ads_dashboard_shop_daily", { p_shop_ids: shopIds, p_from: filters.from, p_to: filters.to }),
-        () => this.rpc<ShopDailyRow>("ads_dashboard_shop_daily", { p_shop_ids: shopIds, p_from: prevRange.from, p_to: prevRange.to }),
-        () => this.rpc<CampaignAggRow>("ads_dashboard_campaigns", { p_shop_ids: shopIds, p_from: filters.from, p_to: filters.to }),
+        () => this.rpc<ShopDailyRow>("ads_dashboard_shop_daily", { p_shop_ids: shopIds, p_from: filters.from, p_to: filters.to }, "report_date"),
+        () => this.rpc<ShopDailyRow>("ads_dashboard_shop_daily", { p_shop_ids: shopIds, p_from: prevRange.from, p_to: prevRange.to }, "report_date"),
+        () => this.rpc<CampaignAggRow>("ads_dashboard_campaigns", { p_shop_ids: shopIds, p_from: filters.from, p_to: filters.to }, "campaign_id"),
       ],
       3,
       (read) => read(),

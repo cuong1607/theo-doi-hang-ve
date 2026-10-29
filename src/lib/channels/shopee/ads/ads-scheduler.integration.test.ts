@@ -21,6 +21,7 @@ import { claimNextSyncJob, recoverStaleSyncJobs } from "../../core/sync-jobs.ts"
 import { SyncWorker, type SliceReport } from "../../core/sync-worker.ts";
 import { mapWithConcurrency } from "../../core/time-windows.ts";
 import { ApiCallMeter } from "../sync-instrumentation.ts";
+import { ShopeeApiError } from "../errors.ts";
 import { toJobFailure } from "../sync-errors.ts";
 import { parseAdsFilters } from "./filters.ts";
 import { FixtureShopeeAdsProvider, loadAdsFixtures, MeteredShopeeAdsProvider, type AdsDateRange, type AdsProviderContext, type ShopeeAdsProvider } from "./provider.ts";
@@ -188,7 +189,7 @@ test("no-browser flow: tick → metadata + 30-day backfill + HOT; 15 min later H
   const { data: today } = await db.from("shopee_ads_shop_daily_performance").select("last_synced_at").eq("shop_id", A.id).eq("report_date", "2026-10-28").single();
   assert.equal(Date.parse(today!.last_synced_at), clock.getTime(), "today's shop row refreshed by the background HOT read");
   const hotCampaign = (await jobs(A.id)).filter((j) => j.lane === "ads_hot" && j.sync_type === "ads_campaign_performance_read").at(-1)!;
-  assert.deepEqual((hotCampaign.metadata as { campaignScope: unknown }).campaignScope, { scope: "hot", candidates: 43, known: 143, fallback: null });
+  assert.deepEqual((hotCampaign.metadata as { campaignScope: unknown }).campaignScope, { scope: "hot", candidates: 43, known: 143, fallback: null, unsupported: 0 });
   // dashboard freshness reads the DB: fresh, auto sync on
   const d = await new RealAdsDashboardSource(db, { now: () => clock }).load(parseAdsFilters({ period: "today", shop: A.id }, clock));
   assert.equal(d.sync.state, "fresh");
@@ -208,7 +209,7 @@ test("HOT fallback: campaign metadata stale (> 8 h) → ALL known campaigns (3 b
     await drain([A.id], fixtureProvider);
     assert.deepEqual(fixtureProvider.calls.map((c) => c.ids), [50, 50, 43], "no per-campaign loop: 143 ids in 3 calls");
     const j = (await jobs(A.id)).filter((x) => x.lane === "ads_hot" && x.sync_type === "ads_campaign_performance_read").at(-1)!;
-    assert.deepEqual((j.metadata as { campaignScope: unknown }).campaignScope, { scope: "hot", candidates: 143, known: 143, fallback: "metadata_stale" });
+    assert.deepEqual((j.metadata as { campaignScope: unknown }).campaignScope, { scope: "hot", candidates: 143, known: 143, fallback: "metadata_stale", unsupported: 0 });
   } finally {
     await db.from("channel_sync_states").update({ last_success_at: clock.toISOString() }).eq("shop_id", A.id).eq("sync_type", "ads_campaign_read");
   }
@@ -293,6 +294,67 @@ test("large shop: 1000 campaigns = 20 batches, 3 per slice with checkpoint; a sm
   assert.equal(sim.calls.filter((c) => c.shop === H.ext).length, 20);
   assert.ok(sim.calls.every((c) => c.ids <= 50));
   assert.equal(await count("shopee_ads_campaign_daily_performance", H.id), 1000, "one row per campaign/day");
+});
+
+test("ADS-2.1 multi-shop gaps: a performance job waits for the FIRST complete catalogue (no partial id list), no provider call", async () => {
+  const realNow = () => new Date();
+  const P = await newShop();
+  const range = adsHotRange(new Date(), TZ);
+  const sim = new SimulatedAdsProvider([{ externalShopId: P.ext, campaigns: 120 }], { date: range.from });
+  // a catalogue written page by page but not finished yet (as during a sliced ads_campaign_read)
+  const { error } = await db.from("shopee_ads_campaigns").insert({ shop_id: P.id, provider_campaign_id: "100000", campaign_name: "partial", provider_status: "ongoing", last_synced_at: new Date().toISOString() });
+  if (error) throw error;
+  await enqueueAdsJob(db, { shopId: P.id, syncType: "ads_campaign_performance_read", strategy: "backfill", priority: 7, range, scope: "all", now: realNow() });
+  const r = await worker([P.id], sim, { now: realNow }).runOne(120_000);
+  assert.equal(r?.status, "retry", "dependency pending → retry with backoff");
+  assert.equal(sim.calls.length, 0);
+});
+
+test("ADS-2.1 multi-shop gaps: Shopee refuses one non-product-ads id → that id is dropped and remembered, the batch is re-read, the job succeeds; the backfill marker is set; > 1000 campaigns reach the dashboard", async () => {
+  const realNow = () => new Date();
+  const B = await newShop();
+  const range = adsHotRange(new Date(), TZ);
+  const REFUSED = "100007";
+  class RefusingProvider extends SimulatedAdsProvider {
+    async getProductCampaignDailyPerformance(ctx: AdsProviderContext, input: { campaignIds: readonly string[]; range: AdsDateRange }) {
+      if (input.campaignIds.includes(REFUSED)) {
+        this.calls.push({ shop: ctx.externalShopId, endpoint: "campaign_daily_performance", startedAt: Date.now(), ms: 0, ids: input.campaignIds.length });
+        throw new ShopeeApiError({ apiPath: "/api/v2/ads/get_product_campaign_daily_performance", errorCode: "error_param", message: `Wrong parameters. campaign_id_list: has invalid product ads campaign ids- ${REFUSED};` });
+      }
+      return super.getProductCampaignDailyPerformance(ctx, input);
+    }
+  }
+  const sim = new RefusingProvider([{ externalShopId: B.ext, campaigns: 1100, ongoingShare: 1 }], { date: range.from });
+  await enqueueAdsJob(db, { shopId: B.id, syncType: "ads_campaign_read", strategy: "metadata", priority: 5, now: realNow() });
+  await enqueueAdsJob(db, { shopId: B.id, syncType: "ads_shop_performance_read", strategy: "backfill", priority: 7, range, now: realNow() });
+  const backfill = await enqueueAdsJob(db, { shopId: B.id, syncType: "ads_campaign_performance_read", strategy: "backfill", priority: 7, range, scope: "all", now: realNow() });
+  await drain([B.id], sim, { now: realNow, config: { batchesPerSlice: 100 } });
+  const job = (await jobs(B.id)).find((j) => j.id === backfill.jobId)!;
+  assert.equal(job.status, "success", "one refused id must not fail the job");
+  const perf = sim.calls.filter((c) => c.endpoint === "campaign_daily_performance");
+  assert.equal(perf.length, 23, "22 batches + 1 refused attempt");
+  assert.deepEqual((job.metadata as { unsupportedCampaignIds: string[] }).unsupportedCampaignIds, [REFUSED]);
+  assert.equal(await count("shopee_ads_campaign_daily_performance", B.id), 1099);
+  const { data: refused } = await db.from("shopee_ads_campaigns").select("provider_campaign_id").eq("shop_id", B.id).not("performance_unsupported_at", "is", null);
+  assert.deepEqual(refused?.map((r) => r.provider_campaign_id), [REFUSED]);
+  const { data: marks } = await db.from("shopee_ads_shop_settings").select("shop_backfill_completed_at, campaign_backfill_completed_at").eq("shop_id", B.id).single();
+  assert.ok(marks?.shop_backfill_completed_at && marks.campaign_backfill_completed_at, "both backfill markers set");
+
+  // later jobs never send the refused id again (no wasted call)
+  sim.calls.length = 0;
+  await enqueueAdsJob(db, { shopId: B.id, syncType: "ads_campaign_performance_read", strategy: "cold", priority: 6, range, scope: "all", now: realNow() });
+  await drain([B.id], sim, { now: realNow, config: { batchesPerSlice: 100 } });
+  assert.equal(sim.calls.filter((c) => c.endpoint === "campaign_daily_performance").length, 22);
+
+  // dashboard: PostgREST caps a response at 1000 rows — every campaign must still be there
+  const data = await new RealAdsDashboardSource(db, { now: realNow }).load(parseAdsFilters({ period: "today", shop: B.id }, new Date()));
+  assert.equal(data.statusCounts.all, 1099 + 1, "1100 ongoing campaigns listed (the refused one is ongoing, without data)");
+  const perCampaign = data.campaigns.find((c) => c.metrics.spend > 0)!.metrics.spend;
+  const campaignSpend = data.campaigns.reduce((s, c) => s + c.metrics.spend, 0);
+  assert.equal(campaignSpend, 1099 * perCampaign, "Σ campaigns covers all 1099 readable campaigns (not the first 1000 rows)");
+  // the simulated shop total = every ongoing campaign (incl. the refused one, which Shopee still bills) + 1000 non-product spend
+  assert.equal(data.overview.outsideProductCampaigns?.spend, data.overview.current.spend - campaignSpend);
+  assert.equal(data.overview.outsideProductCampaigns?.spend, 1000 + perCampaign);
 });
 
 test("stale recovery: an interrupted HOT job (worker died) is recovered and finishes without duplicate rows", async () => {

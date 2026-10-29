@@ -28,6 +28,7 @@ import { payloadHash } from "../../core/snapshots.ts";
 import { type SyncJobRow, type SyncMode } from "../../core/sync-jobs.ts";
 import { continuation, type SliceInput, type SliceOutcome, type SyncJobRunner } from "../../core/sync-runner.ts";
 import type { JobProgress } from "../../core/sync-progress.ts";
+import { ShopeeApiError } from "../errors.ts";
 import type { ProviderPayload } from "../product-provider.ts";
 import {
   parseCampaignDailyPerformance,
@@ -413,6 +414,33 @@ function jobRange(job: SyncJobRow): AdsDateRange {
   return r;
 }
 
+const isBackfillJob = (job: SyncJobRow) => job.metadata?.strategy === "backfill" || job.mode === "backfill";
+
+/**
+ * Shopee refuses the WHOLE campaign batch when one id is not a product-ads
+ * campaign: "campaign_id_list: has invalid product ads campaign ids- 20932764;".
+ * Returns the refused ids that belong to the batch (empty = another error).
+ */
+export function invalidAdsCampaignIds(err: unknown, batch: string[]): string[] {
+  if (!(err instanceof ShopeeApiError)) return [];
+  const m = /invalid product ads campaign ids?\s*-?\s*([\d\s,;]+)/i.exec(err.message);
+  if (!m) return [];
+  const inBatch = new Set(batch);
+  return [...new Set(m[1].match(/\d+/g) ?? [])].filter((id) => inBatch.has(id));
+}
+
+/** Per-type "the 30-day backfill has finished" markers (a HOT success is not a backfill). */
+export async function adsBackfillStatus(db: SupabaseClient, shopId: string): Promise<{ shop: boolean; campaign: boolean }> {
+  const { data, error } = await db.from("shopee_ads_shop_settings").select("shop_backfill_completed_at, campaign_backfill_completed_at").eq("shop_id", shopId).maybeSingle<{ shop_backfill_completed_at: string | null; campaign_backfill_completed_at: string | null }>();
+  if (error) throw new Error(`Không đọc được trạng thái backfill Ads: ${error.message}`);
+  return { shop: !!data?.shop_backfill_completed_at, campaign: !!data?.campaign_backfill_completed_at };
+}
+
+async function markAdsBackfillCompleted(db: SupabaseClient, shopId: string, column: "shop_backfill_completed_at" | "campaign_backfill_completed_at", at: Date) {
+  const { error } = await db.from("shopee_ads_shop_settings").upsert({ shop_id: shopId, [column]: at.toISOString() }, { onConflict: "shop_id" });
+  if (error) throw new Error(`Không lưu được trạng thái backfill Ads: ${error.message}`);
+}
+
 function jobScope(job: SyncJobRow): AdsCampaignScope {
   const s = job.metadata?.adsScope;
   return s === "hot" || s === "warm" ? s : "all";
@@ -543,14 +571,20 @@ async function pagedProviderIds(build: (from: number, to: number) => PromiseLike
 export async function selectAdsCampaignScope(
   db: SupabaseClient,
   input: { shopId: string; scope: AdsCampaignScope; range: AdsDateRange; timeZone: string; now: Date; config: AdsSyncConfig; idMap: Map<string, string> },
-): Promise<{ ids: string[]; fallback: string | null }> {
-  const all = [...input.idMap.keys()];
-  if (input.scope === "all") return { ids: all, fallback: null };
+): Promise<{ ids: string[]; fallback: string | null; unsupported: number }> {
+  // campaigns Shopee refused as "not a product-ads campaign" are never sent again (they fail the whole batch)
+  const refused = await pagedProviderIds(
+    (from, to) => db.from("shopee_ads_campaigns").select("provider_campaign_id").eq("shop_id", input.shopId).not("performance_unsupported_at", "is", null).order("provider_campaign_id").range(from, to),
+    (r) => String(r.provider_campaign_id),
+  );
+  const all = [...input.idMap.keys()].filter((id) => !refused.has(id));
+  const unsupported = input.idMap.size - all.length;
+  if (input.scope === "all") return { ids: all, fallback: null, unsupported };
   if (input.scope === "hot") {
     const { data: state, error } = await db.from("channel_sync_states").select("last_success_at").eq("shop_id", input.shopId).eq("sync_type", "ads_campaign_read").maybeSingle<{ last_success_at: string | null }>();
     if (error) throw new Error(`Không đọc được trạng thái danh mục chiến dịch: ${error.message}`);
     const fresh = !!state?.last_success_at && input.now.getTime() - Date.parse(state.last_success_at) < input.config.metadataStaleMinutes * 60_000;
-    if (!fresh) return { ids: all, fallback: "metadata_stale" };
+    if (!fresh) return { ids: all, fallback: "metadata_stale", unsupported };
   }
   const sinceMs = input.scope === "hot" ? input.now.getTime() - input.config.hotRecentStatusHours * 3_600_000 : zonedMidnightUtc(input.range.from, input.timeZone);
   const since = new Date(sinceMs).toISOString();
@@ -581,7 +615,7 @@ export async function selectAdsCampaignScope(
     (r) => uuidToProvider.get(String(r.campaign_id)) ?? null,
   );
   const wanted = new Set([...byStatus, ...active]);
-  return { ids: all.filter((id) => wanted.has(id)), fallback: null };
+  return { ids: all.filter((id) => wanted.has(id)), fallback: null, unsupported };
 }
 
 async function storedCampaignFacts(db: SupabaseClient, campaignIds: string[], range: AdsDateRange): Promise<Map<string, StoredFact>> {
@@ -613,17 +647,18 @@ export class AdsCampaignPerformanceReadRunner implements SyncJobRunner {
     const ctx: AdsProviderContext = { shopId: shop.id, externalShopId: shop.external_shop_id };
     const range = jobRange(job);
     const idMap = await loadAdsCampaignIds(this.deps.db, shop.id);
-    if (idMap.size === 0) {
-      // Campaign metadata has not been synced yet: wait for ads_campaign_read (retry with backoff, no provider call).
-      throw new AdsDependencyPendingError();
-    }
     if (!progress.checkpoint) {
+      // The catalogue is written page by page: until ads_campaign_read has finished once, a partial
+      // catalogue would freeze a partial id list (850 of 1135 campaigns, 2026-10-29) → wait (retry with backoff, no provider call).
+      const { data: catalogue, error: catalogueError } = await this.deps.db.from("channel_sync_states").select("last_success_at").eq("shop_id", shop.id).eq("sync_type", "ads_campaign_read").maybeSingle<{ last_success_at: string | null }>();
+      if (catalogueError) throw new Error(`Không đọc được trạng thái danh mục chiến dịch: ${catalogueError.message}`);
+      if (!catalogue?.last_success_at) throw new AdsDependencyPendingError();
       const scope = await selectAdsCampaignScope(this.deps.db, { shopId: shop.id, scope: jobScope(job), range, timeZone: shop.timezone, now: now(), config, idMap });
       progress.checkpoint = { windows: splitAdsRange(range, ADS_CAMPAIGN_RANGE_DAYS), windowIndex: 0, batchIndex: 0, ids: scope.ids };
-      progress.meta.campaignScope = { scope: jobScope(job), candidates: scope.ids.length, known: idMap.size, fallback: scope.fallback };
+      progress.meta.campaignScope = { scope: jobScope(job), candidates: scope.ids.length, known: idMap.size, fallback: scope.fallback, unsupported: scope.unsupported };
     }
     const cp = progress.checkpoint;
-    const batches = chunk(cp.ids ?? [...idMap.keys()], ADS_ID_BATCH);
+    let batches = chunk(cp.ids ?? [...idMap.keys()], ADS_ID_BATCH);
     const failures = (progress.meta.adsFailures as FailureList | undefined) ?? [];
     const today = shopToday(now(), shop.timezone);
     let callsThisSlice = 0;
@@ -635,7 +670,23 @@ export class AdsCampaignPerformanceReadRunner implements SyncJobRunner {
         if (callsThisSlice >= config.batchesPerSlice) return { kind: "more", reason: "batch_limit", remaining: "more_records" };
         const window = cp.windows[cp.windowIndex];
         const batch = batches[cp.batchIndex];
-        const payload = await this.deps.provider.getProductCampaignDailyPerformance(ctx, { campaignIds: batch, range: window });
+        let payload: ProviderPayload;
+        try {
+          payload = await this.deps.provider.getProductCampaignDailyPerformance(ctx, { campaignIds: batch, range: window });
+        } catch (err) {
+          const refused = invalidAdsCampaignIds(err, batch);
+          if (!refused.length) throw err;
+          // one non-product-ads id fails the whole batch: drop it (remembered for later jobs) and re-read the same batch
+          callsThisSlice++;
+          const refusedSet = new Set(refused);
+          cp.ids = (cp.ids ?? [...idMap.keys()]).filter((id) => !refusedSet.has(id));
+          batches = chunk(cp.ids, ADS_ID_BATCH);
+          await markAdsCampaignsUnsupported(this.deps.db, shop.id, refused, now());
+          const dropped = (progress.meta.unsupportedCampaignIds as string[] | undefined) ?? [];
+          progress.meta.unsupportedCampaignIds = [...dropped, ...refused].slice(0, 50);
+          if ((await lease.checkpoint(progress.toPatch())).cancelRequested) return { kind: "cancelled" };
+          continue;
+        }
         callsThisSlice++;
         const syncedAt = now().toISOString();
         await saveAdsSnapshot(this.deps.db, { shopId: shop.id, payload, key: `campaign_daily:${window.from}:${window.to}:${batch[0]}:${batch.length}`, sourceMode: this.deps.provider.mode, syncedAt });
@@ -674,8 +725,14 @@ export class AdsCampaignPerformanceReadRunner implements SyncJobRunner {
       cp.windowIndex++;
     }
     progress.meta.lastReportDate = range.to;
+    if (isBackfillJob(job)) await markAdsBackfillCompleted(this.deps.db, shop.id, "campaign_backfill_completed_at", now());
     return doneOutcome(range, failures.length, failures[0]?.reason ?? null, now());
   }
+}
+
+async function markAdsCampaignsUnsupported(db: SupabaseClient, shopId: string, providerIds: string[], at: Date) {
+  const { error } = await db.from("shopee_ads_campaigns").update({ performance_unsupported_at: at.toISOString() }).eq("shop_id", shopId).in("provider_campaign_id", providerIds);
+  if (error) throw new Error(`Không lưu được chiến dịch Shopee từ chối: ${error.message}`);
 }
 
 export class AdsShopPerformanceReadRunner implements SyncJobRunner {
@@ -721,6 +778,7 @@ export class AdsShopPerformanceReadRunner implements SyncJobRunner {
       if ((await lease.checkpoint(progress.toPatch())).cancelRequested) return { kind: "cancelled" };
     }
     progress.meta.lastReportDate = range.to;
+    if (isBackfillJob(job)) await markAdsBackfillCompleted(this.deps.db, shop.id, "shop_backfill_completed_at", now());
     return doneOutcome(range, 0, null, now());
   }
 }
@@ -855,7 +913,9 @@ export async function requestAdsRefresh(
   const { data: states, error } = await db.from("channel_sync_states").select("sync_type, last_success_at").eq("shop_id", shop.id).in("sync_type", ["ads_campaign_read", "ads_campaign_performance_read", "ads_shop_performance_read"]);
   if (error) throw new Error(`Không đọc được trạng thái đồng bộ Ads: ${error.message}`);
   const last = new Map(((states ?? []) as Array<{ sync_type: string; last_success_at: string | null }>).map((s) => [s.sync_type, s.last_success_at]));
-  const initial = !last.get("ads_campaign_performance_read") || !last.get("ads_shop_performance_read");
+  // a HOT success is not a backfill: a shop whose 30-day backfill failed is still "initial" for that type
+  const backfilled = await adsBackfillStatus(db, shop.id);
+  const initial = !backfilled.shop || !backfilled.campaign;
   const range = initial ? adsBackfillRange(now, shop.timezone, config) : adsHotRange(now, shop.timezone);
 
   if (!initial && !input.force && config.manualDedupeMinutes > 0) {
@@ -873,8 +933,9 @@ export async function requestAdsRefresh(
   };
   if (campaignStale) await add({ syncType: "ads_campaign_read", strategy: "manual", priority: ADS_PRIORITY.manual }, true);
   if (initial) {
-    await add({ syncType: "ads_campaign_performance_read", strategy: "backfill", priority: ADS_PRIORITY.manual, range, scope: "all" }, true);
-    await add({ syncType: "ads_shop_performance_read", strategy: "backfill", priority: ADS_PRIORITY.manual, range }, true);
+    // the type already backfilled only needs today
+    await add(backfilled.campaign ? { syncType: "ads_campaign_performance_read", strategy: "manual", priority: ADS_PRIORITY.manual, range: adsHotRange(now, shop.timezone), scope: "all" } : { syncType: "ads_campaign_performance_read", strategy: "backfill", priority: ADS_PRIORITY.manual, range, scope: "all" }, true);
+    await add(backfilled.shop ? { syncType: "ads_shop_performance_read", strategy: "manual", priority: ADS_PRIORITY.manual, range: adsHotRange(now, shop.timezone) } : { syncType: "ads_shop_performance_read", strategy: "backfill", priority: ADS_PRIORITY.manual, range }, true);
     return { shopId: shop.id, jobs, range, initial, fresh: false };
   }
   await add({ syncType: "ads_campaign_performance_read", strategy: "manual", priority: ADS_PRIORITY.manual, range, scope: "all" }, true);

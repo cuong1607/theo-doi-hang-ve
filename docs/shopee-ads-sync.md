@@ -80,6 +80,13 @@ Opening the dashboard never calls Shopee and never enqueues anything.
   - A failing batch fails only its own job; it is retried from its checkpoint.
   - A failing shop never blocks the others. The circuit breaker pauses that shop's automatic jobs.
 
+## Multi-shop safeguards (ADS-2.1)
+- **Catalogue first:** a performance job freezes its id list only after `ads_campaign_read` has succeeded once. A catalogue that is still being written page by page would otherwise freeze a partial list.
+- **Rejected ids:**
+  - When Shopee answers "invalid product ads campaign ids- X", X is dropped and the same batch is re-read.
+  - X is stored in `performance_unsupported_at` and excluded from later scopes (`campaignScope.unsupported`).
+- **Backfill markers:** a failed backfill is retried at the next WARM slot, for the missing type only, until it finishes. A HOT success does not count as a backfill.
+
 ## Accuracy
 - **Today is partial.** HOT upserts the same rows repeatedly, and the dashboard warns "Hôm nay — dữ liệu có thể chưa hoàn tất".
 - **Completed days are never treated as immutable.** WARM re-reads them hourly and COLD twice a day.
