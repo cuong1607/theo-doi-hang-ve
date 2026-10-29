@@ -159,6 +159,44 @@ export interface AdsFilters {
   type: AdsCampaignType | "all";
 }
 
+/** ADS-3A.1 hourly Σ vs daily facts of the same shop × date (docs/shopee-ads-hourly.md). */
+export type AdsHourlyReconciliationStatus = "IN_PROGRESS" | "MATCH" | "ROUNDING_DIFFERENCE" | "MISMATCH" | "INSUFFICIENT_DATA";
+
+export interface AdsIntradayHour {
+  hour: number;
+  /** "14h" */
+  label: string;
+  /** "current" = the hour that is still running (partial, "Đang diễn ra"). */
+  state: "complete" | "current";
+  /** Summed primitives + ratio-of-sums. null = Shopee returned no row for this hour (a gap, never drawn as 0). */
+  metrics: AdsMetricValues | null;
+  /** Shops with a row for this hour (All shops: fewer than `shops.enabled` = partial hour). */
+  shops: number;
+  cumSpend: number;
+  cumRevenue: number;
+}
+
+export interface AdsIntradayData {
+  /** Shop-local report date (YYYY-MM-DD). */
+  date: string;
+  /** Current shop-local hour (0–23); hours after it are not shown. */
+  currentHour: number;
+  /** disabled = no selected shop has hourly enabled and nothing is stored; empty = enabled, no rows yet; unavailable = could not be read. */
+  status: "ok" | "disabled" | "empty" | "unavailable";
+  /** 00h → current hour. */
+  hours: AdsIntradayHour[];
+  /** Σ hours through the current hour (ratio-of-sums) — intraday breakdown, NOT the overview KPI (that stays the daily fact). */
+  totals: AdsMetricValues;
+  /** Today 00h → last COMPLETED hour vs yesterday over the same hours (never a partial today vs a full yesterday). */
+  sameHourYesterday: { throughHour: number; today: AdsMetricValues; yesterday: AdsMetricValues } | null;
+  /** Observational only (no action is ever suggested). Completed hours, enough data. */
+  peaks: Array<{ key: "spend" | "revenue" | "roas"; label: string; hour: number; value: number }>;
+  freshness: { lastSyncedAt: string | null; targetMinutes: number; staleAfterMinutes: number; stale: boolean };
+  shops: { selected: number; enabled: number; withData: number };
+  /** Yesterday (completed day): worst status across the selected shops. */
+  reconciliation: { date: string; status: AdsHourlyReconciliationStatus; reasons: string[] } | null;
+}
+
 export interface AdsDashboardData {
   filters: AdsFilters;
   previousRange: { from: string; to: string };
@@ -172,5 +210,7 @@ export interface AdsDashboardData {
   statusCounts: Record<AdsCampaignStatus | "all", number>;
   insights: AdsInsight[];
   sync: AdsSyncStatus;
+  /** Real data only (ADS-3A.1): "Hôm nay theo giờ". Undefined in fixture mode. */
+  intraday?: AdsIntradayData;
   generatedAt: string;
 }

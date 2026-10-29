@@ -19,7 +19,7 @@ export const LEGACY_SYNC_TYPES: readonly RunnableSyncType[] = RUNNABLE_SYNC_TYPE
  * ADS_SYNC_TYPES and of the DB check). READ-ONLY POLICY: read/sync jobs only
  * (ads_<what>_read) — never *_update / *_set / budget / bid / status writes.
  */
-export const ADS_SYNC_TYPES = ["ads_campaign_read", "ads_campaign_performance_read", "ads_shop_performance_read"] as const;
+export const ADS_SYNC_TYPES = ["ads_campaign_read", "ads_campaign_performance_read", "ads_shop_performance_read", "ads_shop_hourly_read", "ads_campaign_hourly_read"] as const;
 export type AdsSyncType = (typeof ADS_SYNC_TYPES)[number];
 
 /** Legacy job types the scheduler may enqueue and the worker may claim right now. */

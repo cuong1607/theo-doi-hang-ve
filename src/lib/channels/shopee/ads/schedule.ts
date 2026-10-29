@@ -23,7 +23,9 @@
 // ============================================================
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { ADS_PRIORITY, adsBackfillRange, adsBackfillStatus, adsColdRange, adsHotRange, adsWarmRange, enqueueAdsJob, type AdsCampaignScope, type AdsStrategy, type AdsSyncConfig } from "./sync.ts";
+import { adsHourlyReconciliation, loadAdsHourlyReconciliation } from "./hourly.ts";
+import { ADS_PRIORITY, addDaysIso, adsBackfillRange, adsBackfillStatus, adsColdRange, adsHotRange, adsWarmRange, enqueueAdsJob, shopToday, type AdsCampaignScope, type AdsStrategy, type AdsSyncConfig } from "./sync.ts";
+import type { AdsHourlyReconciliationStatus } from "./view-models.ts";
 import type { AdsDateRange } from "./provider.ts";
 import type { AdsSyncType } from "./read-only-policy.ts";
 
@@ -31,8 +33,23 @@ const MINUTE = 60_000;
 
 // ------------------------------------------------------------------ pure planning
 
-export type AdsSlotColumn = "last_hot_shop_slot_at" | "last_hot_campaign_slot_at" | "last_warm_slot_at" | "last_cold_slot_at" | "last_metadata_slot_at";
-export const ADS_SLOT_COLUMNS: readonly AdsSlotColumn[] = ["last_hot_shop_slot_at", "last_hot_campaign_slot_at", "last_warm_slot_at", "last_cold_slot_at", "last_metadata_slot_at"];
+export type AdsSlotColumn =
+  | "last_hot_shop_slot_at"
+  | "last_hot_campaign_slot_at"
+  | "last_warm_slot_at"
+  | "last_cold_slot_at"
+  | "last_metadata_slot_at"
+  | "last_hot_hourly_slot_at"
+  | "last_hourly_finalize_slot_at";
+export const ADS_SLOT_COLUMNS: readonly AdsSlotColumn[] = [
+  "last_hot_shop_slot_at",
+  "last_hot_campaign_slot_at",
+  "last_warm_slot_at",
+  "last_cold_slot_at",
+  "last_metadata_slot_at",
+  "last_hot_hourly_slot_at",
+  "last_hourly_finalize_slot_at",
+];
 
 export type AdsSlotState = Partial<Record<AdsSlotColumn, string | null>>;
 
@@ -45,7 +62,7 @@ export interface AdsJobSpec {
 }
 
 export interface AdsPlannedSlot {
-  kind: "hot_shop" | "hot_campaign" | "warm" | "backfill" | "cold" | "metadata";
+  kind: "hot_shop" | "hot_campaign" | "warm" | "backfill" | "cold" | "metadata" | "hot_hourly" | "hourly_finalize";
   column: AdsSlotColumn;
   slotAt: Date;
   jobs: AdsJobSpec[];
@@ -126,6 +143,10 @@ export function planAdsShop(input: {
   performanceSynced: boolean;
   /** Per type (when known): only the missing backfill is re-read. */
   backfilled?: { shop: boolean; campaign: boolean };
+  /** ADS-3A.1: ADS_HOURLY_SYNC_ENABLED AND the shop's ads_hourly_enabled. */
+  hourlyEnabled?: boolean;
+  /** A daily HOT read of an EARLIER slot is still waiting: hourly waits too (daily freshness first). */
+  dailyHotBacklog?: boolean;
 }): AdsPlannedSlot[] {
   const { now, timeZone, offsetMinutes: off, slots, config } = input;
   const out: AdsPlannedSlot[] = [];
@@ -142,6 +163,26 @@ export function planAdsShop(input: {
   add("hot_shop", "last_hot_shop_slot_at", latestAdsSlot(now, config.hotIntervalMinutes, off), [{ syncType: "ads_shop_performance_read", strategy: "hot", priority: ADS_PRIORITY.hotShop, range: hot }]);
   if (input.hasCampaigns) {
     add("hot_campaign", "last_hot_campaign_slot_at", latestAdsSlot(now, config.campaignHotIntervalMinutes, off), [{ syncType: "ads_campaign_performance_read", strategy: "hot", priority: ADS_PRIORITY.hotCampaign, range: hot, scope: "hot" }]);
+  }
+
+  // HOURLY (ADS-3A.1): same 15-minute slot as HOT, TODAY only, below the daily HOT priorities.
+  // While the daily HOT queue is behind, the slot is left unclaimed (retried next heartbeat).
+  if (input.hourlyEnabled && !input.dailyHotBacklog) {
+    add("hot_hourly", "last_hot_hourly_slot_at", latestAdsSlot(now, config.hotIntervalMinutes, off), [
+      { syncType: "ads_shop_hourly_read", strategy: "hot", priority: ADS_PRIORITY.hotShopHourly, range: hot },
+      ...(input.hasCampaigns ? [{ syncType: "ads_campaign_hourly_read" as const, strategy: "hot" as const, priority: ADS_PRIORITY.hotCampaignHourly, range: hot, scope: "hot" as const }] : []),
+    ]);
+  }
+  // yesterday's hourly rows once after the day rollover, ALL campaigns (accuracy pass) + reconciliation
+  if (input.hourlyEnabled) {
+    const finalizeSlot = latestColdSlot(now, [config.hourlyFinalizeTime], timeZone, off * 2);
+    // the day that ended before the slot (a slot at 02:30 on D finalizes D−1, whenever the heartbeat picks it up)
+    const day = finalizeSlot ? addDaysIso(shopToday(finalizeSlot, timeZone), -1) : addDaysIso(hot.from, -1);
+    const yesterday = { from: day, to: day };
+    add("hourly_finalize", "last_hourly_finalize_slot_at", finalizeSlot, [
+      { syncType: "ads_shop_hourly_read", strategy: "finalize", priority: ADS_PRIORITY.hourlyFinalize, range: yesterday },
+      ...(input.hasCampaigns ? [{ syncType: "ads_campaign_hourly_read" as const, strategy: "finalize" as const, priority: ADS_PRIORITY.hourlyFinalize, range: yesterday, scope: "all" as const }] : []),
+    ]);
   }
 
   // WARM (or the first BACKFILL, which also covers what WARM / COLD would read)
@@ -183,6 +224,8 @@ export interface AdsSchedulerTickResult {
   slotsClaimed: number;
   skippedShops: Array<{ shopId: string; reason: string }>;
   errors: Array<{ shopId: string; message: string }>;
+  /** ADS-3A.1: shops whose hourly slot waited because a daily HOT read of an earlier slot was still queued. */
+  hourlyDeferred: string[];
   durationMs: number;
 }
 
@@ -196,6 +239,9 @@ interface SettingsRow {
   last_warm_slot_at: string | null;
   last_cold_slot_at: string | null;
   last_metadata_slot_at: string | null;
+  ads_hourly_enabled: boolean;
+  last_hot_hourly_slot_at: string | null;
+  last_hourly_finalize_slot_at: string | null;
 }
 
 /**
@@ -207,14 +253,17 @@ export async function runAdsSchedulerTick(db: SupabaseClient, options: { config:
   const started = Date.now();
   const now = options.now ?? new Date();
   const config = options.config;
-  const result: AdsSchedulerTickResult = { disabled: false, shops: 0, enqueued: [], slotsClaimed: 0, skippedShops: [], errors: [], durationMs: 0 };
+  const result: AdsSchedulerTickResult = { disabled: false, shops: 0, enqueued: [], slotsClaimed: 0, skippedShops: [], errors: [], hourlyDeferred: [], durationMs: 0 };
   if (!config.autoSyncEnabled) {
     result.disabled = true;
     result.durationMs = Date.now() - started;
     return result;
   }
 
-  let q = db.from("shopee_ads_shop_settings").select("shop_id, sync_slot, last_hot_shop_slot_at, last_hot_campaign_slot_at, last_warm_slot_at, last_cold_slot_at, last_metadata_slot_at").eq("ads_sync_enabled", true);
+  let q = db
+    .from("shopee_ads_shop_settings")
+    .select("shop_id, sync_slot, last_hot_shop_slot_at, last_hot_campaign_slot_at, last_warm_slot_at, last_cold_slot_at, last_metadata_slot_at, ads_hourly_enabled, last_hot_hourly_slot_at, last_hourly_finalize_slot_at")
+    .eq("ads_sync_enabled", true);
   if (options.shopIds) q = q.in("shop_id", [...options.shopIds]);
   const { data: settings, error } = await q;
   if (error) throw new Error(`Không đọc được cấu hình đồng bộ Ads: ${error.message}`);
@@ -264,7 +313,10 @@ export async function runAdsSchedulerTick(db: SupabaseClient, options: { config:
       const shop = shopOf.get(s.shop_id)!;
       const facts = await shopFacts(db, s.shop_id);
       const offset = offsets.get(s.shop_id) ?? 0;
-      const plan = planAdsShop({ now, timeZone: shop.timezone || "Asia/Ho_Chi_Minh", offsetMinutes: offset, slots: s, config, ...facts });
+      const hourlyEnabled = config.hourlySyncEnabled && !!s.ads_hourly_enabled;
+      const dailyHotBacklog = hourlyEnabled ? await adsDailyHotBacklog(db, s.shop_id, latestAdsSlot(now, config.hotIntervalMinutes, offset)) : false;
+      if (dailyHotBacklog) result.hourlyDeferred.push(s.shop_id);
+      const plan = planAdsShop({ now, timeZone: shop.timezone || "Asia/Ho_Chi_Minh", offsetMinutes: offset, slots: s, config, ...facts, hourlyEnabled, dailyHotBacklog });
       // ONE start offset per shop and tick: every job of the shop becomes claimable together, priority decides the order
       const notBefore = new Date(now.getTime() + adsJitterMs(s.shop_id, latestAdsSlot(now, config.hotIntervalMinutes, offset), config.jitterSeconds));
       for (const slot of plan) {
@@ -297,6 +349,24 @@ async function shopFacts(db: SupabaseClient, shopId: string): Promise<{ hasCampa
   return { hasCampaigns: (count ?? 0) > 0, performanceSynced: backfilled.shop && backfilled.campaign, backfilled };
 }
 
+/**
+ * Daily HOT queue falling behind: a daily read in the HOT lane, created before
+ * the current slot, is still active (pending / retry / running). Hourly waits
+ * — daily canonical freshness always comes first.
+ */
+export async function adsDailyHotBacklog(db: SupabaseClient, shopId: string, slotAt: Date): Promise<boolean> {
+  const { count, error } = await db
+    .from("channel_sync_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("shop_id", shopId)
+    .eq("lane", "ads_hot")
+    .in("sync_type", ["ads_shop_performance_read", "ads_campaign_performance_read"])
+    .in("status", ["pending", "running", "retry"])
+    .lt("created_at", slotAt.toISOString());
+  if (error) throw new Error(`Không đọc được hàng đợi HOT: ${error.message}`);
+  return (count ?? 0) > 0;
+}
+
 /** Conditional UPDATE: true only for the ONE tick that moves the slot forward. */
 async function claimSlot(db: SupabaseClient, shopId: string, column: string, slotAt: Date): Promise<boolean> {
   const iso = slotAt.toISOString();
@@ -322,18 +392,30 @@ export interface AdsShopSyncOverview {
   campaignTodayAt: string | null;
   hot: { runs: number; failed: number; p95QueueWaitMs: number | null; p95TotalMs: number | null; apiCalls: number };
   activeJobs: number;
+  /** ADS-3A.1: hourly TODAY layer of the shop. */
+  hourly: {
+    enabled: boolean;
+    /** Latest write of today's shop hourly rows. */
+    lastSyncedAt: string | null;
+    runs: number;
+    failed: number;
+    apiCalls: number;
+    p95TotalMs: number | null;
+    /** Yesterday's hourly Σ vs daily. */
+    reconciliation: AdsHourlyReconciliationStatus | null;
+  };
 }
 
 /** Per shop: switch, stagger offset, campaign count, HOT SLA over the last 24 h. */
-export async function loadAdsSyncOverview(db: SupabaseClient): Promise<AdsShopSyncOverview[]> {
+export async function loadAdsSyncOverview(db: SupabaseClient, now: Date = new Date()): Promise<AdsShopSyncOverview[]> {
   const { data: shops, error } = await db.from("shops").select("id, shop_name").eq("channel", "shopee").eq("data_source", "live").eq("is_active", true).order("shop_name");
   if (error) throw new Error(`Không đọc được shop: ${error.message}`);
   const list = (shops ?? []) as Array<{ id: string; shop_name: string }>;
   if (!list.length) return [];
   const ids = list.map((s) => s.id);
-  const { data: settings, error: sError } = await db.from("shopee_ads_shop_settings").select("shop_id, ads_sync_enabled, sync_slot").in("shop_id", ids);
+  const { data: settings, error: sError } = await db.from("shopee_ads_shop_settings").select("shop_id, ads_sync_enabled, sync_slot, ads_hourly_enabled").in("shop_id", ids);
   if (sError) throw new Error(`Không đọc được cấu hình đồng bộ Ads: ${sError.message}`);
-  const settingOf = new Map(((settings ?? []) as Array<{ shop_id: string; ads_sync_enabled: boolean; sync_slot: number | null }>).map((s) => [s.shop_id, s]));
+  const settingOf = new Map(((settings ?? []) as Array<{ shop_id: string; ads_sync_enabled: boolean; sync_slot: number | null; ads_hourly_enabled: boolean }>).map((s) => [s.shop_id, s]));
   const enabled = list.filter((s) => settingOf.get(s.id)?.ads_sync_enabled);
   const offsets = adsShopOffsets(enabled.map((s) => ({ id: s.id, syncSlot: settingOf.get(s.id)?.sync_slot ?? null })));
   const { data: metrics, error: mError } = await db.rpc("get_ads_sync_metrics", { p_hours: 24 });
@@ -341,17 +423,33 @@ export async function loadAdsSyncOverview(db: SupabaseClient): Promise<AdsShopSy
   const { data: fresh, error: fError } = await db.rpc("ads_sync_freshness", { p_shop_ids: ids });
   if (fError) throw new Error(`Không đọc được độ mới dữ liệu: ${fError.message}`);
   const freshOf = new Map(((fresh ?? []) as Array<{ shop_id: string; shop_today_at: string | null; campaign_today_at: string | null; active_jobs: number }>).map((f) => [f.shop_id, f]));
-  type M = { shop_id: string; strategy: string; jobs: number; failed: number; p95_queue_wait_ms: number | null; p95_total_ms: number | null; api_calls: number };
-  const hotOf = (shopId: string) => {
-    const rows = ((metrics ?? []) as M[]).filter((m) => m.shop_id === shopId && m.strategy === "hot");
+  type M = { shop_id: string; sync_type: string; strategy: string; jobs: number; failed: number; p95_queue_wait_ms: number | null; p95_total_ms: number | null; api_calls: number };
+  const HOURLY_TYPES = ["ads_shop_hourly_read", "ads_campaign_hourly_read"];
+  const hotOf = (shopId: string, hourly = false) => {
+    const rows = ((metrics ?? []) as M[]).filter((m) => m.shop_id === shopId && m.strategy === "hot" && HOURLY_TYPES.includes(m.sync_type) === hourly);
     const max = (pick: (m: M) => number | null) => rows.reduce<number | null>((a, m) => (pick(m) === null ? a : Math.max(a ?? 0, Number(pick(m)))), null);
     return { runs: rows.reduce((a, m) => a + Number(m.jobs), 0), failed: rows.reduce((a, m) => a + Number(m.failed), 0), p95QueueWaitMs: max((m) => m.p95_queue_wait_ms), p95TotalMs: max((m) => m.p95_total_ms), apiCalls: rows.reduce((a, m) => a + Number(m.api_calls ?? 0), 0) };
   };
+  // hourly layer (tolerant: an unreadable hourly table never hides the daily overview)
+  const tz = "Asia/Ho_Chi_Minh";
+  const today = shopToday(now, tz);
+  const hourlySynced = new Map<string, string>();
+  const reconOf = new Map<string, AdsHourlyReconciliationStatus>();
+  try {
+    const { data: synced, error: hError } = await db.from("shopee_ads_shop_hourly_performance").select("shop_id, last_synced_at").in("shop_id", ids).eq("report_date", today).order("last_synced_at", { ascending: false }).range(0, 999);
+    if (hError) throw hError;
+    for (const r of (synced ?? []) as Array<{ shop_id: string; last_synced_at: string }>) if (!hourlySynced.has(r.shop_id)) hourlySynced.set(r.shop_id, r.last_synced_at);
+    const yesterday = addDaysIso(today, -1);
+    for (const r of await loadAdsHourlyReconciliation(db, ids, { from: yesterday, to: yesterday })) reconOf.set(r.shop_id, adsHourlyReconciliation(r, today).status);
+  } catch (err) {
+    console.warn(JSON.stringify({ source: "ads-sync-overview", event: "hourly_unavailable", message: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200) }));
+  }
   const out: AdsShopSyncOverview[] = [];
   for (const s of list) {
     const { count, error: cError } = await db.from("shopee_ads_campaigns").select("id", { count: "exact", head: true }).eq("shop_id", s.id);
     if (cError) throw new Error(`Không đọc được danh mục chiến dịch: ${cError.message}`);
     const f = freshOf.get(s.id);
+    const hourlyHot = hotOf(s.id, true);
     out.push({
       shopId: s.id,
       shopName: s.shop_name,
@@ -362,6 +460,15 @@ export async function loadAdsSyncOverview(db: SupabaseClient): Promise<AdsShopSy
       campaignTodayAt: f?.campaign_today_at ?? null,
       hot: hotOf(s.id),
       activeJobs: Number(f?.active_jobs ?? 0),
+      hourly: {
+        enabled: !!settingOf.get(s.id)?.ads_hourly_enabled,
+        lastSyncedAt: hourlySynced.get(s.id) ?? null,
+        runs: hourlyHot.runs,
+        failed: hourlyHot.failed,
+        apiCalls: hourlyHot.apiCalls,
+        p95TotalMs: hourlyHot.p95TotalMs,
+        reconciliation: reconOf.get(s.id) ?? null,
+      },
     });
   }
   return out;
@@ -376,4 +483,12 @@ export async function setAdsShopSyncEnabled(db: SupabaseClient, input: { shopId:
   if (input.syncSlot !== undefined) row.sync_slot = input.syncSlot;
   const { error } = await db.from("shopee_ads_shop_settings").upsert(row, { onConflict: "shop_id" });
   if (error) throw new Error(`Không lưu được cấu hình đồng bộ Ads: ${error.message}`);
+}
+
+/** ADS-3A.1 hourly rollout switch for one shop (pilot first). Only decides whether hourly READ jobs are enqueued. */
+export async function setAdsShopHourlyEnabled(db: SupabaseClient, input: { shopId: string; enabled: boolean; updatedBy?: string | null }) {
+  const row: Record<string, unknown> = { shop_id: input.shopId, ads_hourly_enabled: input.enabled, updated_by: input.updatedBy ?? null };
+  if (input.enabled) row.hourly_enabled_at = new Date().toISOString();
+  const { error } = await db.from("shopee_ads_shop_settings").upsert(row, { onConflict: "shop_id" });
+  if (error) throw new Error(`Không lưu được cấu hình theo giờ: ${error.message}`);
 }

@@ -23,12 +23,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { addDays, daysBetween } from "../../../analytics/periods.ts";
 import { mapWithConcurrency } from "../../core/time-windows.ts";
 import { adsPreviousRange } from "./filters.ts";
+import { adsHourlyReconciliation, buildAdsIntraday, loadAdsHourlyReconciliation, loadAdsShopHourly, unavailableIntraday } from "./hourly.ts";
 import { mapAdsCampaignStatus, mapAdsCampaignType } from "./mapper.ts";
 import { addTotals, deriveMetrics, subtractTotals, ZERO_TOTALS } from "./metrics.ts";
 import { ADS_SYNC_TYPES } from "./read-only-policy.ts";
 import { AdsDataUnavailableError, type AdsDashboardSource } from "./source.ts";
-import { shopToday } from "./sync.ts";
-import type { AdsCampaignRow, AdsCampaignStatus, AdsDashboardData, AdsFilters, AdsMetricValues, AdsSyncStatus, AdsTotals, AdsTrendPoint } from "./view-models.ts";
+import { getAdsSyncConfig, shopHour, shopToday } from "./sync.ts";
+import type { AdsCampaignRow, AdsCampaignStatus, AdsDashboardData, AdsFilters, AdsIntradayData, AdsMetricValues, AdsSyncStatus, AdsTotals, AdsTrendPoint } from "./view-models.ts";
 
 type Num = number | string | null;
 const n = (v: Num): number => (v === null || v === undefined ? 0 : Number(v));
@@ -70,6 +71,8 @@ export const ADS_SYNC_LABELS: Record<(typeof ADS_SYNC_TYPES)[number], string> = 
   ads_campaign_read: "Danh mục chiến dịch",
   ads_campaign_performance_read: "Hiệu quả chiến dịch",
   ads_shop_performance_read: "Tổng quảng cáo cấp shop",
+  ads_shop_hourly_read: "Tổng shop theo giờ",
+  ads_campaign_hourly_read: "Chiến dịch theo giờ",
 };
 
 const NO_SHOP = "00000000-0000-0000-0000-000000000000";
@@ -281,8 +284,50 @@ export class RealAdsDashboardSource implements AdsDashboardSource {
       statusCounts,
       insights: [],
       sync: await this.syncStatus(shopIds, selected, filters, now),
+      intraday: await this.intraday(shopIds, selected, now),
       generatedAt: now.toISOString(),
     };
+  }
+
+  /**
+   * ADS-3A.1 "Hôm nay theo giờ": shop hourly rows of today (+ yesterday for the
+   * same-hour comparison and the completed-day reconciliation). DB only.
+   * Never breaks the dashboard: an unreadable hourly layer (e.g. code deployed
+   * before migration 00067) shows "unavailable", nothing is synthesized.
+   */
+  private async intraday(shopIds: string[], selected: ShopRow[], now: Date): Promise<AdsIntradayData> {
+    const config = getAdsSyncConfig();
+    const tz = selected[0]?.timezone || "Asia/Ho_Chi_Minh";
+    const today = shopToday(now, tz);
+    const yesterday = addDays(today, -1);
+    const currentHour = shopHour(now, tz);
+    try {
+      const { data: settings, error: settingsError } = await this.db.from("shopee_ads_shop_settings").select("shop_id, ads_hourly_enabled").in("shop_id", shopIds.length ? shopIds : [NO_SHOP]);
+      if (settingsError) throw settingsError;
+      const enabled = ((settings ?? []) as Array<{ shop_id: string; ads_hourly_enabled: boolean }>).filter((s) => s.ads_hourly_enabled).length;
+      const rows = await loadAdsShopHourly(this.db, shopIds, { from: yesterday, to: today });
+      // freshness per shop with rows today (≤ 24 rows per shop: one page for any realistic shop count)
+      const { data: synced, error: syncedError } = await this.db.from("shopee_ads_shop_hourly_performance").select("shop_id, last_synced_at").in("shop_id", shopIds.length ? shopIds : [NO_SHOP]).eq("report_date", today).order("last_synced_at", { ascending: false }).range(0, RPC_PAGE - 1);
+      if (syncedError) throw syncedError;
+      const latest = new Map<string, string>();
+      for (const r of (synced ?? []) as Array<{ shop_id: string; last_synced_at: string }>) if (!latest.has(r.shop_id)) latest.set(r.shop_id, r.last_synced_at);
+      const recon = (await loadAdsHourlyReconciliation(this.db, shopIds, { from: yesterday, to: yesterday })).map((r) => adsHourlyReconciliation(r, today));
+      return buildAdsIntraday({
+        today,
+        yesterday,
+        currentHour,
+        rows,
+        shops: { selected: shopIds.length, enabled },
+        lastSyncedByShop: [...latest.values()],
+        reconciliation: recon,
+        now,
+        freshTargetMinutes: config.hourlyFreshTargetMinutes,
+        staleMinutes: config.hourlyStaleMinutes,
+      });
+    } catch (err) {
+      console.warn(JSON.stringify({ source: "ads-dashboard", event: "intraday_unavailable", message: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200) }));
+      return unavailableIntraday(today, currentHour, config.hourlyFreshTargetMinutes, config.hourlyStaleMinutes);
+    }
   }
 
   private async syncStatus(shopIds: string[], selected: ShopRow[], filters: AdsFilters, now: Date): Promise<AdsSyncStatus> {

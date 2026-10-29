@@ -74,6 +74,8 @@ async function main() {
   if (!shopIds.length) throw new Error("Cần ít nhất 1 shop Shopee live trong DB local.");
   const { count: preexisting } = await admin.from("shopee_ads_campaigns").select("id", { count: "exact", head: true }).in("shop_id", shopIds);
   if ((preexisting ?? 0) > 0) throw new Error("DB local đã có dữ liệu Ads cho shop live — dừng để không xoá nhầm.");
+  const { data: existingSettings } = await admin.from("shopee_ads_shop_settings").select("shop_id").in("shop_id", shopIds);
+  const settingsBefore = new Set((existingSettings ?? []).map((s) => s.shop_id as string));
 
   const { data: created, error } = await admin.auth.admin.createUser({ email: EMAIL, password: PASSWORD, email_confirm: true });
   if (error || !created.user) throw error ?? new Error("createUser failed");
@@ -203,6 +205,8 @@ async function main() {
   } finally {
     await browser?.close();
     await cleanupAds(shopIds);
+    // ADS-2.1: the run's backfill markers live in shopee_ads_shop_settings — remove only the rows this run created
+    await admin.from("shopee_ads_shop_settings").delete().in("shop_id", shopIds.filter((id) => !settingsBefore.has(id)));
     await admin.from("profiles").delete().eq("id", userId);
     await admin.auth.admin.deleteUser(userId);
   }

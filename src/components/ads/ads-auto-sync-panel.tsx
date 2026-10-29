@@ -9,7 +9,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import type { AdsShopSyncOverview } from "@/lib/channels/shopee/ads/schedule";
-import { toggleAdsAutoSyncAction } from "@/app/(authenticated)/shopee/ads/actions";
+import type { AdsHourlyReconciliationStatus } from "@/lib/channels/shopee/ads/view-models";
+import { toggleAdsAutoSyncAction, toggleAdsHourlySyncAction } from "@/app/(authenticated)/shopee/ads/actions";
 import { toast } from "@/components/patterns/toast";
 import { Button } from "@/components/ui/button";
 
@@ -21,11 +22,30 @@ function ago(iso: string | null, nowMs: number): string {
 
 const secs = (ms: number | null) => (ms === null ? "—" : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
 
-export function AdsAutoSyncPanel({ rows, globalEnabled, serverNow }: { rows: AdsShopSyncOverview[]; globalEnabled: boolean; serverNow: string }) {
+const RECON_LABEL: Record<AdsHourlyReconciliationStatus, { text: string; cls: string }> = {
+  MATCH: { text: "Khớp", cls: "text-success-text" },
+  ROUNDING_DIFFERENCE: { text: "Lệch làm tròn", cls: "text-success-text" },
+  MISMATCH: { text: "Lệch", cls: "text-danger-text" },
+  INSUFFICIENT_DATA: { text: "Thiếu dữ liệu", cls: "text-warning-text" },
+  IN_PROGRESS: { text: "Đang cập nhật", cls: "text-muted-foreground" },
+};
+
+export function AdsAutoSyncPanel({ rows, globalEnabled, hourlyGlobalEnabled, serverNow }: { rows: AdsShopSyncOverview[]; globalEnabled: boolean; hourlyGlobalEnabled: boolean; serverNow: string }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
   const now = Date.parse(serverNow);
+
+  const toggleHourly = (row: AdsShopSyncOverview) => {
+    setBusy(`h:${row.shopId}`);
+    start(async () => {
+      const r = await toggleAdsHourlySyncAction({ shopId: row.shopId, enabled: !row.hourly.enabled });
+      setBusy(null);
+      if (r.ok) toast.success(r.message, hourlyGlobalEnabled ? "Dữ liệu theo giờ của hôm nay được đọc cùng nhịp HOT 15 phút (ưu tiên thấp hơn số liệu ngày)." : "ADS_HOURLY_SYNC_ENABLED đang tắt — chưa có job theo giờ nào được tạo.");
+      else toast.error("Không đổi được cấu hình", r.message);
+      router.refresh();
+    });
+  };
 
   const toggle = (row: AdsShopSyncOverview) => {
     setBusy(row.shopId);
@@ -42,12 +62,17 @@ export function AdsAutoSyncPanel({ rows, globalEnabled, serverNow }: { rows: Ads
     <div className="mt-4 space-y-2" data-slot="ads-auto-sync">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium">Đồng bộ nền (chỉ đọc)</p>
-        <span className={globalEnabled ? "rounded-full border border-success/30 bg-success-soft px-2.5 py-0.5 text-xs text-success-text" : "rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"}>
-          {globalEnabled ? "Bộ lập lịch Ads: đang bật" : "Bộ lập lịch Ads: đang tắt (ADS_AUTO_SYNC_ENABLED)"}
-        </span>
+        <div className="flex flex-wrap gap-1.5">
+          <span className={globalEnabled ? "rounded-full border border-success/30 bg-success-soft px-2.5 py-0.5 text-xs text-success-text" : "rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"}>
+            {globalEnabled ? "Bộ lập lịch Ads: đang bật" : "Bộ lập lịch Ads: đang tắt (ADS_AUTO_SYNC_ENABLED)"}
+          </span>
+          <span data-slot="ads-hourly-global" className={hourlyGlobalEnabled ? "rounded-full border border-success/30 bg-success-soft px-2.5 py-0.5 text-xs text-success-text" : "rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"}>
+            {hourlyGlobalEnabled ? "Theo giờ: đang bật" : "Theo giờ: đang tắt (ADS_HOURLY_SYNC_ENABLED)"}
+          </span>
+        </div>
       </div>
       <div className="overflow-x-auto rounded-lg border border-ads-border">
-        <table className="w-full min-w-[640px] text-xs">
+        <table className="w-full min-w-[900px] text-xs">
           <thead className="bg-ads-surface text-left text-ads-muted">
             <tr>
               <th className="px-3 py-2 font-medium">Shop</th>
@@ -57,6 +82,10 @@ export function AdsAutoSyncPanel({ rows, globalEnabled, serverNow }: { rows: Ads
               <th className="px-3 py-2 font-medium">Chiến dịch hôm nay</th>
               <th className="px-3 py-2 text-right font-medium">HOT 24h (lỗi)</th>
               <th className="px-3 py-2 text-right font-medium">p95 chờ / tổng</th>
+              <th className="px-3 py-2" />
+              <th className="border-l border-ads-border px-3 py-2 font-medium">Theo giờ hôm nay</th>
+              <th className="px-3 py-2 text-right font-medium">Giờ 24h (gọi API)</th>
+              <th className="px-3 py-2 font-medium">Đối chiếu hôm qua</th>
               <th className="px-3 py-2" />
             </tr>
           </thead>
@@ -80,12 +109,27 @@ export function AdsAutoSyncPanel({ rows, globalEnabled, serverNow }: { rows: Ads
                     {r.enabled ? "Tắt tự động" : "Bật tự động"}
                   </Button>
                 </td>
+                <td className="border-l border-ads-border px-3 py-2 tabular-nums" data-hourly-enabled={r.hourly.enabled}>
+                  {r.hourly.enabled ? ago(r.hourly.lastSyncedAt, now) : <span className="text-muted-foreground">Tắt</span>}
+                </td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {r.hourly.runs}
+                  {r.hourly.failed > 0 ? <span className="text-danger-text"> ({r.hourly.failed})</span> : null} · {r.hourly.apiCalls} · {secs(r.hourly.p95TotalMs)}
+                </td>
+                <td className="px-3 py-2">{r.hourly.reconciliation ? <span className={RECON_LABEL[r.hourly.reconciliation].cls}>{RECON_LABEL[r.hourly.reconciliation].text}</span> : "—"}</td>
+                <td className="px-3 py-2 text-right">
+                  <Button type="button" size="sm" variant="outline" disabled={pending} aria-busy={busy === `h:${r.shopId}`} onClick={() => toggleHourly(r)} data-action="toggle-hourly">
+                    {r.hourly.enabled ? "Tắt theo giờ" : "Bật theo giờ"}
+                  </Button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-ads-muted">Mỗi shop chạy lệch vài phút trong mỗi khung 15 phút để không dồn request. Mở trang không bao giờ gọi Shopee — dữ liệu luôn đọc từ cơ sở dữ liệu.</p>
+      <p className="text-xs text-ads-muted">
+        Mỗi shop chạy lệch vài phút trong mỗi khung 15 phút để không dồn request. Dữ liệu theo giờ chỉ đọc cho hôm nay, cùng nhịp HOT nhưng ưu tiên thấp hơn số liệu ngày; bật thử từng shop trước. Mở trang không bao giờ gọi Shopee — dữ liệu luôn đọc từ cơ sở dữ liệu.
+      </p>
     </div>
   );
 }

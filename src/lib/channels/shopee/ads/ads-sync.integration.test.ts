@@ -131,7 +131,8 @@ test("initial refresh through the queue: 143 campaigns + product links, campaign
   assert.equal(await count("shopee_ads_campaign_daily_performance", shopA), 143 * 31, "one row per campaign per day (zeros included, as the API returns them)");
   assert.equal(await count("shopee_ads_shop_daily_performance", shopA), 31, "28/09 … 28/10");
   const { data: states } = await db.from("channel_sync_states").select("sync_type, last_success_at").eq("shop_id", shopA);
-  assert.deepEqual((states ?? []).map((s) => s.sync_type).sort(), [...ADS_SYNC_TYPES].sort());
+  // hourly reads (ADS-3A.1) are off by default: only the three daily read types ran
+  assert.deepEqual((states ?? []).map((s) => s.sync_type).sort(), ADS_SYNC_TYPES.filter((t) => !t.includes("hourly")).sort());
   assert.ok((states ?? []).every((s) => Date.parse(s.last_success_at) === NOW.getTime()), "freshness = when the read finished");
   const { count: snaps } = await db.from("channel_api_snapshots").select("id", { count: "exact", head: true }).eq("shop_id", shopA).eq("entity_type", "ads");
   assert.ok((snaps ?? 0) >= 2 + 3 + 15 + 2, `raw snapshots kept (${snaps})`);

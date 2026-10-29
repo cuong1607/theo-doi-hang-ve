@@ -19,7 +19,7 @@ import { z } from "zod";
 
 import { authorizeAction } from "@/lib/auth/session";
 import { adsFreshnessStamp, loadAdsFreshness } from "@/lib/channels/shopee/ads/real-source";
-import { setAdsShopSyncEnabled } from "@/lib/channels/shopee/ads/schedule";
+import { setAdsShopHourlyEnabled, setAdsShopSyncEnabled } from "@/lib/channels/shopee/ads/schedule";
 import { requestAdsRefresh } from "@/lib/channels/shopee/ads/sync";
 import { kickShopeeSyncWorker } from "@/lib/channels/shopee/server";
 import { getShopeeFlags } from "@/lib/feature-flags";
@@ -64,19 +64,22 @@ export async function refreshAdsDataAction(input: { shop: string; force?: boolea
   const jobIds: string[] = [];
   let failedShops = 0;
   let freshShops = 0;
+  let backgroundJobs = 0;
   // each shop independently — one failing shop never blocks the others
   for (const shopId of shops) {
     try {
       const r = await requestAdsRefresh(db, { shopId, createdBy: authz.auth.user.id, force });
       if (r.fresh) freshShops++;
       jobIds.push(...r.jobs.filter((j) => j.poll).map((j) => j.jobId));
+      if (r.jobs.some((j) => !j.poll && j.created)) backgroundJobs++;
     } catch (err) {
       failedShops++;
       console.error(JSON.stringify({ source: "ads-refresh", event: "enqueue_failed", shopId, message: err instanceof Error ? err.message.slice(0, 200) : String(err) }));
     }
   }
   if (!jobIds.length && freshShops === 0) return { ok: false, message: "Không tạo được yêu cầu đồng bộ Ads." };
-  if (jobIds.length) await kickAfterResponse();
+  // background jobs (WARM catch-up, hourly) are not awaited by the button but still need the worker
+  if (jobIds.length || backgroundJobs) await kickAfterResponse();
   console.info(JSON.stringify({ source: "ads-refresh", event: "refresh_requested", shops: shops.length, jobs: jobIds.length, freshShops, failedShops, force, by: authz.auth.user.id }));
   const message = !jobIds.length
     ? "Số liệu hôm nay vừa được đồng bộ nền vài phút trước — không cần gọi lại Shopee."
@@ -135,4 +138,22 @@ export async function toggleAdsAutoSyncAction(input: { shopId: string; enabled: 
   console.info(JSON.stringify({ source: "ads-auto-sync", event: parsed.data.enabled ? "shop_enabled" : "shop_disabled", shopId: parsed.data.shopId, by: authz.auth.user.id }));
   revalidatePath("/shopee/ads");
   return { ok: true, message: parsed.data.enabled ? "Đã bật đồng bộ nền cho shop." : "Đã tắt đồng bộ nền cho shop." };
+}
+
+/** ADS-3A.1 hourly rollout switch (admin): hourly READ jobs for the shop — only while ADS_HOURLY_SYNC_ENABLED=true. */
+export async function toggleAdsHourlySyncAction(input: { shopId: string; enabled: boolean }): Promise<{ ok: boolean; message: string }> {
+  const authz = await authorizeAction("channel:manage");
+  if (!authz.ok) return { ok: false, message: authz.message };
+  const parsed = z.object({ shopId: z.string().uuid(), enabled: z.boolean() }).safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Dữ liệu không hợp lệ." };
+  const shops = await liveShopIds(parsed.data.shopId);
+  if (!shops?.length) return { ok: false, message: "Không tìm thấy shop Shopee đang hoạt động." };
+  try {
+    await setAdsShopHourlyEnabled(createAdminClient(), { shopId: parsed.data.shopId, enabled: parsed.data.enabled, updatedBy: authz.auth.user.id });
+  } catch {
+    return { ok: false, message: "Không lưu được cấu hình theo giờ." };
+  }
+  console.info(JSON.stringify({ source: "ads-auto-sync", event: parsed.data.enabled ? "shop_hourly_enabled" : "shop_hourly_disabled", shopId: parsed.data.shopId, by: authz.auth.user.id }));
+  revalidatePath("/shopee/ads");
+  return { ok: true, message: parsed.data.enabled ? "Đã bật dữ liệu theo giờ cho shop." : "Đã tắt dữ liệu theo giờ cho shop." };
 }

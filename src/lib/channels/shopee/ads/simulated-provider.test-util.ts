@@ -31,7 +31,8 @@ export interface SimulatedCall {
 export function simulatedShopData(base: AdsFixtureData, shop: SimulatedShop, date: string): AdsFixtureData {
   const template = base.settings.values().next().value as Obj;
   const metricsTemplate = [...base.campaignDaily.values()].flatMap((m) => [...m.values()]).find((r) => Number(r.expense) > 0)!;
-  const data: AdsFixtureData = { campaignIds: [], settings: new Map(), campaignDaily: new Map(), shopDaily: new Map() };
+  const hourlyTemplate = ([...base.campaignHourly.values()][0]?.values().next().value ?? []) as Obj[];
+  const data: AdsFixtureData = { campaignIds: [], settings: new Map(), campaignDaily: new Map(), shopDaily: new Map(), shopHourly: new Map(), campaignHourly: new Map(), replayHourly: false };
   const ongoing = Math.round(shop.campaigns * (shop.ongoingShare ?? 0.3));
   let spend = 0;
   for (let i = 0; i < shop.campaigns; i++) {
@@ -45,11 +46,13 @@ export function simulatedShopData(base: AdsFixtureData, shop: SimulatedShop, dat
     data.settings.set(id, s);
     if (i < ongoing) {
       data.campaignDaily.set(id, new Map([[date, { ...metricsTemplate, date }]]));
+      data.campaignHourly.set(id, new Map([[date, hourlyTemplate.map((r) => ({ ...r, date }))]]));
       spend += Number(metricsTemplate.expense);
     }
   }
   const shopRow = { ...([...base.shopDaily.values()][0] as Obj), date, expense: spend + 1000 };
   data.shopDaily.set(date, shopRow);
+  data.shopHourly.set(date, (([...base.shopHourly.values()][0] ?? []) as Obj[]).map((r) => ({ ...r, date })));
   return data;
 }
 
@@ -104,5 +107,13 @@ export class SimulatedAdsProvider implements ShopeeAdsProvider {
 
   async getAllCpcAdsDailyPerformance(ctx: AdsProviderContext, input: { range: AdsDateRange }) {
     return this.run(ctx, "shop_daily_performance", 0, (p) => p.getAllCpcAdsDailyPerformance(ctx, input));
+  }
+
+  async getAllCpcAdsHourlyPerformance(ctx: AdsProviderContext, input: { date: string }) {
+    return this.run(ctx, "shop_hourly_performance", 0, (p) => p.getAllCpcAdsHourlyPerformance(ctx, input));
+  }
+
+  async getProductCampaignHourlyPerformance(ctx: AdsProviderContext, input: { campaignIds: readonly string[]; date: string }) {
+    return this.run(ctx, "campaign_hourly_performance", input.campaignIds.length, (p) => p.getProductCampaignHourlyPerformance(ctx, input));
   }
 }

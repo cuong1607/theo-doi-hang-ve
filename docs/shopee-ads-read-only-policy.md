@@ -24,7 +24,7 @@
 | Probe / transports | `assertAdsProbeRequest` checks the policy and the allowlist. The server transport (`probe-server.ts`) and the CLI transport (`ads-discovery.ts`) call `assertAdsReadOnlyRequest` again before fetching. |
 | Discovery CLI | `probe <path>` is refused unless `isAdsReadOnlyPath` passes; with `--prod`, the path must also be allowlisted. |
 | Server actions | The only Ads action is `runAdsProbeAction`: admin only, typed `READ-ONLY`, and it calls the allowlisted probe only. |
-| Jobs | Reserved types are `ads_campaign_read`, `ads_performance_read`, `ads_settings_read`. Types like `*_update`, `*_set`, budget, bid or status are never allowed. |
+| Jobs | Current types are `ads_campaign_read`, `ads_campaign_performance_read`, `ads_shop_performance_read`, `ads_shop_hourly_read` and `ads_campaign_hourly_read` (ADS-3A.1), all `ads_<what>_read`. Types like `*_update`, `*_set`, budget, bid or status are never allowed. |
 | UI | No Edit / Pause / Resume / Stop / Delete / Change budget / Change bid / Optimize / Apply buttons. <br>• "Cấu hình" opens the internal connection settings (`/settings/shopee`). <br>• The future "Cài đặt" tab is for internal dashboard settings only. <br>• Insights are advisory text. |
 | Tests | `ads/read-only-guard.test.ts`, part of `npm test`; see §3. |
 

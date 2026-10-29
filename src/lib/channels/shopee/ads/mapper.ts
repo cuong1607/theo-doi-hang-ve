@@ -246,6 +246,66 @@ export function parseShopDailyPerformance(envelope: unknown): { rows: AdsPerform
   return { rows, missingFields: missing.n };
 }
 
+// ------------------------------------------------------------------ hourly (ADS-3A.1)
+
+export interface AdsHourlyPrimitives extends AdsPerformancePrimitives {
+  /** 0–23, shop-local hour of `reportDate` (verified field `hour`). */
+  reportHour: number;
+}
+
+export interface AdsCampaignHourlyWrite extends AdsHourlyPrimitives {
+  providerCampaignId: string;
+}
+
+/** Provider `hour`: integer 0–23 (verified). Anything else is refused, never clamped. */
+export function parseAdsHour(v: unknown): number {
+  const n = typeof v === "string" && /^\d{1,2}$/.test(v.trim()) ? Number(v) : v;
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > 23) throw new AdsPayloadError(`Giờ báo cáo không hợp lệ: ${String(v).slice(0, 10)}`);
+  return n;
+}
+
+function hourlyRowsOf(list: unknown[], kind: "shop" | "campaign", missing: { n: number }): AdsHourlyPrimitives[] {
+  const seen = new Set<string>();
+  return list.map((m) => {
+    if (!isObj(m)) throw new AdsPayloadError("Dòng chỉ số theo giờ không phải object.");
+    if (!("hour" in m)) throw new AdsPayloadError("Dòng theo ngày không được lưu ở bảng giờ.");
+    const row = { ...primitivesOf(m, kind, missing), reportHour: parseAdsHour(m.hour) };
+    const key = `${row.reportDate}|${row.reportHour}`;
+    if (seen.has(key)) throw new AdsPayloadError(`Trùng giờ ${row.reportHour} ngày ${row.reportDate}.`);
+    seen.add(key);
+    return row;
+  });
+}
+
+/** get_all_cpc_ads_hourly_performance → one row per (date, hour) of the shop-level total. */
+export function parseShopHourlyPerformance(envelope: unknown): { rows: AdsHourlyPrimitives[]; missingFields: number } {
+  const r = responseOf(envelope);
+  if (!Array.isArray(r)) throw new AdsPayloadError("Hiệu quả theo giờ cấp shop không phải mảng.");
+  const missing = { n: 0 };
+  return { rows: hourlyRowsOf(r, "shop", missing), missingFields: missing.n };
+}
+
+/** get_product_campaign_hourly_performance → one row per (campaign, date, hour); one bad campaign does not fail the batch. */
+export function parseCampaignHourlyPerformance(envelope: unknown): { rows: AdsCampaignHourlyWrite[]; missingFields: number; failures: Array<{ id: string | null; reason: string }> } {
+  const r = responseOf(envelope);
+  if (!isObj(r)) throw new AdsPayloadError("Hiệu quả chiến dịch theo giờ không có response.");
+  const missing = { n: 0 };
+  const rows: AdsCampaignHourlyWrite[] = [];
+  const failures: Array<{ id: string | null; reason: string }> = [];
+  for (const c of arr(r.campaign_list)) {
+    let id: string | null = null;
+    try {
+      if (!isObj(c)) throw new AdsPayloadError("Chiến dịch không phải object.");
+      const providerCampaignId = providerId(c.campaign_id, "campaign_id");
+      id = providerCampaignId;
+      rows.push(...hourlyRowsOf(arr(c.metrics_list), "campaign", missing).map((h) => ({ providerCampaignId, ...h })));
+    } catch (err) {
+      failures.push({ id, reason: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return { rows, missingFields: missing.n, failures };
+}
+
 // ------------------------------------------------------------------ UI mapping of raw provider values
 
 export type AdsUiStatus = "active" | "paused" | "ended" | "closed" | "unknown";

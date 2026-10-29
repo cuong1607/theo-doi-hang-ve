@@ -36,7 +36,7 @@ export const ADS_READ_ENDPOINTS = {
 export type AdsReadEndpoint = keyof typeof ADS_READ_ENDPOINTS;
 
 /** Queue job types of the Ads domain — read / sync only (ads_<what>_read). */
-export const ADS_SYNC_TYPES = ["ads_campaign_read", "ads_campaign_performance_read", "ads_shop_performance_read"] as const;
+export const ADS_SYNC_TYPES = ["ads_campaign_read", "ads_campaign_performance_read", "ads_shop_performance_read", "ads_shop_hourly_read", "ads_campaign_hourly_read"] as const;
 export type AdsSyncType = (typeof ADS_SYNC_TYPES)[number];
 
 export function isAdsSyncType(type: string): type is AdsSyncType {

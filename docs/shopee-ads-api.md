@@ -300,3 +300,19 @@ Fixtures: `exp-*.json` and `_probe-report-expansion.json`.
 4. `closed` vs `paused`; `campaign_budget = 0`; `roas_target = 0`; whether `ad_type = auto` campaigns exist anywhere.
 5. Maximum `limit`, maximum ids per call, maximum date range beyond 30 days.
 6. Rate limits: none observed in 24 calls across both probes.
+
+## 5. Hourly endpoints in the sync (SHOPEE-ADS-3A.1)
+
+Both hourly endpoints of section 3 are now read by the queue worker, with the shapes verified in production. No new endpoint and no unverified parameter were added.
+
+| provider method | endpoint (GET) | params sent | limits enforced before the call |
+|---|---|---|---|
+| `getAllCpcAdsHourlyPerformance` | `/api/v2/ads/get_all_cpc_ads_hourly_performance` | `performance_date` (DD-MM-YYYY) | exactly one valid date |
+| `getProductCampaignHourlyPerformance` | `/api/v2/ads/get_product_campaign_hourly_performance` | `performance_date`, `campaign_id_list` (comma-separated) | one date, 1 to 50 numeric ids |
+
+- Both go through `assertAdsReadOnlyRequest("GET", path)` and the `ADS_READ_ENDPOINTS` allowlist, like every other Ads call.
+- The fields mapped are the section 3.2 primitives plus `hour`. Provider ratios stay in the raw snapshot only, including the campaign `cpc`, which is expense / broad_order.
+- Still unknown: what Shopee returns for hours of TODAY that have not happened yet (zero rows or omitted). The sync never stores them and counts them in `stats.futureHours`. Read that counter after the first production runs.
+- Whether the campaign hourly endpoint also refuses a non-product-ads id (`ad_type = auto`) the way the daily one does is not verified. The sync applies the same drop-and-re-read handling if it happens.
+
+See [shopee-ads-hourly.md](shopee-ads-hourly.md).

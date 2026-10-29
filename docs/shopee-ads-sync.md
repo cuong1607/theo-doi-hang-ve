@@ -32,20 +32,30 @@ Opening the dashboard never calls Shopee and never enqueues anything.
 | `ADS_SCHEDULER_JITTER_SECONDS` | `20` | Deterministic start offset per shop and tick. |
 | `ADS_MANUAL_DEDUPE_MINUTES` | `5` | Manual refresh right after a HOT read → "Dữ liệu vừa được đồng bộ". |
 | `ADS_HOT_RECENT_STATUS_HOURS` | `36` | Campaigns whose status changed / ended within this stay HOT candidates. |
+| `ADS_HOURLY_SYNC_ENABLED` | `false` | ADS-3A.1 hourly TODAY reads (scheduler + manual). Also requires the shop's `ads_hourly_enabled` (admin panel "Bật theo giờ"). |
+| `ADS_HOURLY_RETENTION_DAYS` | `14` | Hourly rows older than this are pruned (min 2: today / yesterday are never pruned). |
+| `ADS_HOURLY_FRESH_TARGET_MINUTES` | `25` | "Cập nhật theo giờ" target. |
+| `ADS_HOURLY_STALE_MINUTES` | `35` | Hourly shown as not fresh after this. |
+| `ADS_HOURLY_FINALIZE_TIME` | `02:30` | Shop-local time after which yesterday's hourly rows are re-read once (all campaigns) and reconciled. |
 
 ## Strategies
 
 | strategy | when | range | campaigns | priority | lane |
 |---|---|---|---|---|---|
-| manual | "Làm mới dữ liệu" | today | all | 1 | `ads_hot` |
+| manual | "Làm mới dữ liệu" | today | all | 1 (hourly: 2) | `ads_hot` |
 | hot (shop) | every 15 min | **today only** | — | 2 | `ads_hot` |
 | metadata (first) | every 15 min until the catalogue exists | — | all | 2 | `ads_meta` |
 | hot (campaign) | every 15 min | **today only** | active candidates | 3 | `ads_hot` |
 | repair | a performance answer names an unknown campaign | — | all | 3 | `ads_meta` |
-| warm | hourly | yesterday … −3 days | recent-activity candidates | 4 | `ads_warm` |
-| metadata | every 6 h | — | all | 5 | `ads_meta` |
-| cold | 03:00 & 15:00 VN | 7 completed days + today | **all** | 6 | `ads_cold` |
-| backfill | first sync (replaces WARM/COLD until it succeeds) | 30 days + today | all | 7 | `ads_backfill` |
+| hot (shop hourly, ADS-3A.1) | every 15 min, same slot as HOT | today | — | 4 | `ads_hot` |
+| hot (campaign hourly, ADS-3A.1) | every 15 min, same slot as HOT | today | active candidates | 5 | `ads_hot` |
+| warm | hourly | yesterday … −3 days | recent-activity candidates | 6 | `ads_warm` |
+| metadata | every 6 h | — | all | 7 | `ads_meta` |
+| cold | 03:00 & 15:00 VN | 7 completed days + today | **all** | 8 | `ads_cold` |
+| finalize (hourly, ADS-3A.1) | once a day after 02:30 | yesterday | **all** | 8 | `ads_warm` |
+| backfill | first sync (replaces WARM/COLD until it succeeds) | 30 days + today | all | 9 | `ads_backfill` |
+
+ADS-3A.1 renumbered the priorities (WARM 4 → 6, metadata 5 → 7, COLD 6 → 8, backfill 7 → 9) to make room for the hourly reads right below the daily HOT reads. The relative order of the daily strategies is unchanged. Hourly runs only with `ADS_HOURLY_SYNC_ENABLED` + the shop's `ads_hourly_enabled`; see [shopee-ads-hourly.md](shopee-ads-hourly.md).
 
 **Campaign candidates** are derived from the DB before any call:
 - **HOT:** `provider_status = ongoing`, + `status_changed_at` / `provider_end_at` within 36 h, + campaigns already non-zero today.
@@ -152,5 +162,6 @@ The ADS-0 daily keepalive is **kept**. With HOT every 15 minutes, every Ads-enab
   - page load = 0 jobs / 0 calls
   - 5-shop load simulation
 - `ads-sync.integration.test.ts`: canonical reconciliation (27/10 regression), manual dedupe, COLD restatement detection.
+- `ads-hourly.test.ts` / `ads-hourly.integration.test.ts` / `scripts/e2e/shopee-ads-hourly.ts`: the hourly layer (ADS-3A.1).
 - `scripts/e2e/shopee-ads-scheduler.ts`: browser + scheduler endpoint (no-browser proof locally).
 - `scripts/e2e/shopee-ads-real.ts`: dashboard in real mode.

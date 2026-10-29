@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Activity, Gauge, Lightbulb, Link2, ListOrdered, Trophy, Unplug } from "lucide-react";
+import { Activity, Clock, Gauge, Lightbulb, Link2, ListOrdered, Trophy, Unplug } from "lucide-react";
 
 import { hasPermission } from "@/lib/auth/permissions";
 import { requirePermission } from "@/lib/auth/session";
@@ -28,6 +28,7 @@ import { AdsErrorState } from "@/components/ads/ads-error-state";
 import { AdsEmptyState } from "@/components/ads/ads-states";
 import { AdsTopCampaigns } from "@/components/ads/ads-top-campaigns";
 import { AdsTrendChart } from "@/components/ads/ads-trend-chart";
+import { AdsIntradayChart } from "@/components/ads/ads-intraday-chart";
 
 export const dynamic = "force-dynamic";
 
@@ -164,7 +165,7 @@ export default async function ShopeeAdsPage({ searchParams }: { searchParams: Pr
                 Dữ liệu thật từ Shopee Ads (chỉ đọc){sync.reportThrough ? ` · có số liệu đến ngày ${formatAdsRange(sync.reportThrough, sync.reportThrough)}` : ""}.{" "}
                 {sync.autoSync?.enabled ? "Đồng bộ nền tự động ~15 phút/lần, không cần mở trang." : "Chưa bật đồng bộ nền cho shop này — dữ liệu chỉ cập nhật khi bấm “Làm mới dữ liệu”."} Tổng quan lấy từ tổng quảng cáo cấp shop; bảng chiến dịch lấy từ từng chiến dịch sản phẩm.
               </p>
-              {autoSync ? <AdsAutoSyncPanel rows={autoSync} globalEnabled={getAdsSyncConfig().autoSyncEnabled} serverNow={serverNow} /> : null}
+              {autoSync ? <AdsAutoSyncPanel rows={autoSync} globalEnabled={getAdsSyncConfig().autoSyncEnabled} hourlyGlobalEnabled={getAdsSyncConfig().hourlySyncEnabled} serverNow={serverNow} /> : null}
             </div>
           ) : (
             <p className="mt-3 rounded-lg border border-dashed border-ads-border bg-ads-surface px-3 py-2 text-xs text-ads-muted">
@@ -231,6 +232,13 @@ function Dashboard({ data, table, query, real }: { data: AdsDashboardData; table
           </AdsSection>
         )}
       </div>
+
+      {real && data.intraday ? (
+        // ADS-3A.1: intraday breakdown of TODAY (shop hourly facts); the KPIs above stay daily facts
+        <AdsSection id="ads-intraday" title="Hôm nay theo giờ" description={`00h → ${String(data.intraday.currentHour).padStart(2, "0")}h, dữ liệu cấp shop`} icon={Clock} iconClass="bg-metric-spend/12 text-metric-spend-text" delay={200}>
+          <AdsIntradayChart data={data.intraday} serverNow={data.generatedAt} />
+        </AdsSection>
+      ) : null}
 
       <AdsSection id="ads-campaigns" title="Tổng quan chiến dịch" description={`${data.statusCounts.all} chiến dịch có hoạt động trong kỳ`} icon={ListOrdered} delay={220}>
         <AdsCampaignTable

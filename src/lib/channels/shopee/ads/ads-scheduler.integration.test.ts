@@ -86,6 +86,14 @@ class CountingProvider implements ShopeeAdsProvider {
     this.calls.push({ endpoint: "shop_daily_performance", ids: 0, range: input.range });
     return this.inner.getAllCpcAdsDailyPerformance(ctx, input);
   }
+  async getAllCpcAdsHourlyPerformance(ctx: AdsProviderContext, input: { date: string }) {
+    this.calls.push({ endpoint: "shop_hourly_performance", ids: 0, range: { from: input.date, to: input.date } });
+    return this.inner.getAllCpcAdsHourlyPerformance(ctx, input);
+  }
+  async getProductCampaignHourlyPerformance(ctx: AdsProviderContext, input: { campaignIds: readonly string[]; date: string }) {
+    this.calls.push({ endpoint: "campaign_hourly_performance", ids: input.campaignIds.length, range: { from: input.date, to: input.date } });
+    return this.inner.getProductCampaignHourlyPerformance(ctx, input);
+  }
 }
 
 const fixtures = loadAdsFixtures();
@@ -164,9 +172,9 @@ test("no-browser flow: tick → metadata + 30-day backfill + HOT; 15 min later H
   const jitter = Date.parse(due![0].next_attempt_at) - T0.getTime();
   assert.ok(jitter >= 0 && jitter <= 20_000, `jitter ${jitter} ms`);
   assert.deepEqual(queued.map((j) => [j.sync_type, j.lane, j.priority]).sort(), [
-    ["ads_campaign_performance_read", "ads_backfill", 7],
+    ["ads_campaign_performance_read", "ads_backfill", 9],
     ["ads_campaign_read", "ads_meta", 2],
-    ["ads_shop_performance_read", "ads_backfill", 7],
+    ["ads_shop_performance_read", "ads_backfill", 9],
     ["ads_shop_performance_read", "ads_hot", 2],
   ]);
   const reports = await drain([A.id], fixtureProvider);

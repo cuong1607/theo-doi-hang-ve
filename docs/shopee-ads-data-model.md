@@ -81,6 +81,18 @@ Grain: **shop × report_date**, an independent fact. Unique key: `(shop_id, repo
 - **`shopee_ads_campaigns.performance_unsupported_at`:** Shopee rejects a whole performance batch when one id is not a product-ads campaign. Seen 2026-10-29 on campaign 20932764, the only `ad_type = auto` campaign of 1135. The runner drops such ids, re-reads the batch and records them here; later jobs never send them again.
 - **Dashboard RPCs are read in ordered pages of 1000.** PostgREST caps every response at 1000 rows, RPCs included. With five shops (~1,900 campaigns) the campaign table was silently truncated, and "Ngoài chiến dịch sản phẩm" was inflated.
 
+## ADS-3A.1 additions (migration `00067_shopee_ads_hourly.sql`, local only until reviewed)
+Details: [shopee-ads-hourly.md](shopee-ads-hourly.md).
+- **`shopee_ads_shop_hourly_performance`** (shop × report_date × hour) and **`shopee_ads_campaign_hourly_performance`** (campaign × report_date × hour, composite FK to the campaign of the same shop).
+  - Same primitives as the daily tables; `report_hour` 0–23.
+  - These are operational rows for today's intraday view and yesterday's reconciliation, kept `ADS_HOURLY_RETENTION_DAYS` (14). Daily facts remain canonical for all day / 7-day / 30-day reporting and for the TODAY KPI.
+- **`shopee_ads_shop_settings`:** `ads_hourly_enabled` (default false), `hourly_enabled_at`, and the slots `last_hot_hourly_slot_at` / `last_hourly_finalize_slot_at`.
+- **`channel_sync_jobs` types:** `ads_shop_hourly_read`, `ads_campaign_hourly_read` (read only). `enqueue_ads_sync_job` is replaced with the same body, accepting the two types.
+- **RPCs** (service_role):
+  - `ads_dashboard_shop_hourly(shop_ids, from, to)`: primitives per (date, hour) summed across shops.
+  - `ads_dashboard_hourly_reconciliation(shop_ids, from, to)`: Σ hourly vs daily, shop and campaign level.
+  - `prune_shopee_ads_hourly(days, limit)`: retention, clamped to ≥ 2 days.
+
 ## Raw snapshots
 - Stored in the existing `channel_api_snapshots` with `entity_type = 'ads'` and `api_name` = the endpoint path.
 - The key is the request shape (e.g. `campaign_daily:2026-10-21:2026-10-27:<first id>:<n>`).
