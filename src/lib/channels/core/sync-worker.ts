@@ -82,6 +82,8 @@ export class SyncWorker {
   private readonly log: WorkerLogger;
   private readonly region: string;
   private readonly syncTypes: readonly string[];
+  private readonly maxRunningAds: number | null;
+  private readonly idleWaitMs: number;
 
   constructor(deps: {
     db: SupabaseClient;
@@ -97,7 +99,13 @@ export class SyncWorker {
     region?: string;
     /** SHOPEE-ADS-0: job types this worker may claim (default: every runnable type). Empty = claims nothing. */
     syncTypes?: readonly string[];
+    /** SHOPEE-ADS-2: global cap on RUNNING Ads jobs (null = only the global cap). */
+    maxRunningAds?: number | null;
+    /** SHOPEE-ADS-2: when the queue looks empty, wait up to this long for a job that is about to become due. */
+    idleWaitMs?: number;
   }) {
+    this.maxRunningAds = deps.maxRunningAds ?? null;
+    this.idleWaitMs = deps.idleWaitMs ?? 0;
     this.region = deps.region ?? "local";
     this.syncTypes = deps.syncTypes ?? RUNNABLE_SYNC_TYPES;
     this.db = deps.db;
@@ -123,9 +131,36 @@ export class SyncWorker {
       // invocation at maxDuration (60 s) — leave the rest to the next one.
       if (left < this.config.sliceTimeBudgetMs) return { recovered, slices, stoppedBy: "time" };
       const report = await this.runOne(left);
-      if (!report) return { recovered, slices, stoppedBy: "empty" };
+      if (!report) {
+        // SHOPEE-ADS-2: a job due in a few seconds (stagger jitter) is waited for inside the
+        // budget instead of being left for the next scheduler minute. Off by default (idleWaitMs 0).
+        const wait = await this.nextDueWithin(Math.min(this.idleWaitMs, left - this.config.sliceTimeBudgetMs));
+        if (wait === null) return { recovered, slices, stoppedBy: "empty" };
+        await new Promise((resolve) => setTimeout(resolve, wait));
+        continue;
+      }
       slices.push(report);
     }
+  }
+
+  /** Milliseconds until the next job of this worker's types becomes due, if within `withinMs`; else null. */
+  private async nextDueWithin(withinMs: number): Promise<number | null> {
+    if (withinMs <= 0 || this.syncTypes.length === 0) return null;
+    const now = Date.now();
+    let q = this.db
+      .from("channel_sync_jobs")
+      .select("next_attempt_at")
+      .in("status", ["pending", "retry"])
+      .in("sync_type", [...this.syncTypes])
+      .gt("next_attempt_at", new Date(now).toISOString())
+      .lte("next_attempt_at", new Date(now + withinMs).toISOString())
+      .order("next_attempt_at", { ascending: true })
+      .limit(1);
+    if (this.config.shopAllowlist) q = q.in("shop_id", [...this.config.shopAllowlist]);
+    const { data, error } = await q;
+    const next = (data ?? [])[0] as { next_attempt_at: string } | undefined;
+    if (error || !next) return null;
+    return Math.max(50, Date.parse(next.next_attempt_at) - now + 50);
   }
 
   /** Claims one job and runs one slice of it. Null when nothing is claimable. */
@@ -136,6 +171,7 @@ export class SyncWorker {
       syncTypes: this.syncTypes,
       shopIds: this.config.shopAllowlist,
       maxPerShop: this.config.maxRunningPerShop,
+      maxRunningAds: this.maxRunningAds,
     });
     if (!job) return null;
     const started = this.clock();

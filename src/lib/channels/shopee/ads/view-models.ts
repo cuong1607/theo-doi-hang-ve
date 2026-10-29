@@ -125,7 +125,8 @@ export interface AdsInsight {
   campaignName?: string;
 }
 
-export type AdsSyncState = "fresh" | "never" | "refreshing" | "error";
+/** stale = real data older than its freshness target (SHOPEE-ADS-2: shop > 25 min, campaigns > 35 min, metadata > 8 h). */
+export type AdsSyncState = "fresh" | "stale" | "never" | "refreshing" | "error";
 
 export interface AdsSyncStatus {
   state: AdsSyncState;
@@ -133,7 +134,11 @@ export interface AdsSyncStatus {
   lastSyncedAt: string | null;
   source: "fixture" | "shopee";
   /** Real data: freshness per read job (campaign metadata / campaign facts / shop totals). */
-  details?: Array<{ key: string; label: string; lastSuccessAt: string | null; lastErrorAt: string | null; errorMessage: string | null }>;
+  details?: Array<{ key: string; label: string; lastSuccessAt: string | null; lastErrorAt: string | null; errorMessage: string | null; targetMinutes?: number; staleAfterMinutes?: number; stale?: boolean }>;
+  /** Real data: changes whenever a background read lands (DB-only polling compares it). */
+  stamp?: string | null;
+  /** Real data: background sync (scheduler) state for the selected shop(s). */
+  autoSync?: { enabled: boolean; enabledShops: number; shops: number };
   /** The selected range includes today (shop-local) — today's data is partial. */
   todayPartial?: boolean;
   /** Latest report date with shop-level facts (YYYY-MM-DD). */

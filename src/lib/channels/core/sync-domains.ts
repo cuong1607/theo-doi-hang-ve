@@ -29,7 +29,8 @@ export function activeSyncTypes(flags: ShopeeFlags): RunnableSyncType[] {
 
 /**
  * Ads read job types the worker may claim. Only in REAL mode — they are
- * enqueued by the manual "Làm mới dữ liệu" action (no Ads scheduler yet).
+ * enqueued by the manual "Làm mới dữ liệu" action and (SHOPEE-ADS-2) by the
+ * Ads scheduler when ADS_AUTO_SYNC_ENABLED=true for enabled shops.
  */
 export function activeAdsSyncTypes(flags: ShopeeFlags): AdsSyncType[] {
   return flags.adsEnabled && flags.adsDataSource === "real" ? [...ADS_SYNC_TYPES] : [];

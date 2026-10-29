@@ -40,7 +40,7 @@ import { ApiCallMeter } from "./sync-instrumentation.ts";
 import { JobRefusedError } from "./sync-errors.ts";
 import { FixtureShopeeAdsProvider, loadAdsFixtures, MeteredShopeeAdsProvider, RealShopeeAdsProvider, type AdsFixtureData, type ShopeeAdsProvider } from "./ads/provider.ts";
 import { isAdsSyncType } from "./ads/read-only-policy.ts";
-import { createAdsRunner } from "./ads/sync.ts";
+import { createAdsRunner, getAdsSyncConfig } from "./ads/sync.ts";
 
 let cached: { config: ShopeeConfig; client: ShopeeClient; service: ShopeeConnectionService } | null = null;
 
@@ -97,11 +97,31 @@ function adsRunnerHandle(job: SyncJobRow, budget: ExecutionBudget, db: SupabaseC
     const { config: shopeeConfig, service } = getShopee();
     provider = new RealShopeeAdsProvider({ client: getWorkerClient(shopeeConfig), connections: new JobTokenCache(service) });
   }
-  return { meter, runner: createAdsRunner(job, { db, provider: new MeteredShopeeAdsProvider(provider, meter) }) };
+  return { meter, runner: createAdsRunner(job, { db, provider: new MeteredShopeeAdsProvider(provider, meter), config: getAdsSyncConfig() }) };
 }
 
-export function getShopeeSyncWorker(): SyncWorker {
+/**
+ * SHOPEE-ADS-2: Ads API concurrency = running Ads jobs, capped globally by
+ * ADS_GLOBAL_API_CONCURRENCY (1 right after a rate limit). When no legacy
+ * domain is active the Ads cap may exceed SHOPEE_SYNC_GLOBAL_WORKERS.
+ */
+function workerLimits(rateLimitedRecently: boolean) {
   const config = getSyncConfig();
+  const flags = getShopeeFlags();
+  const adsActive = activeAdsSyncTypes(flags).length > 0;
+  const ads = getAdsSyncConfig();
+  const adsCap = rateLimitedRecently ? 1 : ads.globalApiConcurrency;
+  const onlyAds = adsActive && activeSyncTypes(flags).length === 0;
+  return {
+    maxRunningAds: adsActive ? adsCap : null,
+    globalWorkers: onlyAds ? Math.max(config.globalWorkers, adsCap) : config.globalWorkers,
+    // stagger jitter must not cost a whole scheduler minute: wait for jobs due within it
+    idleWaitMs: adsActive && ads.autoSyncEnabled ? (ads.jitterSeconds + 2) * 1000 : 0,
+  };
+}
+
+export function getShopeeSyncWorker(limits: { maxRunningAds: number | null; globalWorkers: number; idleWaitMs: number } = workerLimits(false)): SyncWorker {
+  const config = { ...getSyncConfig(), globalWorkers: limits.globalWorkers };
   const db = createAdminClient();
   const flags = getShopeeFlags();
   const providers: ShopeeProviderSource = () => {
@@ -143,6 +163,8 @@ export function getShopeeSyncWorker(): SyncWorker {
     syncTypes: [...activeSyncTypes(flags), ...activeAdsSyncTypes(flags)],
     classifyError: toJobFailure,
     region,
+    maxRunningAds: limits.maxRunningAds,
+    idleWaitMs: limits.idleWaitMs,
   });
 }
 
@@ -158,11 +180,12 @@ export async function runShopeeWorkerBursts(options: { bursts: number; timeBudge
   const startedAt = Date.now();
   // SHOPEE-9A rate-limit circuit breaker: right after Shopee said "too many", run ONE burst only.
   const rateLimitedRecently = await recentlyRateLimited(db, config.rateLimitCooldownMinutes);
-  const bursts = rateLimitedRecently ? 1 : Math.max(1, Math.min(options.bursts, config.globalWorkers));
+  const limits = workerLimits(rateLimitedRecently);
+  const bursts = rateLimitedRecently ? 1 : Math.max(1, Math.min(Math.max(options.bursts, limits.maxRunningAds ?? 1), limits.globalWorkers));
   try {
     await markHeartbeatRun(db, WORKER_HEARTBEAT).catch(() => undefined);
     const reports = await mapWithConcurrency(Array.from({ length: bursts }, (_, i) => i), bursts, () =>
-      getShopeeSyncWorker().runBurst({ timeBudgetMs: options.timeBudgetMs }),
+      getShopeeSyncWorker(limits).runBurst({ timeBudgetMs: options.timeBudgetMs }),
     );
     const slices = reports.flatMap((r) => r.slices);
     await markHeartbeatSuccess(db, WORKER_HEARTBEAT, {

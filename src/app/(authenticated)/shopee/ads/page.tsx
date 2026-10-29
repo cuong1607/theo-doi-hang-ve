@@ -8,6 +8,9 @@ import { formatAdsRange, parseAdsDemo, parseAdsFilters, parseAdsTableQuery, quer
 import { adsDeltaPercent } from "@/lib/channels/shopee/ads/metrics";
 import { AdsDataUnavailableError, FixtureAdsDashboardSource } from "@/lib/channels/shopee/ads/source";
 import { RealAdsDashboardSource } from "@/lib/channels/shopee/ads/real-source";
+import { loadAdsSyncOverview, type AdsShopSyncOverview } from "@/lib/channels/shopee/ads/schedule";
+import { getAdsSyncConfig } from "@/lib/channels/shopee/ads/sync";
+import { AdsAutoSyncPanel } from "@/components/ads/ads-auto-sync-panel";
 import { formatDateTime } from "@/lib/ui/format";
 import { AdsAttributionPanel } from "@/components/ads/ads-attribution-panel";
 import type { AdsDashboardData } from "@/lib/channels/shopee/ads/view-models";
@@ -73,9 +76,18 @@ export default async function ShopeeAdsPage({ searchParams }: { searchParams: Pr
   const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
   const query = Object.fromEntries(QUERY_KEYS.map((k) => [k, one(sp[k])]));
   const sync = data?.sync ?? { state: "error" as const, lastSyncedAt: null, source: real ? ("shopee" as const) : ("fixture" as const) };
+  // SHOPEE-ADS-2: background sync per shop (admins) — DB only
+  let autoSync: AdsShopSyncOverview[] | null = null;
+  if (real && canManage) {
+    try {
+      autoSync = await loadAdsSyncOverview(createAdminClient());
+    } catch (e) {
+      console.warn(JSON.stringify({ source: "ads-dashboard", event: "auto_sync_overview_failed", message: e instanceof Error ? e.message.slice(0, 200) : null }));
+    }
+  }
 
   return (
-    <AdsRefreshProvider mode={real ? "real" : "fixture"} shop={data?.filters.shop ?? filters.shop}>
+    <AdsRefreshProvider mode={real ? "real" : "fixture"} shop={data?.filters.shop ?? filters.shop} stamp={data?.sync.stamp ?? null}>
       <div data-ads-root className="space-y-5">
         <AdsPageHeader preset={filters.preset} rangeLabel={formatAdsRange(filters.from, filters.to)} canManage={canManage} sync={sync} serverNow={serverNow} />
 
@@ -137,16 +149,22 @@ export default async function ShopeeAdsPage({ searchParams }: { searchParams: Pr
             <div className="mt-3 space-y-2" data-slot="ads-freshness">
               <ul className="grid gap-2 text-xs sm:grid-cols-3">
                 {(sync.details ?? []).map((d) => (
-                  <li key={d.key} className="rounded-lg border border-ads-border bg-ads-surface px-3 py-2">
-                    <p className="font-medium">{d.label}</p>
-                    <p className="text-muted-foreground tabular-nums">{d.lastSuccessAt ? `Thành công: ${formatDateTime(d.lastSuccessAt)}` : "Chưa đồng bộ"}</p>
+                  <li key={d.key} data-freshness={d.key} data-stale={d.stale ? "true" : "false"} className="rounded-lg border border-ads-border bg-ads-surface px-3 py-2">
+                    <p className="font-medium">
+                      {d.label}
+                      {d.stale && d.lastSuccessAt ? <span className="ml-1.5 text-warning-text">· chưa mới</span> : null}
+                    </p>
+                    <p className="text-muted-foreground tabular-nums">{d.lastSuccessAt ? `Đọc lúc ${formatDateTime(d.lastSuccessAt)}` : "Chưa đồng bộ"}</p>
+                    {d.targetMinutes ? <p className="text-ads-muted">Mục tiêu ≤ {d.targetMinutes >= 60 ? `${d.targetMinutes / 60} giờ` : `${d.targetMinutes} phút`}</p> : null}
                     {d.lastErrorAt && <p className="text-danger-text">Lỗi lúc {formatDateTime(d.lastErrorAt)}{d.errorMessage ? ` — ${d.errorMessage.slice(0, 120)}` : ""}</p>}
                   </li>
                 ))}
               </ul>
               <p className="text-xs text-ads-muted">
-                Dữ liệu thật từ Shopee Ads (chỉ đọc){sync.reportThrough ? ` · có số liệu đến ngày ${formatAdsRange(sync.reportThrough, sync.reportThrough)}` : ""}. Tổng quan lấy từ tổng quảng cáo cấp shop; bảng chiến dịch lấy từ từng chiến dịch sản phẩm.
+                Dữ liệu thật từ Shopee Ads (chỉ đọc){sync.reportThrough ? ` · có số liệu đến ngày ${formatAdsRange(sync.reportThrough, sync.reportThrough)}` : ""}.{" "}
+                {sync.autoSync?.enabled ? "Đồng bộ nền tự động ~15 phút/lần, không cần mở trang." : "Chưa bật đồng bộ nền cho shop này — dữ liệu chỉ cập nhật khi bấm “Làm mới dữ liệu”."} Tổng quan lấy từ tổng quảng cáo cấp shop; bảng chiến dịch lấy từ từng chiến dịch sản phẩm.
               </p>
+              {autoSync ? <AdsAutoSyncPanel rows={autoSync} globalEnabled={getAdsSyncConfig().autoSyncEnabled} serverNow={serverNow} /> : null}
             </div>
           ) : (
             <p className="mt-3 rounded-lg border border-dashed border-ads-border bg-ads-surface px-3 py-2 text-xs text-ads-muted">

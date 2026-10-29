@@ -1,27 +1,33 @@
 // ============================================================
-// SHOPEE-ADS-1B: READ-ONLY Ads sync — services + queue runners + enqueue.
+// SHOPEE-ADS-1B / ADS-2: READ-ONLY Ads sync — services + queue runners + enqueue.
 //
 //   ads_campaign_read              list ids (limit 100) → settings (50 ids)
 //                                  → snapshots → upsert campaigns + product links
-//   ads_campaign_performance_read  campaigns × ≤7-day windows × ≤50 ids
+//   ads_campaign_performance_read  campaign scope × ≤7-day windows × ≤50 ids
 //                                  → upsert campaign daily facts
 //   ads_shop_performance_read      ≤30-day windows → upsert SHOP daily facts
 //                                  (independent table: shop total ≠ Σ campaigns)
 //
+// ADS-2 strategies (metadata.strategy, each in its own queue lane):
+//   hot       every 15 min, TODAY only; campaigns = active candidates
+//   warm      hourly, the previous N completed days; recent-activity candidates
+//   cold      1–2×/day, 7 completed days + today, ALL campaigns (reconciliation)
+//   backfill  first sync of a shop (30 days, ≤7-day chunks)
+//   manual    "Làm mới dữ liệu" (today, all campaigns, highest priority)
+//   metadata  campaign catalogue every 6 h
+//   repair    metadata re-read when a performance answer names an unknown campaign
+//
 // Runs only inside the existing queue worker (claim / lease / checkpoint /
 // retry / backoff / stale recovery). Never called from a page render.
 // Every provider call goes through the read-only provider (GET, allowlist).
-//
-// Overlap: every performance refresh re-reads today + the previous
-// ADS_PERFORMANCE_RESTATEMENT_DAYS (default 7) completed days — PROVISIONAL,
-// historical restatement is not proven yet (docs/shopee-ads-sync.md).
 // No "server-only" marker: integration tests drive it with a local DB.
 // ============================================================
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { payloadHash } from "../../core/snapshots.ts";
-import { enqueueSyncJob, type EnqueueResult, type SyncJobRow } from "../../core/sync-jobs.ts";
+import { type SyncJobRow, type SyncMode } from "../../core/sync-jobs.ts";
 import { continuation, type SliceInput, type SliceOutcome, type SyncJobRunner } from "../../core/sync-runner.ts";
+import type { JobProgress } from "../../core/sync-progress.ts";
 import type { ProviderPayload } from "../product-provider.ts";
 import {
   parseCampaignDailyPerformance,
@@ -39,17 +45,53 @@ import { ADS_SNAPSHOT_ENTITY_TYPE } from "./types.ts";
 // ------------------------------------------------------------------ config (centralized)
 
 export interface AdsSyncConfig {
-  /** Completed days re-read on every performance refresh (provisional). */
+  /** COLD path: completed days re-read 1–2×/day (ADS_PERFORMANCE_RESTATEMENT_DAYS, provisional). */
   restatementDays: number;
   /** Days fetched on the first performance sync of a shop. */
   initialBackfillDays: number;
-  /** Campaign metadata is re-read by "Làm mới" only when older than this. */
+  /** Manual "Làm mới": campaign metadata is re-read only when older than this. */
   campaignStaleMinutes: number;
+  /** WARM path: completed days re-read every hour (yesterday back N days). */
+  warmRestatementDays: number;
+  hotIntervalMinutes: number;
+  campaignHotIntervalMinutes: number;
+  warmIntervalMinutes: number;
+  /** COLD restatement times ("HH:MM") in coldTimeZone. */
+  coldTimes: string[];
+  coldTimeZone: string;
+  metadataIntervalMinutes: number;
+  /** HOT may skip non-active campaigns only while campaign metadata is newer than this. */
+  metadataStaleMinutes: number;
+  /** Global cap on running Ads jobs (= concurrent Ads API calls). */
+  globalApiConcurrency: number;
+  /** One Ads provider workflow per shop (enforced by the claim's per-shop cap). */
+  perShopApiConcurrency: number;
+  /** ADS_AUTO_SYNC_ENABLED: the scheduler enqueues Ads jobs (default OFF until the pilot is validated). */
+  autoSyncEnabled: boolean;
+  /** Manual refresh right after a HOT sync (< N min) returns "Dữ liệu vừa được đồng bộ" without provider calls. */
+  manualDedupeMinutes: number;
+  /** Deterministic 0–N s start offset per shop + slot (no same-second bursts). */
+  jitterSeconds: number;
+  /** Campaign batches per slice before the job goes to the back of its line (large shops never block small ones). */
+  batchesPerSlice: number;
+  /** A campaign whose status changed / ended within this many hours stays a HOT candidate. */
+  hotRecentStatusHours: number;
 }
 
 const intEnv = (v: string | undefined, fallback: number, min: number, max: number) => {
   const n = Number(v);
-  return Number.isInteger(n) && n >= min && n <= max ? n : fallback;
+  return v !== undefined && v.trim() !== "" && Number.isInteger(n) && n >= min && n <= max ? n : fallback;
+};
+const boolEnv = (v: string | undefined, fallback: boolean) => {
+  const s = v?.trim().toLowerCase();
+  if (!s) return fallback;
+  if (["1", "true", "on", "yes"].includes(s)) return true;
+  if (["0", "false", "off", "no"].includes(s)) return false;
+  return fallback;
+};
+const timesEnv = (v: string | undefined, fallback: string[]) => {
+  const list = (v ?? "").split(/[,\s]+/).filter(Boolean);
+  return list.length && list.every((t) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)) ? [...new Set(list)].sort() : fallback;
 };
 
 export function getAdsSyncConfig(env: Record<string, string | undefined> = process.env): AdsSyncConfig {
@@ -57,15 +99,51 @@ export function getAdsSyncConfig(env: Record<string, string | undefined> = proce
     restatementDays: intEnv(env.ADS_PERFORMANCE_RESTATEMENT_DAYS, 7, 0, 30),
     initialBackfillDays: intEnv(env.ADS_INITIAL_BACKFILL_DAYS, 30, 1, 90),
     campaignStaleMinutes: intEnv(env.ADS_CAMPAIGN_STALE_MINUTES, 360, 5, 7 * 24 * 60),
+    warmRestatementDays: intEnv(env.ADS_WARM_RESTATEMENT_DAYS, 3, 0, 14),
+    hotIntervalMinutes: intEnv(env.ADS_HOT_INTERVAL_MINUTES, 15, 10, 120),
+    campaignHotIntervalMinutes: intEnv(env.ADS_CAMPAIGN_HOT_INTERVAL_MINUTES, 15, 10, 180),
+    warmIntervalMinutes: intEnv(env.ADS_WARM_INTERVAL_MINUTES, 60, 30, 24 * 60),
+    coldTimes: timesEnv(env.ADS_COLD_RESTATEMENT_TIMES, ["03:00", "15:00"]),
+    coldTimeZone: env.ADS_COLD_TIMEZONE?.trim() || "Asia/Ho_Chi_Minh",
+    metadataIntervalMinutes: intEnv(env.ADS_CAMPAIGN_METADATA_INTERVAL_MINUTES, 360, 60, 24 * 60),
+    metadataStaleMinutes: intEnv(env.ADS_CAMPAIGN_METADATA_STALE_MINUTES, 480, 60, 7 * 24 * 60),
+    globalApiConcurrency: intEnv(env.ADS_GLOBAL_API_CONCURRENCY, 2, 1, 5),
+    perShopApiConcurrency: intEnv(env.ADS_PER_SHOP_API_CONCURRENCY, 1, 1, 1),
+    autoSyncEnabled: boolEnv(env.ADS_AUTO_SYNC_ENABLED, false),
+    manualDedupeMinutes: intEnv(env.ADS_MANUAL_DEDUPE_MINUTES, 5, 0, 60),
+    jitterSeconds: intEnv(env.ADS_SCHEDULER_JITTER_SECONDS, 20, 0, 60),
+    batchesPerSlice: intEnv(env.ADS_BATCHES_PER_SLICE, 3, 1, 50),
+    hotRecentStatusHours: intEnv(env.ADS_HOT_RECENT_STATUS_HOURS, 36, 1, 7 * 24),
   };
 }
 
-/** Manual "Làm mới" lane priorities (lower = earlier): metadata first, facts right after. */
-export const ADS_JOB_PRIORITY: Record<AdsSyncType, number> = {
-  ads_campaign_read: 5,
-  ads_campaign_performance_read: 6,
-  ads_shop_performance_read: 6,
-};
+/** Defaults + overrides (tests pass a few fields). */
+export function resolveAdsSyncConfig(config?: Partial<AdsSyncConfig>): AdsSyncConfig {
+  return { ...getAdsSyncConfig(), ...(config ?? {}) };
+}
+
+export const ADS_STRATEGIES = ["hot", "warm", "cold", "backfill", "manual", "metadata", "repair"] as const;
+export type AdsStrategy = (typeof ADS_STRATEGIES)[number];
+/** Queue lane per strategy (one active job per shop + type + lane). */
+export type AdsLane = "ads_hot" | "ads_warm" | "ads_cold" | "ads_backfill" | "ads_meta";
+/** Which campaigns a campaign-performance job reads. */
+export type AdsCampaignScope = "all" | "hot" | "warm";
+
+/**
+ * Claim order (lower first). Current-day data always outranks restatement /
+ * backfill; a continued slice goes to the back of its own priority line.
+ */
+export const ADS_PRIORITY = {
+  manual: 1,
+  hotShop: 2,
+  metadataInitial: 2,
+  hotCampaign: 3,
+  metadataRepair: 3,
+  warm: 4,
+  metadata: 5,
+  cold: 6,
+  backfill: 7,
+} as const;
 
 // ------------------------------------------------------------------ dates (pure)
 
@@ -82,10 +160,38 @@ export function addDaysIso(iso: string, days: number): string {
   return new Date(Date.parse(`${iso}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
 }
 
-/** Refresh window: today + the previous `restatementDays` completed days; first sync: `initialBackfillDays`. */
-export function adsPerformanceRange(now: Date, timeZone: string, config: AdsSyncConfig, initial: boolean): AdsDateRange {
+/** UTC instant of 00:00 of a shop-local date. */
+export function zonedMidnightUtc(iso: string, timeZone: string): number {
+  const guess = Date.parse(`${iso}T00:00:00Z`);
+  const p = new Intl.DateTimeFormat("en-CA", { timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(guess));
+  const v = (t: string) => Number(p.find((x) => x.type === t)?.value ?? 0);
+  const asLocal = Date.UTC(v("year"), v("month") - 1, v("day"), v("hour"), v("minute"), v("second"));
+  return guess - (asLocal - guess);
+}
+
+/** HOT: today only (never inherits a restatement window). */
+export function adsHotRange(now: Date, timeZone: string): AdsDateRange {
   const today = shopToday(now, timeZone);
-  return { from: addDaysIso(today, -(initial ? config.initialBackfillDays : config.restatementDays)), to: today };
+  return { from: today, to: today };
+}
+
+/** WARM: yesterday back `warmRestatementDays` completed days; null when disabled. */
+export function adsWarmRange(now: Date, timeZone: string, config: Pick<AdsSyncConfig, "warmRestatementDays">): AdsDateRange | null {
+  if (config.warmRestatementDays <= 0) return null;
+  const today = shopToday(now, timeZone);
+  return { from: addDaysIso(today, -config.warmRestatementDays), to: addDaysIso(today, -1) };
+}
+
+/** COLD: the previous `restatementDays` completed days + today. */
+export function adsColdRange(now: Date, timeZone: string, config: Pick<AdsSyncConfig, "restatementDays">): AdsDateRange {
+  const today = shopToday(now, timeZone);
+  return { from: addDaysIso(today, -config.restatementDays), to: today };
+}
+
+/** BACKFILL: `initialBackfillDays` + today. */
+export function adsBackfillRange(now: Date, timeZone: string, config: Pick<AdsSyncConfig, "initialBackfillDays">): AdsDateRange {
+  const today = shopToday(now, timeZone);
+  return { from: addDaysIso(today, -config.initialBackfillDays), to: today };
 }
 
 /** Splits an inclusive range into consecutive windows of ≤ maxDays (oldest first). */
@@ -100,6 +206,39 @@ export function splitAdsRange(range: AdsDateRange, maxDays: number): AdsDateRang
 
 export function chunk<T>(list: readonly T[], size: number): T[][] {
   return Array.from({ length: Math.ceil(list.length / size) }, (_, i) => list.slice(i * size, (i + 1) * size));
+}
+
+// ------------------------------------------------------------------ data quality (pure)
+
+/** Rows that are allowed but worth watching (never refused; negatives are refused by the mapper). */
+export function adsAnomalyCodes(p: AdsPerformancePrimitives): string[] {
+  const out: string[] = [];
+  if (p.broadOrder < p.directOrder) out.push("broad_order_lt_direct");
+  if (Number(p.broadGmv) < Number(p.directGmv)) out.push("broad_gmv_lt_direct");
+  if (p.broadOrder > 0 && Number(p.broadGmv) === 0) out.push("order_without_gmv");
+  return out;
+}
+
+const PRIMITIVE_COLUMNS = ["expense", "impression", "clicks", "direct_order", "broad_order", "direct_gmv", "broad_gmv", "direct_item_sold", "broad_item_sold"] as const;
+type StoredFact = Record<(typeof PRIMITIVE_COLUMNS)[number], string | number> & { report_date: string; last_synced_at: string };
+
+const factColumns = (p: AdsPerformancePrimitives) => ({
+  report_date: p.reportDate,
+  expense: p.expense,
+  impression: p.impression,
+  clicks: p.clicks,
+  direct_order: p.directOrder,
+  broad_order: p.broadOrder,
+  direct_gmv: p.directGmv,
+  broad_gmv: p.broadGmv,
+  direct_item_sold: p.directItemSold,
+  broad_item_sold: p.broadItemSold,
+});
+
+/** Fields whose stored value differs from the new one (exact decimal compare, no float math). */
+export function changedPrimitives(stored: StoredFact, next: AdsPerformancePrimitives): Array<(typeof PRIMITIVE_COLUMNS)[number]> {
+  const n = factColumns(next) as Record<string, string | number>;
+  return PRIMITIVE_COLUMNS.filter((c) => Number(stored[c]) !== Number(n[c]));
 }
 
 // ------------------------------------------------------------------ snapshots (existing channel_api_snapshots, entity 'ads')
@@ -121,7 +260,7 @@ export async function saveAdsSnapshot(db: SupabaseClient, input: { shopId: strin
   return "inserted" as const;
 }
 
-// ------------------------------------------------------------------ canonical writes
+// ------------------------------------------------------------------ canonical writes (bulk upserts, ≤ 500 rows per request)
 
 const UPSERT_CHUNK = 500;
 
@@ -195,19 +334,6 @@ export async function reconcileAdsCampaignProducts(db: SupabaseClient, shopId: s
   return { inserted, removed };
 }
 
-const factColumns = (p: AdsPerformancePrimitives) => ({
-  report_date: p.reportDate,
-  expense: p.expense,
-  impression: p.impression,
-  clicks: p.clicks,
-  direct_order: p.directOrder,
-  broad_order: p.broadOrder,
-  direct_gmv: p.directGmv,
-  broad_gmv: p.broadGmv,
-  direct_item_sold: p.directItemSold,
-  broad_item_sold: p.broadItemSold,
-});
-
 export async function upsertAdsCampaignFacts(db: SupabaseClient, rows: Array<{ shopId: string; campaignId: string; facts: AdsPerformancePrimitives }>, syncedAt: string) {
   for (const part of chunk(rows, UPSERT_CHUNK)) {
     const { error } = await db
@@ -222,6 +348,46 @@ export async function upsertAdsShopFacts(db: SupabaseClient, shopId: string, row
     const { error } = await db.from("shopee_ads_shop_daily_performance").upsert(part.map((r) => ({ shop_id: shopId, ...factColumns(r), last_synced_at: syncedAt })), { onConflict: "shop_id,report_date" });
     if (error) throw new Error(`Không lưu được hiệu quả cấp shop: ${error.message}`);
   }
+}
+
+// ------------------------------------------------------------------ restatement log (completed days only)
+
+interface RestatementSample {
+  date: string;
+  campaignId: string | null;
+  fields: Record<string, [string, string]>;
+  storedAt: string;
+}
+
+/**
+ * A completed day whose stored value was read AFTER that day had ended and
+ * now differs = a real provider restatement (late attribution). Values read
+ * while the day was still running are partial, not restated. Counted in
+ * job stats (restatedRows) with ≤ 5 samples — the evidence used to tune
+ * ADS_WARM_RESTATEMENT_DAYS / ADS_PERFORMANCE_RESTATEMENT_DAYS.
+ */
+function recordRestatements(progress: JobProgress<unknown>, timeZone: string, today: string, pairs: Array<{ stored: StoredFact | undefined; next: AdsPerformancePrimitives; campaignId: string | null }>) {
+  const samples = ((progress.meta.restatedSamples as RestatementSample[] | undefined) ?? []).slice(0, 5);
+  let n = 0;
+  for (const { stored, next, campaignId } of pairs) {
+    if (!stored || next.reportDate >= today) continue;
+    if (Date.parse(stored.last_synced_at) < zonedMidnightUtc(addDaysIso(next.reportDate, 1), timeZone)) continue;
+    const fields = changedPrimitives(stored, next);
+    if (!fields.length) continue;
+    n++;
+    if (samples.length < 5) {
+      const nf = factColumns(next) as Record<string, string | number>;
+      samples.push({ date: next.reportDate, campaignId, storedAt: stored.last_synced_at, fields: Object.fromEntries(fields.map((f) => [f, [String(stored[f]), String(nf[f])]])) });
+    }
+  }
+  if (n > 0) {
+    progress.incr("restatedRows", n);
+    progress.meta.restatedSamples = samples;
+  }
+}
+
+function recordAnomalies(progress: JobProgress<unknown>, rows: AdsPerformancePrimitives[]) {
+  for (const r of rows) for (const code of adsAnomalyCodes(r)) progress.incrIn("anomalies", code);
 }
 
 // ------------------------------------------------------------------ queue runners
@@ -247,6 +413,11 @@ function jobRange(job: SyncJobRow): AdsDateRange {
   return r;
 }
 
+function jobScope(job: SyncJobRow): AdsCampaignScope {
+  const s = job.metadata?.adsScope;
+  return s === "hot" || s === "warm" ? s : "all";
+}
+
 type FailureList = Array<{ externalId: string | null; reason: string }>;
 const doneOutcome = (range: AdsDateRange | null, failures: number, firstFailure: string | null, finishedAt: Date): SliceOutcome => ({
   kind: "done",
@@ -266,10 +437,16 @@ interface CampaignCheckpoint {
   settingsIndex: number;
 }
 
-export class AdsCampaignReadRunner implements SyncJobRunner {
-  private readonly deps: { db: SupabaseClient; provider: ShopeeAdsProvider };
+interface RunnerDeps {
+  db: SupabaseClient;
+  provider: ShopeeAdsProvider;
+  config?: Partial<AdsSyncConfig>;
+}
 
-  constructor(deps: { db: SupabaseClient; provider: ShopeeAdsProvider }) {
+export class AdsCampaignReadRunner implements SyncJobRunner {
+  private readonly deps: RunnerDeps;
+
+  constructor(deps: RunnerDeps) {
     this.deps = deps;
   }
 
@@ -323,6 +500,8 @@ interface PerformanceCheckpoint {
   windows: AdsDateRange[];
   windowIndex: number;
   batchIndex: number;
+  /** Provider campaign ids of this job, frozen on the first slice (batches never shift between slices). */
+  ids?: string[];
 }
 
 /** Provider campaign id → canonical uuid for the shop (paged: PostgREST returns ≤ 1000 rows per request). */
@@ -337,15 +516,98 @@ export async function loadAdsCampaignIds(db: SupabaseClient, shopId: string): Pr
   }
 }
 
-export class AdsCampaignPerformanceReadRunner implements SyncJobRunner {
-  private readonly deps: { db: SupabaseClient; provider: ShopeeAdsProvider };
+async function pagedProviderIds(build: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>, pick: (row: Record<string, unknown>) => string | null): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await build(from, from + 999);
+    if (error) throw new Error(`Không đọc được danh sách chiến dịch ứng viên: ${error.message}`);
+    const rows = (data ?? []) as Array<Record<string, unknown>>;
+    for (const r of rows) {
+      const id = pick(r);
+      if (id) out.add(id);
+    }
+    if (rows.length < 1000) return out;
+  }
+}
 
-  constructor(deps: { db: SupabaseClient; provider: ShopeeAdsProvider }) {
+/**
+ * Which campaigns a performance job reads (DB-derived, before any provider call):
+ *   all   every known campaign (COLD / backfill / manual)
+ *   hot   provider_status = ongoing, + status changed / ended within
+ *         hotRecentStatusHours, + already non-zero in the range. Only while
+ *         campaign metadata is fresh — otherwise ALL (accuracy > optimization).
+ *   warm  ongoing, + status changed / ended since the window start, + non-zero
+ *         stored performance in the window.
+ * Non-candidates are still refreshed by COLD (all campaigns, 1–2×/day).
+ */
+export async function selectAdsCampaignScope(
+  db: SupabaseClient,
+  input: { shopId: string; scope: AdsCampaignScope; range: AdsDateRange; timeZone: string; now: Date; config: AdsSyncConfig; idMap: Map<string, string> },
+): Promise<{ ids: string[]; fallback: string | null }> {
+  const all = [...input.idMap.keys()];
+  if (input.scope === "all") return { ids: all, fallback: null };
+  if (input.scope === "hot") {
+    const { data: state, error } = await db.from("channel_sync_states").select("last_success_at").eq("shop_id", input.shopId).eq("sync_type", "ads_campaign_read").maybeSingle<{ last_success_at: string | null }>();
+    if (error) throw new Error(`Không đọc được trạng thái danh mục chiến dịch: ${error.message}`);
+    const fresh = !!state?.last_success_at && input.now.getTime() - Date.parse(state.last_success_at) < input.config.metadataStaleMinutes * 60_000;
+    if (!fresh) return { ids: all, fallback: "metadata_stale" };
+  }
+  const sinceMs = input.scope === "hot" ? input.now.getTime() - input.config.hotRecentStatusHours * 3_600_000 : zonedMidnightUtc(input.range.from, input.timeZone);
+  const since = new Date(sinceMs).toISOString();
+  const nowIso = input.now.toISOString();
+  const byStatus = await pagedProviderIds(
+    (from, to) =>
+      db
+        .from("shopee_ads_campaigns")
+        .select("provider_campaign_id")
+        .eq("shop_id", input.shopId)
+        .or(`provider_status.eq.ongoing,status_changed_at.gte.${since},and(provider_end_at.gte.${since},provider_end_at.lte.${nowIso})`)
+        .order("provider_campaign_id")
+        .range(from, to),
+    (r) => String(r.provider_campaign_id),
+  );
+  const uuidToProvider = new Map([...input.idMap.entries()].map(([p, u]) => [u, p]));
+  const active = await pagedProviderIds(
+    (from, to) =>
+      db
+        .from("shopee_ads_campaign_daily_performance")
+        .select("campaign_id")
+        .eq("shop_id", input.shopId)
+        .gte("report_date", input.range.from)
+        .lte("report_date", input.range.to)
+        .or("expense.gt.0,impression.gt.0,clicks.gt.0,broad_order.gt.0")
+        .order("campaign_id")
+        .range(from, to),
+    (r) => uuidToProvider.get(String(r.campaign_id)) ?? null,
+  );
+  const wanted = new Set([...byStatus, ...active]);
+  return { ids: all.filter((id) => wanted.has(id)), fallback: null };
+}
+
+async function storedCampaignFacts(db: SupabaseClient, campaignIds: string[], range: AdsDateRange): Promise<Map<string, StoredFact>> {
+  const out = new Map<string, StoredFact>();
+  if (!campaignIds.length) return out;
+  const { data, error } = await db
+    .from("shopee_ads_campaign_daily_performance")
+    .select(`campaign_id, report_date, last_synced_at, ${PRIMITIVE_COLUMNS.join(", ")}`)
+    .in("campaign_id", campaignIds)
+    .gte("report_date", range.from)
+    .lte("report_date", range.to);
+  if (error) throw new Error(`Không đọc được hiệu quả chiến dịch đã lưu: ${error.message}`);
+  for (const r of (data ?? []) as unknown as Array<StoredFact & { campaign_id: string }>) out.set(`${r.campaign_id}|${r.report_date}`, r);
+  return out;
+}
+
+export class AdsCampaignPerformanceReadRunner implements SyncJobRunner {
+  private readonly deps: RunnerDeps;
+
+  constructor(deps: RunnerDeps) {
     this.deps = deps;
   }
 
   async runSlice(input: SliceInput): Promise<SliceOutcome> {
     const { job, lease, budget, now } = input;
+    const config = resolveAdsSyncConfig(this.deps.config);
     const progress = input.progress as SliceInput<PerformanceCheckpoint>["progress"];
     const shop = await loadAdsShop(this.deps.db, job.shop_id);
     const ctx: AdsProviderContext = { shopId: shop.id, externalShopId: shop.external_shop_id };
@@ -355,30 +617,50 @@ export class AdsCampaignPerformanceReadRunner implements SyncJobRunner {
       // Campaign metadata has not been synced yet: wait for ads_campaign_read (retry with backoff, no provider call).
       throw new AdsDependencyPendingError();
     }
-    progress.checkpoint ??= { windows: splitAdsRange(range, ADS_CAMPAIGN_RANGE_DAYS), windowIndex: 0, batchIndex: 0 };
+    if (!progress.checkpoint) {
+      const scope = await selectAdsCampaignScope(this.deps.db, { shopId: shop.id, scope: jobScope(job), range, timeZone: shop.timezone, now: now(), config, idMap });
+      progress.checkpoint = { windows: splitAdsRange(range, ADS_CAMPAIGN_RANGE_DAYS), windowIndex: 0, batchIndex: 0, ids: scope.ids };
+      progress.meta.campaignScope = { scope: jobScope(job), candidates: scope.ids.length, known: idMap.size, fallback: scope.fallback };
+    }
     const cp = progress.checkpoint;
-    const providerIds = [...idMap.keys()];
-    const batches = chunk(providerIds, ADS_ID_BATCH);
+    const batches = chunk(cp.ids ?? [...idMap.keys()], ADS_ID_BATCH);
     const failures = (progress.meta.adsFailures as FailureList | undefined) ?? [];
+    const today = shopToday(now(), shop.timezone);
+    let callsThisSlice = 0;
 
     while (cp.windowIndex < cp.windows.length) {
       while (cp.batchIndex < batches.length) {
         if (!budget.canSpend(1)) return continuation(budget, "more_records");
+        // rotate: after N batches the job goes to the back of its priority line (other shops get a turn)
+        if (callsThisSlice >= config.batchesPerSlice) return { kind: "more", reason: "batch_limit", remaining: "more_records" };
         const window = cp.windows[cp.windowIndex];
         const batch = batches[cp.batchIndex];
         const payload = await this.deps.provider.getProductCampaignDailyPerformance(ctx, { campaignIds: batch, range: window });
+        callsThisSlice++;
         const syncedAt = now().toISOString();
         await saveAdsSnapshot(this.deps.db, { shopId: shop.id, payload, key: `campaign_daily:${window.from}:${window.to}:${batch[0]}:${batch.length}`, sourceMode: this.deps.provider.mode, syncedAt });
         const parsed = parseCampaignDailyPerformance(payload.raw);
+        let unknown = 0;
         const rows = parsed.rows.flatMap((r) => {
           const campaignId = idMap.get(r.providerCampaignId);
           if (!campaignId) {
-            failures.push({ externalId: r.providerCampaignId, reason: "Chiến dịch chưa có trong danh mục (chờ ads_campaign_read)." });
+            unknown++;
+            failures.push({ externalId: r.providerCampaignId, reason: "Chiến dịch chưa có trong danh mục (đã yêu cầu đọc lại danh mục)." });
             return [];
           }
           return [{ shopId: shop.id, campaignId, facts: r }];
         });
+        if (window.from < today) {
+          const stored = await storedCampaignFacts(this.deps.db, rows.map((r) => r.campaignId), window);
+          recordRestatements(progress, shop.timezone, today, rows.map((r) => ({ stored: stored.get(`${r.campaignId}|${r.facts.reportDate}`), next: r.facts, campaignId: r.facts.providerCampaignId })));
+        }
         await upsertAdsCampaignFacts(this.deps.db, rows, syncedAt);
+        recordAnomalies(progress, rows.map((r) => r.facts));
+        if (unknown > 0 && !progress.meta.metadataRepairJobId) {
+          // fast path: never wait for the 6-hour metadata cycle
+          const repair = await enqueueAdsJob(this.deps.db, { shopId: shop.id, syncType: "ads_campaign_read", strategy: "repair", priority: ADS_PRIORITY.metadataRepair, now: now() });
+          progress.meta.metadataRepairJobId = repair.jobId;
+        }
         progress.counters.fetched += parsed.rows.length;
         progress.counters.updated += rows.length;
         progress.counters.failed += parsed.failures.length;
@@ -397,9 +679,9 @@ export class AdsCampaignPerformanceReadRunner implements SyncJobRunner {
 }
 
 export class AdsShopPerformanceReadRunner implements SyncJobRunner {
-  private readonly deps: { db: SupabaseClient; provider: ShopeeAdsProvider };
+  private readonly deps: RunnerDeps;
 
-  constructor(deps: { db: SupabaseClient; provider: ShopeeAdsProvider }) {
+  constructor(deps: RunnerDeps) {
     this.deps = deps;
   }
 
@@ -409,6 +691,7 @@ export class AdsShopPerformanceReadRunner implements SyncJobRunner {
     const shop = await loadAdsShop(this.deps.db, job.shop_id);
     const ctx: AdsProviderContext = { shopId: shop.id, externalShopId: shop.external_shop_id };
     const range = jobRange(job);
+    const today = shopToday(now(), shop.timezone);
     progress.checkpoint ??= { windows: splitAdsRange(range, ADS_SHOP_RANGE_DAYS), windowIndex: 0 };
     const cp = progress.checkpoint;
     while (cp.windowIndex < cp.windows.length) {
@@ -418,7 +701,19 @@ export class AdsShopPerformanceReadRunner implements SyncJobRunner {
       const syncedAt = now().toISOString();
       await saveAdsSnapshot(this.deps.db, { shopId: shop.id, payload, key: `shop_daily:${window.from}:${window.to}`, sourceMode: this.deps.provider.mode, syncedAt });
       const parsed = parseShopDailyPerformance(payload.raw);
+      if (window.from < today) {
+        const { data: stored, error } = await this.deps.db
+          .from("shopee_ads_shop_daily_performance")
+          .select(`report_date, last_synced_at, ${PRIMITIVE_COLUMNS.join(", ")}`)
+          .eq("shop_id", shop.id)
+          .gte("report_date", window.from)
+          .lte("report_date", window.to);
+        if (error) throw new Error(`Không đọc được hiệu quả cấp shop đã lưu: ${error.message}`);
+        const byDate = new Map(((stored ?? []) as unknown as StoredFact[]).map((r) => [r.report_date, r]));
+        recordRestatements(progress, shop.timezone, today, parsed.rows.map((r) => ({ stored: byDate.get(r.reportDate), next: r, campaignId: null })));
+      }
       await upsertAdsShopFacts(this.deps.db, shop.id, parsed.rows, syncedAt);
+      recordAnomalies(progress, parsed.rows);
       progress.counters.fetched += parsed.rows.length;
       progress.counters.updated += parsed.rows.length;
       progress.incr("missingFields", parsed.missingFields);
@@ -439,7 +734,7 @@ export class AdsDependencyPendingError extends Error {
   }
 }
 
-export function createAdsRunner(job: SyncJobRow, deps: { db: SupabaseClient; provider: ShopeeAdsProvider }): SyncJobRunner {
+export function createAdsRunner(job: SyncJobRow, deps: RunnerDeps): SyncJobRunner {
   switch (job.sync_type) {
     case "ads_campaign_read":
       return new AdsCampaignReadRunner(deps);
@@ -452,39 +747,156 @@ export function createAdsRunner(job: SyncJobRow, deps: { db: SupabaseClient; pro
   }
 }
 
-// ------------------------------------------------------------------ enqueue (manual "Làm mới dữ liệu")
+// ------------------------------------------------------------------ enqueue (dedupe + coalescing in the DB)
 
-export interface AdsRefreshResult {
+const LANE_OF: Record<AdsStrategy, AdsLane> = { hot: "ads_hot", manual: "ads_hot", warm: "ads_warm", cold: "ads_cold", backfill: "ads_backfill", metadata: "ads_meta", repair: "ads_meta" };
+
+export function adsLaneFor(syncType: AdsSyncType, strategy: AdsStrategy): AdsLane {
+  return syncType === "ads_campaign_read" ? "ads_meta" : LANE_OF[strategy];
+}
+
+export interface AdsEnqueueInput {
   shopId: string;
-  jobs: Array<{ syncType: AdsSyncType; jobId: string; created: boolean; status: string }>;
-  range: AdsDateRange;
-  initial: boolean;
+  syncType: AdsSyncType;
+  strategy: AdsStrategy;
+  priority: number;
+  range?: AdsDateRange | null;
+  scope?: AdsCampaignScope;
+  /** Not claimable before this instant (stagger jitter). */
+  notBefore?: Date | null;
+  createdBy?: string | null;
+  now?: Date;
+  /** false = never reuse a broader job (tests). */
+  coalesce?: boolean;
+  /** Override the queue mode (user-initiated jobs are "manual": they run even while the shop's automatic sync is paused). */
+  mode?: SyncMode;
+}
+
+export interface AdsEnqueueResult {
+  jobId: string;
+  created: boolean;
+  /** Reused an active job that already covers this request (or widened a queued one). */
+  coalesced: boolean;
+  status: string;
+  lane: string;
+  priority: number;
 }
 
 /**
- * Enqueues the read jobs of one shop: campaign metadata when stale (or never
- * synced), campaign performance and shop performance for the refresh window
- * (first time: the initial backfill). Idempotent per shop + type + lane.
+ * Canonical job identity = shop + sync_type + lane (+ range / scope in
+ * metadata). The DB function decides atomically: reuse a covering active job
+ * (raising its priority), insert, or widen a queued job of the same lane.
  */
-export async function requestAdsRefresh(db: SupabaseClient, input: { shopId: string; now?: Date; createdBy?: string | null; config?: AdsSyncConfig }): Promise<AdsRefreshResult> {
+export async function enqueueAdsJob(db: SupabaseClient, input: AdsEnqueueInput): Promise<AdsEnqueueResult> {
+  const mode: SyncMode = input.mode ?? (input.strategy === "manual" ? "manual" : input.strategy === "backfill" ? "backfill" : "incremental");
+  const metadata: Record<string, unknown> = { strategy: input.strategy, requestedAt: (input.now ?? new Date()).toISOString() };
+  if (input.syncType === "ads_campaign_performance_read") metadata.adsScope = input.scope ?? "all";
+  if (input.syncType !== "ads_campaign_read" && !input.range) throw new Error("Job hiệu quả Ads cần khoảng ngày.");
+  const { data, error } = await db
+    .rpc("enqueue_ads_sync_job", {
+      p_shop_id: input.shopId,
+      p_sync_type: input.syncType,
+      p_lane: adsLaneFor(input.syncType, input.strategy),
+      p_mode: mode,
+      p_priority: input.priority,
+      p_metadata: metadata,
+      p_from: input.syncType === "ads_campaign_read" ? null : input.range!.from,
+      p_to: input.syncType === "ads_campaign_read" ? null : input.range!.to,
+      p_not_before: input.notBefore?.toISOString() ?? null,
+      p_created_by: input.createdBy ?? null,
+      p_coalesce: input.coalesce ?? true,
+    })
+    .single<{ job_id: string; created: boolean; status: string; coalesced: boolean; job_lane: string; job_priority: number }>();
+  if (error || !data) throw new Error(`Không tạo được job Ads: ${error?.message ?? "unknown"}`);
+  return { jobId: data.job_id, created: data.created, coalesced: data.coalesced, status: data.status, lane: data.job_lane, priority: data.job_priority };
+}
+
+// ------------------------------------------------------------------ freshness (DB only)
+
+/**
+ * When TODAY's shop total and campaign facts were last read (latest successful
+ * read whose window includes today; WARM never counts). Same RPC as the
+ * dashboard freshness, so "Dữ liệu vừa được đồng bộ" matches what the page shows.
+ */
+export async function adsTodayFreshness(db: SupabaseClient, shopId: string): Promise<{ shop: string | null; campaign: string | null }> {
+  const { data, error } = await db.rpc("ads_sync_freshness", { p_shop_ids: [shopId] });
+  if (error) throw new Error(`Không đọc được độ mới dữ liệu Ads: ${error.message}`);
+  const row = ((data ?? []) as Array<{ shop_today_at: string | null; campaign_today_at: string | null }>)[0];
+  return { shop: row?.shop_today_at ?? null, campaign: row?.campaign_today_at ?? null };
+}
+
+// ------------------------------------------------------------------ manual "Làm mới dữ liệu"
+
+export interface AdsRefreshResult {
+  shopId: string;
+  /** poll = the button waits for it; background jobs (WARM catch-up) are not awaited. */
+  jobs: Array<{ syncType: AdsSyncType; strategy: AdsStrategy; jobId: string; created: boolean; coalesced: boolean; status: string; poll: boolean }>;
+  range: AdsDateRange;
+  initial: boolean;
+  /** HOT data is newer than manualDedupeMinutes → nothing enqueued. */
+  fresh: boolean;
+}
+
+/**
+ * Same queue as the scheduler, highest priority:
+ *   never synced     → metadata + 30-day backfill
+ *   recently synced  → nothing ("Dữ liệu vừa được đồng bộ") unless `force`
+ *   otherwise        → today (shop + ALL campaigns), metadata when stale,
+ *                      plus a background WARM catch-up when no WARM ran
+ *                      within its interval (e.g. auto sync still off)
+ */
+export async function requestAdsRefresh(
+  db: SupabaseClient,
+  input: { shopId: string; now?: Date; createdBy?: string | null; config?: Partial<AdsSyncConfig>; force?: boolean },
+): Promise<AdsRefreshResult> {
   const now = input.now ?? new Date();
-  const config = input.config ?? getAdsSyncConfig();
+  const config = resolveAdsSyncConfig(input.config);
   const shop = await loadAdsShop(db, input.shopId);
   const { data: states, error } = await db.from("channel_sync_states").select("sync_type, last_success_at").eq("shop_id", shop.id).in("sync_type", ["ads_campaign_read", "ads_campaign_performance_read", "ads_shop_performance_read"]);
   if (error) throw new Error(`Không đọc được trạng thái đồng bộ Ads: ${error.message}`);
   const last = new Map(((states ?? []) as Array<{ sync_type: string; last_success_at: string | null }>).map((s) => [s.sync_type, s.last_success_at]));
   const initial = !last.get("ads_campaign_performance_read") || !last.get("ads_shop_performance_read");
-  const range = adsPerformanceRange(now, shop.timezone, config, initial);
+  const range = initial ? adsBackfillRange(now, shop.timezone, config) : adsHotRange(now, shop.timezone);
+
+  if (!initial && !input.force && config.manualDedupeMinutes > 0) {
+    const f = await adsTodayFreshness(db, shop.id);
+    const recent = (iso: string | null) => !!iso && now.getTime() - Date.parse(iso) < config.manualDedupeMinutes * 60_000;
+    if (recent(f.shop) && recent(f.campaign)) return { shopId: shop.id, jobs: [], range, initial, fresh: true };
+  }
+
   const campaignLast = last.get("ads_campaign_read");
   const campaignStale = !campaignLast || now.getTime() - Date.parse(campaignLast) >= config.campaignStaleMinutes * 60_000;
-
   const jobs: AdsRefreshResult["jobs"] = [];
-  const enqueue = async (syncType: AdsSyncType, metadata: Record<string, unknown>) => {
-    const r: EnqueueResult = await enqueueSyncJob(db, { shopId: shop.id, syncType, mode: "manual", priority: ADS_JOB_PRIORITY[syncType], metadata, createdBy: input.createdBy ?? null });
-    jobs.push({ syncType, jobId: r.jobId, created: r.created, status: r.status });
+  const add = async (e: Omit<AdsEnqueueInput, "shopId" | "now" | "createdBy">, poll: boolean) => {
+    const r = await enqueueAdsJob(db, { ...e, shopId: shop.id, now, createdBy: input.createdBy ?? null, mode: "manual" });
+    jobs.push({ syncType: e.syncType, strategy: e.strategy, jobId: r.jobId, created: r.created, coalesced: r.coalesced, status: r.status, poll });
   };
-  if (campaignStale) await enqueue("ads_campaign_read", { requestedAt: now.toISOString() });
-  await enqueue("ads_campaign_performance_read", { adsRange: range, initial, requestedAt: now.toISOString() });
-  await enqueue("ads_shop_performance_read", { adsRange: range, initial, requestedAt: now.toISOString() });
-  return { shopId: shop.id, jobs, range, initial };
+  if (campaignStale) await add({ syncType: "ads_campaign_read", strategy: "manual", priority: ADS_PRIORITY.manual }, true);
+  if (initial) {
+    await add({ syncType: "ads_campaign_performance_read", strategy: "backfill", priority: ADS_PRIORITY.manual, range, scope: "all" }, true);
+    await add({ syncType: "ads_shop_performance_read", strategy: "backfill", priority: ADS_PRIORITY.manual, range }, true);
+    return { shopId: shop.id, jobs, range, initial, fresh: false };
+  }
+  await add({ syncType: "ads_campaign_performance_read", strategy: "manual", priority: ADS_PRIORITY.manual, range, scope: "all" }, true);
+  await add({ syncType: "ads_shop_performance_read", strategy: "manual", priority: ADS_PRIORITY.manual, range }, true);
+
+  const warm = adsWarmRange(now, shop.timezone, config);
+  if (warm) {
+    const { data: lastWarm, error: warmError } = await db
+      .from("channel_sync_jobs")
+      .select("finished_at")
+      .eq("shop_id", shop.id)
+      .eq("lane", "ads_warm")
+      .eq("status", "success")
+      .order("finished_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ finished_at: string | null }>();
+    if (warmError) throw new Error(`Không đọc được lần đồng bộ WARM gần nhất: ${warmError.message}`);
+    const warmDue = !lastWarm?.finished_at || now.getTime() - Date.parse(lastWarm.finished_at) >= config.warmIntervalMinutes * 60_000;
+    if (warmDue) {
+      await add({ syncType: "ads_shop_performance_read", strategy: "warm", priority: ADS_PRIORITY.warm, range: warm }, false);
+      await add({ syncType: "ads_campaign_performance_read", strategy: "warm", priority: ADS_PRIORITY.warm, range: warm, scope: "warm" }, false);
+    }
+  }
+  return { shopId: shop.id, jobs, range, initial, fresh: false };
 }

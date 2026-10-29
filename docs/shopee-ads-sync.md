@@ -1,71 +1,149 @@
-# Shopee Ads — READ-ONLY sync (SHOPEE-ADS-1B)
+# Shopee Ads — READ-ONLY background sync (SHOPEE-ADS-1B / ADS-2)
 
 The Ads sync **only reads** from Shopee: GET requests to allowlisted read endpoints, enforced by `read-only-policy.ts`. Nothing is ever written to Shopee. See [shopee-ads-read-only-policy.md](shopee-ads-read-only-policy.md).
+
+```
+pg_cron (every minute) → /api/internal/shopee/sync-scheduler → Ads scheduler (due work per shop)
+  → channel_sync_jobs (dedupe / coalescing) → worker bursts (after()) → Shopee Ads GET
+  → canonical Ads tables → /shopee/ads (DB only)
+```
+
+Opening the dashboard never calls Shopee and never enqueues anything.
 
 ## Switches
 
 | env | default | effect |
 |---|---|---|
-| `SHOPEE_ADS_DATA_SOURCE` | `fixture` | `real` → the dashboard reads the canonical tables **and** the worker may claim the Ads read jobs. With `fixture` (the production default), no Ads job is ever created or run. |
-| `SHOPEE_ADS_PROVIDER` | `live` | `fixture` → the jobs replay the sanitized production payloads (`ads/__fixtures__/provider`). Use it for local dev and tests, because the sandbox has no Ads backend. It is refused in production unless `ENABLE_SHOPEE_FIXTURE_MODE=true`. |
-| `ADS_PERFORMANCE_RESTATEMENT_DAYS` | `7` | Completed days re-read by every performance refresh. **Provisional**; see below. |
-| `ADS_INITIAL_BACKFILL_DAYS` | `30` | First performance sync of a shop. |
-| `ADS_CAMPAIGN_STALE_MINUTES` | `360` | "Làm mới" re-reads campaign metadata only when it is older than this. |
+| `SHOPEE_ADS_DATA_SOURCE` | `fixture` | `real` → dashboard reads the canonical tables **and** the worker may claim Ads read jobs. With `fixture` no Ads job is created or run. |
+| `SHOPEE_ADS_PROVIDER` | `live` | `fixture` → replay the sanitized production payloads (local dev / tests). Refused in production unless `ENABLE_SHOPEE_FIXTURE_MODE=true`. |
+| `ADS_AUTO_SYNC_ENABLED` | `false` | Global scheduler switch. Also requires the shop's `shopee_ads_shop_settings.ads_sync_enabled` (admin panel "Bật tự động"). |
+| `ADS_HOT_INTERVAL_MINUTES` | `15` | HOT shop total (min 10: no point polling faster than Shopee updates). |
+| `ADS_CAMPAIGN_HOT_INTERVAL_MINUTES` | `15` | HOT campaign performance. |
+| `ADS_WARM_INTERVAL_MINUTES` | `60` | WARM restatement. |
+| `ADS_WARM_RESTATEMENT_DAYS` | `3` | WARM = yesterday back N completed days (0 = off). |
+| `ADS_COLD_RESTATEMENT_TIMES` | `03:00,15:00` | COLD times in `ADS_COLD_TIMEZONE` (default `Asia/Ho_Chi_Minh`). |
+| `ADS_PERFORMANCE_RESTATEMENT_DAYS` | `7` | COLD = N completed days + today. **Provisional.** |
+| `ADS_CAMPAIGN_METADATA_INTERVAL_MINUTES` | `360` | Campaign catalogue. |
+| `ADS_CAMPAIGN_METADATA_STALE_MINUTES` | `480` | HOT may skip non-active campaigns only while the catalogue is newer than this. |
+| `ADS_INITIAL_BACKFILL_DAYS` | `30` | First sync of a shop. |
+| `ADS_GLOBAL_API_CONCURRENCY` | `2` | Max running Ads jobs across all shops (= concurrent Ads calls). 1 for `SHOPEE_SYNC_RATE_LIMIT_COOLDOWN_MINUTES` after a rate limit. |
+| `ADS_PER_SHOP_API_CONCURRENCY` | `1` | Documented; enforced by the claim's per-shop cap (`SHOPEE_SYNC_MAX_RUNNING_PER_SHOP=1`). |
+| `ADS_BATCHES_PER_SLICE` | `3` | Campaign batches per slice before the job rotates to the back of its line. |
+| `ADS_SCHEDULER_JITTER_SECONDS` | `20` | Deterministic start offset per shop and tick. |
+| `ADS_MANUAL_DEDUPE_MINUTES` | `5` | Manual refresh right after a HOT read → "Dữ liệu vừa được đồng bộ". |
+| `ADS_HOT_RECENT_STATUS_HOURS` | `36` | Campaigns whose status changed / ended within this stay HOT candidates. |
 
-**Local real mode:**
+## Strategies
 
-```
-SHOPEE_ADS_DATA_SOURCE=real SHOPEE_ADS_PROVIDER=fixture npx next dev
-```
+| strategy | when | range | campaigns | priority | lane |
+|---|---|---|---|---|---|
+| manual | "Làm mới dữ liệu" | today | all | 1 | `ads_hot` |
+| hot (shop) | every 15 min | **today only** | — | 2 | `ads_hot` |
+| metadata (first) | every 15 min until the catalogue exists | — | all | 2 | `ads_meta` |
+| hot (campaign) | every 15 min | **today only** | active candidates | 3 | `ads_hot` |
+| repair | a performance answer names an unknown campaign | — | all | 3 | `ads_meta` |
+| warm | hourly | yesterday … −3 days | recent-activity candidates | 4 | `ads_warm` |
+| metadata | every 6 h | — | all | 5 | `ads_meta` |
+| cold | 03:00 & 15:00 VN | 7 completed days + today | **all** | 6 | `ads_cold` |
+| backfill | first sync (replaces WARM/COLD until it succeeds) | 30 days + today | all | 7 | `ads_backfill` |
 
-## Job types
-All jobs run in the existing queue, `channel_sync_jobs`, with claim, lease, checkpoint, retry/backoff, stale recovery and the circuit breaker. No new worker was added.
+**Campaign candidates** are derived from the DB before any call:
+- **HOT:** `provider_status = ongoing`, + `status_changed_at` / `provider_end_at` within 36 h, + campaigns already non-zero today.
+  - If the catalogue is older than 8 h, HOT reads **all** campaigns (`campaignScope.fallback = metadata_stale`).
+- **WARM:** ongoing, + status changed / ended since the window start, + non-zero stored performance in the window.
+- **COLD:** reads every campaign, so the HOT/WARM optimization never costs long-term accuracy.
 
-| job | lane priority (manual) | flow |
-|---|---|---|
-| `ads_campaign_read` | 5 | `get_product_level_campaign_id_list` (limit 100, `offset` += page length until `has_next_page=false`) → `get_product_level_campaign_setting_info` (≤50 ids) → snapshot → upsert campaigns → reconcile product links |
-| `ads_campaign_performance_read` | 6 | `metadata.adsRange` split into **≤7-day** windows × campaign batches of **≤50 ids** → `get_product_campaign_daily_performance` → snapshot → upsert `(campaign_id, report_date)` |
-| `ads_shop_performance_read` | 6 | `metadata.adsRange` split into **≤30-day** windows → `get_all_cpc_ads_daily_performance` → snapshot → upsert `(shop_id, report_date)` |
-
-**Common behaviour:**
-- Every slice checks the API-call / time budget before each call and checkpoints after each batch: `metadata.checkpoint` = window index + batch index, or offset + phase.
-- An answer with a problem fails only its own rows: they are counted and the log status becomes `partial`. An unparseable payload is a fatal job error (`provider_parse_error`); it is not retried.
-- **Dependency:** if campaign performance runs before any campaign exists for the shop, it throws `ads_campaigns_pending`. That error is retryable with backoff and makes **no** provider call. Priority 5 < 6 means metadata normally runs first.
-- **Product links:** only the links of campaigns whose settings parsed completely are reconciled (missing links inserted, links no longer listed removed). A campaign that failed to parse keeps its links.
-- **Sync state:** `channel_sync_states` holds one row per shop × job. `last_success_at` is the time the read finished, which drives freshness. The latest report date is read directly from the fact table.
-
-## Manual refresh ("Làm mới dữ liệu", real mode)
-1. `refreshAdsDataAction` (permission `channel:sync`) runs per selected shop, each one independently, so a failing shop never blocks the others. It enqueues:
-   - `ads_campaign_read`, only when metadata is stale or was never read;
-   - `ads_campaign_performance_read` and `ads_shop_performance_read` for the window, which is the initial backfill on the first sync.
-2. The worker is kicked after the response with `after()`.
-3. The browser polls `adsRefreshStatusAction` every 2.5 s, for at most 3 min. The status action kicks the worker again if work is waiting and nothing is running.
-4. When no job is active: `router.refresh()`, then a success toast, or an error toast with the job error.
-5. The old dashboard stays visible, dimmed, the whole time. The page render itself reads **only the DB**.
-
-## Windows and overlap
-- **Refresh window:** today + the previous `ADS_PERFORMANCE_RESTATEMENT_DAYS` (7) completed days, in the shop's timezone (`shops.timezone`).
-- **First sync:** `ADS_INITIAL_BACKFILL_DAYS` (30) + today. That is 5 campaign windows of ≤7 days and 2 shop windows (30 + 1).
-- **The 7-day overlap is provisional.** Same-day re-reads of 25–27/10 were identical, 27 minutes apart, but cross-day restatement is **not proven**. Adjust the env value once a later probe compares the stored days.
-- **Today is partial.** The dashboard shows "Hôm nay — dữ liệu có thể chưa hoàn tất" whenever the range includes today. The "Hôm nay" preset has no comparison, because no hourly data is stored and a full yesterday would mislead.
+**Calls per HOT cycle:** 1 (shop) + ⌈candidates / 50⌉. For the pilot shop: 43 ongoing of 143 → **2 calls** (vs 4 for all campaigns).
 
 ## Scheduler
-**There is no Ads schedule.** The scheduler does not enqueue Ads jobs; they come only from the manual refresh. The worker bursts started by the scheduler or the kick claim Ads jobs only in real mode.
+- **Heartbeat ≠ cadence.** pg_cron calls the scheduler every minute. For each enabled, active, connected, not-paused shop, the scheduler plans what is due (pure `planAdsShop`).
+- **Slot claim:** each due slot is claimed with a conditional `UPDATE … WHERE last_x_slot_at IS NULL OR < slot` on `shopee_ads_shop_settings` *before* enqueueing. Overlapping or repeated ticks therefore never schedule a slot twice.
+- **Staggering:**
+  - Every shop has a minute offset (0–9) inside each 15-minute window: the explicit `sync_slot`, else `(rank × 2) mod 10` among enabled shops sorted by id → `:00 :02 :04 :06 :08`.
+  - WARM runs at offset + 5 min, metadata at offset + 10 min, COLD at its time + 2 × offset.
+- **Jitter:** one deterministic 0–20 s offset per shop and tick, shared by all that shop's jobs, so priority decides their order.
+  - The worker burst waits for jobs due within the jitter (`idleWaitMs`), so the jitter costs seconds, not a scheduler minute.
 
-The production auto-sync cadence belongs to a later phase. Suggested cadence:
+## Queue
+- **Identity:** shop + sync_type + lane (generated column `channel_sync_jobs.lane`), with range / scope in metadata.
+- **`enqueue_ads_sync_job`** (one advisory-locked step):
+  1. A covering active job (range ⊇, scope all or equal) that is **running**, or **queued at the same / a more urgent priority**, is reused.
+  2. Otherwise insert into the lane.
+  3. If the same lane is busy, not covering and not started, it is widened (union of ranges).
+  - A queued COLD / backfill is never promoted to HOT priority; HOT gets its own small job.
+- **Claim:** priority, then longest-waiting (round robin across shops); ≤ 1 running job per shop; ≤ `ADS_GLOBAL_API_CONCURRENCY` running Ads jobs; paused / disabled shops are skipped (manual jobs still run).
+- **Checkpoint:**
+  - Campaign ids are frozen on the first slice; the window index and batch index are saved after every batch.
+  - After `ADS_BATCHES_PER_SLICE` batches the job goes back to pending at the end of its priority line. A 1000-campaign shop takes 7 slices, and other shops run in between.
+  - Stale running jobs are recovered by the existing `recover_stale_sync_jobs` and resume from their checkpoint.
+- **Isolation:**
+  - A failing batch fails only its own job; it is retried from its checkpoint.
+  - A failing shop never blocks the others. The circuit breaker pauses that shop's automatic jobs.
 
-| what | how often |
-|---|---|
-| shop performance | every 30–60 min during the day |
-| campaign performance | hourly |
-| campaign metadata | every 6 h |
+## Accuracy
+- **Today is partial.** HOT upserts the same rows repeatedly, and the dashboard warns "Hôm nay — dữ liệu có thể chưa hoàn tất".
+- **Completed days are never treated as immutable.** WARM re-reads them hourly and COLD twice a day.
+- **Restatement log:**
+  - When a completed day's stored value was read **after** that day ended and now differs, the job counts it in `stats.restatedRows`.
+  - Up to 5 samples are kept in `metadata.restatedSamples` (old → new per field).
+  - This is the evidence for tuning `ADS_WARM_RESTATEMENT_DAYS` / `ADS_PERFORMANCE_RESTATEMENT_DAYS`.
+- **Anomalies** are counted, never refused, in `stats.anomalies`:
+  - `broad_order_lt_direct`
+  - `broad_gmv_lt_direct`
+  - `order_without_gmv`
+  - Negative values are refused by the mapper.
+- **Shop total vs campaigns:** shop totals stay their own fact, and "Ngoài chiến dịch sản phẩm" is informational only.
 
-With 143 campaigns that is about 3 + 3 + 1 calls per cycle per shop.
+## Freshness (dashboard, DB only)
+`ads_sync_freshness(shop_ids)` returns the latest successful read that **includes today**. WARM never counts toward it.
+
+| part | target | stale after |
+|---|---|---|
+| Tổng shop hôm nay | 20 min | 25 min |
+| Chiến dịch hôm nay | 25 min | 35 min |
+| Danh mục chiến dịch | 6 h | 8 h |
+
+While the page is open and visible, it polls this stamp every 90 s through `adsFreshnessAction` and re-renders when a background read has landed. That is a DB read only.
+
+## Manual refresh
+- **Same queue, priority 1.**
+  - Never synced → metadata + 30-day backfill.
+  - Today read < 5 min ago → nothing is enqueued and the UI says "Dữ liệu vừa được đồng bộ" (`force` overrides this for `channel:manage`).
+  - Otherwise → today (shop + all campaigns), metadata when stale, plus a background WARM catch-up when no WARM ran within the hour.
+- The button polls only its own jobs.
+
+## SLA metrics
+`get_ads_sync_metrics(hours)` reports, per shop × type × strategy:
+- job count, successes, failures, active jobs
+- avg / p95 **queue wait** (`started_at − max(created_at, notBefore)`), **execution** and **total** latency
+- records written and API calls
+
+Per-endpoint latency stays in the existing `get_sync_api_stats`. The admin panel shows the HOT figures per shop.
 
 ## Token keepalive
-The ADS-0 daily keepalive is **kept**. Ads reads refresh tokens on demand through `getValidAccessToken`, but there is no automatic Ads cadence yet. Re-evaluate the keepalive once the scheduled Ads sync exists.
+The ADS-0 daily keepalive is **kept**. With HOT every 15 minutes, every Ads-enabled shop refreshes its token on demand (`getValidAccessToken`). Review after 24–48 h of production scheduling; the keepalive is redundant only for shops that are Ads-enabled.
+
+## Rollout
+1. Push migrations 00064 + 00065 to cloud, then `NOTIFY pgrst, 'reload schema'` (new / changed RPC signatures).
+2. Deploy with `SHOPEE_ADS_DATA_SOURCE=real` and `ADS_AUTO_SYNC_ENABLED=false`. Run "Làm mới dữ liệu" on CTV Bedding and reconcile with Shopee Seller Centre.
+3. Admin panel: "Bật tự động" for CTV Bedding only. Then set `ADS_AUTO_SYNC_ENABLED=true` and redeploy.
+4. Observe several HOT cycles:
+   - queue drained before the next cycle
+   - no stuck job, no rate limit
+   - freshness < target
+   - no-browser proof: close the dashboard for > 15 min, then check that `last_read_at` advanced
+5. Enable the next shop, check capacity (HOT p95 total < 10 min), and continue.
 
 ## Tests
-- `src/lib/channels/shopee/ads/ads-mapper.test.ts` (pure, on the real fixtures): mapping, the `cpc` regression, dates, epoch unit, money, unknown/null/zero/abnormal rows, window planning.
-- `src/lib/channels/shopee/ads/ads-sync.integration.test.ts` (local DB): queue → worker → DB → real dashboard source; raw→DB reconciliation; the 27/10 shop-vs-campaign regression; idempotency; late updates; multi-shop isolation; dependency retry; zero range.
-- `scripts/e2e/shopee-ads-real.ts`: browser test in real mode against the local DB.
+- `ads-schedule.test.ts` (pure): slot maths, 5-shop stagger over simulated minutes, COLD times, HOT = today only, jitter, priorities, new-shop plan.
+- `ads-scheduler.integration.test.ts` (local DB):
+  - no-browser flow
+  - HOT active filter + metadata fallback
+  - coalescing / widening, priority
+  - 1000-campaign checkpoint + fairness, stale recovery, metadata repair
+  - failure isolation, idle wait
+  - page load = 0 jobs / 0 calls
+  - 5-shop load simulation
+- `ads-sync.integration.test.ts`: canonical reconciliation (27/10 regression), manual dedupe, COLD restatement detection.
+- `scripts/e2e/shopee-ads-scheduler.ts`: browser + scheduler endpoint (no-browser proof locally).
+- `scripts/e2e/shopee-ads-real.ts`: dashboard in real mode.

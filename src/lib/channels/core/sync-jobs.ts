@@ -133,7 +133,7 @@ export async function enqueueSyncJob(db: SupabaseClient, input: EnqueueInput): P
 export async function claimNextSyncJob(
   db: SupabaseClient,
   workerId: string,
-  options: { maxRunning: number; syncTypes?: readonly string[]; shopIds?: readonly string[] | null; maxPerShop?: number },
+  options: { maxRunning: number; syncTypes?: readonly string[]; shopIds?: readonly string[] | null; maxPerShop?: number; maxRunningAds?: number | null },
 ): Promise<SyncJobRow | null> {
   const { data, error } = await db.rpc("claim_next_sync_job", {
     p_worker_id: workerId,
@@ -142,6 +142,8 @@ export async function claimNextSyncJob(
     p_shop_ids: options.shopIds ? [...options.shopIds] : null,
     // null = no per-shop cap (the worker always passes config.maxRunningPerShop)
     p_max_per_shop: options.maxPerShop ?? null,
+    // SHOPEE-ADS-2: at most N Ads jobs running across all shops (bounded Ads API concurrency)
+    p_max_running_ads: options.maxRunningAds ?? null,
   });
   if (error) throw new Error(`Không nhận được job: ${error.message}`);
   const rows = (data ?? []) as SyncJobRow[];

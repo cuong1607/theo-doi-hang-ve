@@ -182,13 +182,13 @@ async function main() {
       expect((await metricValue(page, "spend")) === 1104162, "single shop spend");
     });
 
-    await check("freshness: three read jobs listed with their last success; report-through date shown", async () => {
+    await check("freshness: today's shop total / campaigns / catalogue with read time + target (ADS-2); report-through date shown", async () => {
       await open(page, Q27);
       const box = page.locator('[data-slot="ads-freshness"]');
       await box.scrollIntoViewIfNeeded();
       const t = await box.innerText();
-      for (const l of ["Danh mục chiến dịch", "Hiệu quả chiến dịch", "Tổng quảng cáo cấp shop"]) expect(t.includes(l), l);
-      expect((t.match(/Thành công:/g) ?? []).length === 3, t.slice(0, 200));
+      for (const l of ["Tổng shop hôm nay", "Chiến dịch hôm nay", "Danh mục chiến dịch", "Mục tiêu ≤ 20 phút", "Mục tiêu ≤ 25 phút", "Mục tiêu ≤ 6 giờ"]) expect(t.includes(l), l);
+      expect((t.match(/Đọc lúc/g) ?? []).length === 3, t.slice(0, 200));
       expect(/có số liệu đến ngày 28\/10\/2026/.test(t), "report through 28/10");
       expect((await page.locator('[data-sync-state="fresh"]').count()) >= 1, "status fresh");
       await page.screenshot({ path: path.join(SHOTS, "ads-real-27-10.png"), fullPage: true, caret: "initial", animations: "disabled" });

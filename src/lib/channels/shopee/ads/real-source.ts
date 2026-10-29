@@ -72,6 +72,52 @@ export const ADS_SYNC_LABELS: Record<(typeof ADS_SYNC_TYPES)[number], string> = 
   ads_shop_performance_read: "Tổng quảng cáo cấp shop",
 };
 
+const NO_SHOP = "00000000-0000-0000-0000-000000000000";
+
+export interface AdsShopFreshness {
+  shopId: string;
+  shopTodayAt: string | null;
+  campaignTodayAt: string | null;
+  metadataAt: string | null;
+  /** Any Ads read of the shop (WARM included). */
+  lastReadAt: string | null;
+  activeJobs: number;
+  autoEnabled: boolean;
+}
+
+/**
+ * SHOPEE-ADS-2 freshness targets: when TODAY's shop total / campaign facts
+ * and the campaign catalogue were last read (WARM reads never count — they
+ * do not include today).
+ */
+export const ADS_FRESHNESS = [
+  { key: "shop_today", syncType: "ads_shop_performance_read", label: "Tổng shop hôm nay", targetMinutes: 20, staleAfterMinutes: 25, pick: (f: AdsShopFreshness) => f.shopTodayAt },
+  { key: "campaign_today", syncType: "ads_campaign_performance_read", label: "Chiến dịch hôm nay", targetMinutes: 25, staleAfterMinutes: 35, pick: (f: AdsShopFreshness) => f.campaignTodayAt },
+  { key: "metadata", syncType: "ads_campaign_read", label: "Danh mục chiến dịch", targetMinutes: 360, staleAfterMinutes: 480, pick: (f: AdsShopFreshness) => f.metadataAt },
+] as const;
+
+/** One RPC round trip, DB only (also used by the page's background polling). */
+export async function loadAdsFreshness(db: SupabaseClient, shopIds: string[]): Promise<AdsShopFreshness[]> {
+  if (!shopIds.length) return [];
+  const { data, error } = await db.rpc("ads_sync_freshness", { p_shop_ids: shopIds });
+  if (error) throw new AdsDataUnavailableError(new Error(`ads_sync_freshness: ${error.message}`));
+  return ((data ?? []) as Array<{ shop_id: string; shop_today_at: string | null; campaign_today_at: string | null; metadata_at: string | null; last_read_at: string | null; active_jobs: number; auto_enabled: boolean }>).map((r) => ({
+    shopId: r.shop_id,
+    shopTodayAt: r.shop_today_at,
+    campaignTodayAt: r.campaign_today_at,
+    metadataAt: r.metadata_at,
+    lastReadAt: r.last_read_at,
+    activeJobs: Number(r.active_jobs ?? 0),
+    autoEnabled: !!r.auto_enabled,
+  }));
+}
+
+/** Changes whenever any read of the selected shops lands. */
+export function adsFreshnessStamp(rows: AdsShopFreshness[]): string | null {
+  const all = rows.flatMap((r) => [r.shopTodayAt, r.campaignTodayAt, r.metadataAt, r.lastReadAt]).filter((v): v is string => !!v);
+  return all.length ? all.sort().at(-1)! : null;
+}
+
 /** Primitive totals of fact rows (shop or campaign). Broad → revenue / orders. */
 export function totalsOf(rows: Array<Omit<ShopDailyRow, "report_date">>): AdsTotals {
   return rows.reduce<AdsTotals>(
@@ -227,33 +273,42 @@ export class RealAdsDashboardSource implements AdsDashboardSource {
   }
 
   private async syncStatus(shopIds: string[], selected: ShopRow[], filters: AdsFilters, now: Date): Promise<AdsSyncStatus> {
-    const ids = shopIds.length ? shopIds : ["00000000-0000-0000-0000-000000000000"];
-    const { data: states, error } = await this.db.from("channel_sync_states").select("shop_id, sync_type, last_success_at, last_failure_at, last_error_message").in("shop_id", ids).in("sync_type", [...ADS_SYNC_TYPES]);
-    const { count: active, error: jobError } = await this.db.from("channel_sync_jobs").select("id", { count: "exact", head: true }).in("shop_id", ids).in("sync_type", [...ADS_SYNC_TYPES]).in("status", ["pending", "running", "retry"]);
-    const { data: latest, error: latestError } = await this.db.from("shopee_ads_shop_daily_performance").select("report_date").in("shop_id", ids).order("report_date", { ascending: false }).limit(1);
-    if (error || jobError || latestError) throw new AdsDataUnavailableError(error ?? jobError ?? latestError);
-    const rows = (states ?? []) as Array<{ sync_type: string; last_success_at: string | null; last_failure_at: string | null; last_error_message: string | null }>;
-    const details = ADS_SYNC_TYPES.map((type) => {
-      const of = rows.filter((r) => r.sync_type === type);
-      const success = of.map((r) => r.last_success_at).filter((v): v is string => !!v).sort().at(-1) ?? null;
-      const failed = of.filter((r) => r.last_failure_at && (!r.last_success_at || r.last_failure_at > r.last_success_at));
+    const fresh = await loadAdsFreshness(this.db, shopIds);
+    const { data: states, error } = await this.db.from("channel_sync_states").select("shop_id, sync_type, last_success_at, last_failure_at, last_error_message").in("shop_id", shopIds.length ? shopIds : [NO_SHOP]).in("sync_type", [...ADS_SYNC_TYPES]);
+    const { data: latest, error: latestError } = await this.db.from("shopee_ads_shop_daily_performance").select("report_date").in("shop_id", shopIds.length ? shopIds : [NO_SHOP]).order("report_date", { ascending: false }).limit(1);
+    if (error || latestError) throw new AdsDataUnavailableError(error ?? latestError);
+    const rows = (states ?? []) as Array<{ shop_id: string; sync_type: string; last_success_at: string | null; last_failure_at: string | null; last_error_message: string | null }>;
+    // shops that were synced at least once (a never-synced shop does not make the others look stale)
+    const synced = fresh.filter((f) => f.shopTodayAt || f.campaignTodayAt || f.metadataAt);
+    const stalest = (pick: (f: AdsShopFreshness) => string | null) => {
+      const v = synced.map(pick);
+      return v.length === 0 || v.some((x) => !x) ? (v.filter(Boolean).sort()[0] ?? null) : (v as string[]).sort()[0];
+    };
+    const details = ADS_FRESHNESS.map((d) => {
+      const at = stalest(d.pick);
+      const failed = rows.filter((r) => r.sync_type === d.syncType && r.last_failure_at && (!r.last_success_at || r.last_failure_at > r.last_success_at));
       return {
-        key: type,
-        label: ADS_SYNC_LABELS[type],
-        lastSuccessAt: success,
+        key: d.key,
+        label: d.label,
+        lastSuccessAt: at,
         lastErrorAt: failed.map((r) => r.last_failure_at!).sort().at(-1) ?? null,
         errorMessage: failed[0]?.last_error_message ?? null,
+        targetMinutes: d.targetMinutes,
+        staleAfterMinutes: d.staleAfterMinutes,
+        stale: !at || now.getTime() - Date.parse(at) > d.staleAfterMinutes * 60_000,
       };
     });
-    const successes = details.map((d) => d.lastSuccessAt);
-    const anySuccess = successes.some(Boolean);
     const today = shopToday(now, selected[0]?.timezone || "Asia/Ho_Chi_Minh");
+    const anySuccess = synced.length > 0;
+    const enabledShops = fresh.filter((f) => f.autoEnabled).length;
     return {
-      state: (active ?? 0) > 0 ? "refreshing" : details.some((d) => d.lastErrorAt) ? "error" : anySuccess ? "fresh" : "never",
-      // the oldest of the three reads: the dashboard is only as fresh as its stalest part
-      lastSyncedAt: anySuccess ? (successes.every(Boolean) ? (successes as string[]).sort()[0] : successes.filter(Boolean).sort()[0]!) : null,
+      state: !anySuccess ? "never" : details.some((d) => d.lastErrorAt) ? "error" : details.some((d) => d.stale) ? "stale" : "fresh",
+      // headline freshness = today's SHOP total (the overview's source)
+      lastSyncedAt: details[0].lastSuccessAt ?? details.map((d) => d.lastSuccessAt).filter(Boolean).sort().at(-1) ?? null,
       source: "shopee",
       details,
+      stamp: adsFreshnessStamp(fresh),
+      autoSync: { enabled: enabledShops > 0, enabledShops, shops: shopIds.length },
       todayPartial: filters.to >= today,
       reportThrough: ((latest ?? []) as Array<{ report_date: string }>)[0]?.report_date ?? null,
     };

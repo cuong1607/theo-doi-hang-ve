@@ -23,7 +23,7 @@ import {
 } from "./mapper.ts";
 import { deriveMetrics } from "./metrics.ts";
 import { loadAdsFixtures } from "./provider.ts";
-import { addDaysIso, adsPerformanceRange, getAdsSyncConfig, shopToday, splitAdsRange } from "./sync.ts";
+import { addDaysIso, adsBackfillRange, adsColdRange, adsHotRange, adsWarmRange, getAdsSyncConfig, shopToday, splitAdsRange } from "./sync.ts";
 import { totalsOf } from "./real-source.ts";
 
 const DIR = path.join(process.cwd(), "src/lib/channels/shopee/ads/__fixtures__/provider");
@@ -151,13 +151,17 @@ test("unknown / null / zero / abnormal rows never fail the batch", () => {
   assert.equal(parseCampaignDailyPerformance(fx("exp-campaign-hourly-performance")).failures.length, 1);
 });
 
-test("windows: refresh = today + 7 completed days (provisional), first sync = 30-day backfill; split ≤7 / ≤30 days", () => {
+test("windows: HOT = today only, WARM = 3 completed days, COLD = 7 completed days + today, backfill = 30 days; split ≤7 / ≤30 days", () => {
   const now = new Date("2026-10-28T09:30:00Z");
   const config = getAdsSyncConfig({});
   assert.equal(config.restatementDays, 7);
   assert.equal(shopToday(new Date("2026-10-27T17:30:00Z"), "Asia/Ho_Chi_Minh"), "2026-10-28", "shop timezone, not UTC");
-  assert.deepEqual(adsPerformanceRange(now, "Asia/Ho_Chi_Minh", config, false), { from: "2026-10-21", to: "2026-10-28" });
-  assert.deepEqual(adsPerformanceRange(now, "Asia/Ho_Chi_Minh", config, true), { from: "2026-09-28", to: "2026-10-28" });
+  // REGRESSION (ADS-2 §53): HOT never inherits the 7-day restatement window
+  assert.deepEqual(adsHotRange(now, "Asia/Ho_Chi_Minh"), { from: "2026-10-28", to: "2026-10-28" });
+  assert.deepEqual(adsWarmRange(now, "Asia/Ho_Chi_Minh", config), { from: "2026-10-25", to: "2026-10-27" });
+  assert.equal(adsWarmRange(now, "Asia/Ho_Chi_Minh", { warmRestatementDays: 0 }), null);
+  assert.deepEqual(adsColdRange(now, "Asia/Ho_Chi_Minh", config), { from: "2026-10-21", to: "2026-10-28" });
+  assert.deepEqual(adsBackfillRange(now, "Asia/Ho_Chi_Minh", config), { from: "2026-09-28", to: "2026-10-28" });
   const w7 = splitAdsRange({ from: "2026-09-28", to: "2026-10-28" }, 7);
   assert.equal(w7.length, 5);
   assert.deepEqual(w7[0], { from: "2026-09-28", to: "2026-10-04" });

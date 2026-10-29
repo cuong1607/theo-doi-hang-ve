@@ -7,6 +7,9 @@
 //   3. per active shop: enqueue the order / product / escrow job whose
 //      interval passed (idempotent — one active job per shop + type)
 //   4. prune old finished jobs, heartbeat success
+//   4b. SHOPEE-ADS-2: Ads READ jobs due for each Ads-enabled shop (HOT 15 min,
+//      WARM hourly, COLD 03:00/15:00, metadata 6 h; staggered per shop) —
+//      only when SHOPEE_ADS_DATA_SOURCE=real AND ADS_AUTO_SYNC_ENABLED=true
 //   5. respond, THEN run ≤ SHOPEE_SYNC_SCHEDULER_WORKER_TRIGGERS bounded worker
 //      bursts in after() — each claims one job at a time, slices it within
 //      the remaining budget and leaves what is left as "pending" for the next
@@ -19,11 +22,13 @@ import { getSyncConfig } from "@/lib/channels/core/sync-config";
 import { diagnosePendingQueue } from "@/lib/channels/core/sync-diagnostics";
 import { getShopeeProviderMode } from "@/lib/channels/shopee/provider-mode";
 import { runShopeeWorkerBursts } from "@/lib/channels/shopee/server";
-import { runShopeeSchedulerTick } from "@/lib/channels/shopee/sync-service";
+import { hasDueSyncJobs, runShopeeSchedulerTick } from "@/lib/channels/shopee/sync-service";
 import { runReturnNotificationTickSafe } from "@/lib/return-operations/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getShopeeFlags } from "@/lib/feature-flags";
-import { activeSyncTypes, retiredSyncTypes } from "@/lib/channels/core/sync-domains";
+import { activeAdsSyncTypes, activeSyncTypes, retiredSyncTypes } from "@/lib/channels/core/sync-domains";
+import { runAdsSchedulerTick, type AdsSchedulerTickResult } from "@/lib/channels/shopee/ads/schedule";
+import { getAdsSyncConfig } from "@/lib/channels/shopee/ads/sync";
 import { getShopee } from "@/lib/channels/shopee/server";
 import { keepShopeeTokensAlive } from "@/lib/channels/shopee/token-keepalive";
 
@@ -62,6 +67,11 @@ async function handle(request: Request) {
       }),
     );
     for (const e of tick.enqueued) console.info(JSON.stringify({ source: "sync-scheduler", event: "job_enqueued", jobId: e.jobId, shopId: e.shopId, syncType: e.syncType }));
+    // SHOPEE-ADS-2: Ads READ scheduling (never throws; one shop never blocks the others)
+    const adsTypes = activeAdsSyncTypes(flags);
+    const ads = adsTypes.length > 0 ? await runAdsTick(db) : null;
+    // jobs due within the stagger jitter count: the burst waits for them (SyncWorker idleWaitMs)
+    if (adsTypes.length > 0 && !tick.workDue) tick.workDue = await hasDueSyncJobs(db, new Date(Date.now() + (getAdsSyncConfig().jitterSeconds + 2) * 1000), adsTypes).catch(() => false);
     // SHOPEE-6B: scheduled "hàng hoàn đã giao" notifications (pre-sync + generate); never throws
     const notifications = flags.legacyModulesEnabled ? await runReturnNotificationTickSafe(db) : null;
     // keep shop tokens alive while nothing else calls Shopee (live mode only; never throws)
@@ -82,10 +92,35 @@ async function handle(request: Request) {
         after(() => runShopeeWorkerBursts({ bursts: config.schedulerWorkerTriggers, timeBudgetMs, source: "scheduler" }).then(() => undefined));
       }
     }
-    return NextResponse.json({ ok: true, ...tick, workerTriggered, returnNotifications: notifications, tokenKeepalive: keepalive, flags, pending: pending.map(({ jobId, syncType, status, reason, detail }) => ({ jobId, syncType, status, reason, detail })), configWarnings: config.warnings });
+    return NextResponse.json({ ok: true, ...tick, workerTriggered, ads, returnNotifications: notifications, tokenKeepalive: keepalive, flags, pending: pending.map(({ jobId, syncType, status, reason, detail }) => ({ jobId, syncType, status, reason, detail })), configWarnings: config.warnings });
   } catch (err) {
     console.error(JSON.stringify({ source: "sync-scheduler", event: "SYNC_SCHEDULER_FAILED", message: err instanceof Error ? err.message.slice(0, 300) : String(err) }));
     return NextResponse.json({ ok: false, error: "scheduler_failed" }, { status: 500 });
+  }
+}
+
+async function runAdsTick(db: ReturnType<typeof createAdminClient>): Promise<AdsSchedulerTickResult | { error: string }> {
+  try {
+    const r = await runAdsSchedulerTick(db, { config: getAdsSyncConfig() });
+    if (r.enqueued.length > 0 || r.errors.length > 0) {
+      console.info(
+        JSON.stringify({
+          source: "sync-scheduler",
+          event: "ads_scheduler_tick",
+          shops: r.shops,
+          slotsClaimed: r.slotsClaimed,
+          enqueued: r.enqueued.map((e) => `${e.kind}:${e.syncType}${e.created ? "" : e.coalesced ? "(coalesced)" : "(queued)"}`),
+          skippedShops: r.skippedShops,
+          errors: r.errors,
+          durationMs: r.durationMs,
+        }),
+      );
+    }
+    return r;
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 200) : String(err);
+    console.error(JSON.stringify({ source: "sync-scheduler", event: "ads_scheduler_failed", message }));
+    return { error: message };
   }
 }
 

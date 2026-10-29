@@ -22,6 +22,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { SyncConfig } from "./sync-config.ts";
 import { getHeartbeats, isHeartbeatStale, SCHEDULER_HEARTBEAT, WORKER_HEARTBEAT, type HeartbeatRow } from "./sync-heartbeat.ts";
+import { ADS_SYNC_TYPES } from "./sync-domains.ts";
 import { RUNNABLE_SYNC_TYPES, type SyncJobRow } from "./sync-jobs.ts";
 
 export type PendingReason =
@@ -116,7 +117,8 @@ export async function loadPendingDiagnosticsContext(db: SupabaseClient, config: 
   const runningRows = (running.data ?? []) as Array<{ shop_id: string; sync_type: string }>;
   return {
     now,
-    runnableTypes: RUNNABLE_SYNC_TYPES,
+    // SHOPEE-ADS-2: the Ads read jobs are runnable too (not "invalid")
+    runnableTypes: [...RUNNABLE_SYNC_TYPES, ...ADS_SYNC_TYPES],
     shopAllowlist: config.shopAllowlist,
     activeShopIds: new Set(((shops.data ?? []) as Array<{ id: string }>).map((s) => s.id)),
     runningLanes: new Set(runningRows.map((r) => `${r.shop_id}|${r.sync_type}`)),

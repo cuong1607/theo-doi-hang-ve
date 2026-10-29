@@ -23,7 +23,7 @@ import { parseAdsFilters } from "./filters.ts";
 import { FixtureShopeeAdsProvider, loadAdsFixtures, MeteredShopeeAdsProvider, type AdsFixtureData } from "./provider.ts";
 import { ADS_SYNC_TYPES } from "./read-only-policy.ts";
 import { RealAdsDashboardSource } from "./real-source.ts";
-import { createAdsRunner, requestAdsRefresh } from "./sync.ts";
+import { adsColdRange, createAdsRunner, enqueueAdsJob, requestAdsRefresh } from "./sync.ts";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -117,8 +117,9 @@ test("initial refresh through the queue: 143 campaigns + product links, campaign
   assert.equal(refresh.initial, true);
   assert.deepEqual(refresh.range, { from: "2026-09-28", to: "2026-10-28" });
   assert.deepEqual(refresh.jobs.map((j) => j.syncType), ["ads_campaign_read", "ads_campaign_performance_read", "ads_shop_performance_read"]);
-  const { data: jobs } = await db.from("channel_sync_jobs").select("sync_type, mode, metadata").eq("shop_id", shopA);
-  assert.ok((jobs ?? []).every((j) => j.mode === "manual"));
+  const { data: jobs } = await db.from("channel_sync_jobs").select("sync_type, mode, metadata, lane, priority").eq("shop_id", shopA);
+  assert.ok((jobs ?? []).every((j) => j.mode === "manual" && j.priority === 1), "user-initiated, highest priority");
+  assert.deepEqual((jobs ?? []).map((j) => j.lane).sort(), ["ads_backfill", "ads_backfill", "ads_meta"]);
   // idempotent while pending
   const again = await requestAdsRefresh(db, { shopId: shopA, now: NOW });
   assert.ok(again.jobs.every((j) => !j.created));
@@ -213,17 +214,22 @@ test("dashboard (real source): overview = SHOP facts, table = CAMPAIGN facts, ou
 
 test("idempotency: a second refresh keeps 143 campaigns, no duplicate links / facts, same totals", async () => {
   const before = { c: await count("shopee_ads_campaigns", shopA), p: await count("shopee_ads_campaign_products", shopA), f: await count("shopee_ads_campaign_daily_performance", shopA), s: await count("shopee_ads_shop_daily_performance", shopA) };
-  const r = await requestAdsRefresh(db, { shopId: shopA, now: NOW, config: { restatementDays: 7, initialBackfillDays: 30, campaignStaleMinutes: 0 } });
+  // ADS-2: right after a sync the manual refresh is deduped (no provider call)
+  const dedup = await requestAdsRefresh(db, { shopId: shopA, now: NOW });
+  assert.equal(dedup.fresh, true);
+  assert.equal(dedup.jobs.length, 0, "Dữ liệu vừa được đồng bộ → nothing enqueued");
+  const r = await requestAdsRefresh(db, { shopId: shopA, now: NOW, force: true, config: { campaignStaleMinutes: 0 } });
   assert.equal(r.initial, false);
-  assert.deepEqual(r.range, { from: "2026-10-21", to: "2026-10-28" }, "today + 7 completed days");
+  assert.deepEqual(r.range, { from: "2026-10-28", to: "2026-10-28" }, "manual = today (HOT lane, all campaigns)");
   assert.ok(r.jobs.some((j) => j.syncType === "ads_campaign_read"), "metadata re-read when stale");
+  assert.deepEqual(r.jobs.filter((j) => !j.poll).map((j) => [j.syncType, j.strategy]), [["ads_shop_performance_read", "warm"], ["ads_campaign_performance_read", "warm"]], "background WARM catch-up (no WARM ran yet)");
   await drain([shopA]);
   const afterCounts = { c: await count("shopee_ads_campaigns", shopA), p: await count("shopee_ads_campaign_products", shopA), f: await count("shopee_ads_campaign_daily_performance", shopA), s: await count("shopee_ads_shop_daily_performance", shopA) };
   assert.deepEqual(afterCounts, before);
   assert.deepEqual(await sumCampaignFacts(shopA, "2026-10-27"), { expense: 1072671, impression: 29727, clicks: 960, broadOrder: 49, broadGmv: 11140148 });
 });
 
-test("late provider update: the same report date is UPSERTED (no duplicate fact), campaign settings change updates the same row", async () => {
+test("late provider update (COLD restatement): the same report date is UPSERTED (no duplicate fact), restatement counted, campaign settings change updates the same row", async () => {
   const { data: campBefore } = await db.from("shopee_ads_campaigns").select("id").eq("shop_id", shopA).eq("provider_campaign_id", "900000040").single();
   // provider now reports more for 27/10 and campaign #40 is paused with a new item
   const changed: AdsFixtureData = { ...baseData, settings: new Map(baseData.settings) };
@@ -237,8 +243,19 @@ test("late provider update: the same report date is UPSERTED (no duplicate fact)
   });
   try {
     const facts = await count("shopee_ads_campaign_daily_performance", shopA);
-    await requestAdsRefresh(db, { shopId: shopA, now: NOW, config: { restatementDays: 7, initialBackfillDays: 30, campaignStaleMinutes: 0 } });
+    await enqueueAdsJob(db, { shopId: shopA, syncType: "ads_campaign_read", strategy: "metadata", priority: 5, now: NOW });
+    const cold = adsColdRange(NOW, "Asia/Ho_Chi_Minh", { restatementDays: 7 });
+    const coldShop = await enqueueAdsJob(db, { shopId: shopA, syncType: "ads_shop_performance_read", strategy: "cold", priority: 6, range: cold, now: NOW });
+    const coldCampaign = await enqueueAdsJob(db, { shopId: shopA, syncType: "ads_campaign_performance_read", strategy: "cold", priority: 6, range: cold, scope: "all", now: NOW });
     await drain([shopA]);
+    // values stored at NOW (after 27/10 had ended) and now different = real restatement, counted with samples
+    const { data: coldJobs } = await db.from("channel_sync_jobs").select("id, status, metadata").in("id", [coldShop.jobId, coldCampaign.jobId]);
+    for (const j of coldJobs ?? []) {
+      assert.equal(j.status, "success");
+      assert.equal((j.metadata as { stats: { restatedRows?: number } }).stats.restatedRows, 1, `one restated row (${j.id})`);
+    }
+    const sample = (coldJobs ?? []).map((j) => (j.metadata as { restatedSamples: Array<{ date: string; fields: Record<string, [string, string]> }> }).restatedSamples[0]);
+    assert.ok(sample.every((s) => s.date === "2026-10-27" && Object.keys(s.fields).join() === "expense"));
     assert.equal(await count("shopee_ads_campaign_daily_performance", shopA), facts, "no duplicate fact rows");
     const { data: shopRow } = await db.from("shopee_ads_shop_daily_performance").select("expense").eq("shop_id", shopA).eq("report_date", "2026-10-27").single();
     assert.equal(Number(shopRow!.expense), 1104262);

@@ -286,15 +286,23 @@ test("64. the dashboard never calls Shopee: no client / fetch / endpoint in the 
   }
 });
 
-test("65. Ads canonical tables exist ONLY in migration 00064 (ADS-1B) and no Ads write / mutation RPC exists", () => {
+test("65. Ads canonical tables exist ONLY in migration 00064 (ADS-1B), the scheduler settings table only in 00065 (ADS-2); no Ads write / mutation RPC exists", () => {
   const migrations = readdirSync(path.join(ROOT, "supabase/migrations"));
   for (const m of migrations) {
     const sql = readFileSync(path.join(ROOT, "supabase/migrations", m), "utf8");
-    const adsTables = sql.match(/create\s+table\s+(?:if\s+not\s+exists\s+)?public\.shopee_ads_\w+/gi) ?? [];
+    const adsTables = (sql.match(/create\s+table\s+(?:if\s+not\s+exists\s+)?public\.shopee_ads_\w+/gi) ?? []).map((t) => t.split(".").pop());
     if (m.startsWith("00064_")) assert.equal(adsTables.length, 4, m);
+    else if (m.startsWith("00065_")) assert.deepEqual(adsTables, ["shopee_ads_shop_settings"], `${m}: only the per-shop scheduler switch / slots (no Ads data)`);
     else assert.equal(adsTables.length, 0, `${m}: Ads tables belong to 00064`);
-    // read RPCs only (ads_dashboard_*) — never a function that could push changes to Shopee
-    for (const fn of sql.match(/function\s+public\.(ads_\w+)/gi) ?? []) assert.match(fn, /ads_dashboard_/i, `${m}: ${fn}`);
+    // read RPCs only (ads_dashboard_* / ads_sync_freshness) — never a function that could push changes to Shopee
+    for (const fn of sql.match(/function\s+public\.(ads_\w+)/gi) ?? []) assert.match(fn, /ads_dashboard_|ads_sync_freshness/i, `${m}: ${fn}`);
+    // the Ads enqueue RPC only touches the local job queue
+    const enqueue = /CREATE FUNCTION public\.enqueue_ads_sync_job[\s\S]*?\n\$\$;/.exec(sql)?.[0];
+    if (enqueue) {
+      const writes = [...enqueue.matchAll(/\b(INSERT INTO|UPDATE|DELETE FROM)\s+(public\.\w+)/g)].map((w) => w[2]);
+      assert.ok(writes.length > 0 && writes.every((t) => t === "public.channel_sync_jobs"), `${m}: enqueue_ads_sync_job writes ${writes.join(", ")}`);
+      assert.doesNotMatch(enqueue, /net\.http|http_post|\/api\/v2\//i, `${m}: no outbound call`);
+    }
   }
 });
 

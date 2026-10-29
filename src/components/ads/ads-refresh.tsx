@@ -7,13 +7,17 @@
 //   real mode     (SHOPEE-ADS-1B) queue only: enqueue the Ads READ jobs →
 //                 poll their status → re-render from the DB. Never a Shopee
 //                 call in the request, never a write to Shopee.
+//   live feel     (SHOPEE-ADS-2) while the page is open and visible, poll the
+//                 DB freshness stamp every 90 s; when a background read has
+//                 landed → router.refresh(). DB only: never enqueues, never
+//                 calls Shopee.
 import { createContext, useContext, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, CircleDashed, Clock, Database, RefreshCw } from "lucide-react";
 import { cn } from "cn";
 
 import type { AdsSyncStatus as AdsSyncStatusVM } from "@/lib/channels/shopee/ads/view-models";
-import { adsRefreshStatusAction, refreshAdsDataAction } from "@/app/(authenticated)/shopee/ads/actions";
+import { adsFreshnessAction, adsRefreshStatusAction, refreshAdsDataAction } from "@/app/(authenticated)/shopee/ads/actions";
 import { toast } from "@/components/patterns/toast";
 import { Button } from "@/components/ui/button";
 
@@ -33,10 +37,12 @@ const FIXTURE_REFRESH_MS = 900;
 /** Real mode: job status poll interval and the longest the button waits before handing back. */
 const POLL_MS = 2500;
 const MAX_WAIT_MS = 180_000;
+/** Real mode: DB freshness poll while the page is open (never triggers a sync). */
+const LIVE_POLL_MS = 90_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export function AdsRefreshProvider({ children, mode = "fixture", shop = "all" }: { children: React.ReactNode; mode?: "fixture" | "real"; shop?: string }) {
+export function AdsRefreshProvider({ children, mode = "fixture", shop = "all", stamp = null }: { children: React.ReactNode; mode?: "fixture" | "real"; shop?: string; stamp?: string | null }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [success, setSuccess] = useState(false);
@@ -47,6 +53,22 @@ export function AdsRefreshProvider({ children, mode = "fixture", shop = "all" }:
     const t = setTimeout(() => setSuccess(false), 1800);
     return () => clearTimeout(t);
   }, [success]);
+
+  // live feel: re-render from the DB when the background worker has written newer data
+  useEffect(() => {
+    if (mode !== "real") return;
+    let stopped = false;
+    const tick = async () => {
+      if (stopped || document.hidden) return;
+      const r = await adsFreshnessAction({ shop }).catch(() => null);
+      if (!stopped && r?.ok && r.stamp && r.stamp !== stamp) router.refresh();
+    };
+    const t = setInterval(tick, LIVE_POLL_MS);
+    return () => {
+      stopped = true;
+      clearInterval(t);
+    };
+  }, [mode, shop, stamp, router]);
 
   const done = () => {
     router.refresh();
@@ -69,6 +91,12 @@ export function AdsRefreshProvider({ children, mode = "fixture", shop = "all" }:
       const req = await refreshAdsDataAction({ shop });
       if (!req.ok) {
         toast.error("Không làm mới được dữ liệu quảng cáo", req.message);
+        return;
+      }
+      if (req.jobIds.length === 0) {
+        // HOT sync finished moments ago: no duplicate Shopee calls
+        done();
+        toast.info("Dữ liệu vừa được đồng bộ", req.message);
         return;
       }
       const started = Date.now();
@@ -141,6 +169,7 @@ function minutesAgo(fromMs: number, nowMs: number): string {
 
 const STATE_VIEW = {
   fresh: { icon: Clock, cls: "border-success/30 bg-success-soft text-success-text" },
+  stale: { icon: Clock, cls: "border-warning/30 bg-warning-soft text-warning-text" },
   refreshing: { icon: RefreshCw, cls: "border-info/30 bg-info-soft text-info-text" },
   never: { icon: CircleDashed, cls: "border-border bg-muted text-muted-foreground" },
   error: { icon: AlertTriangle, cls: "border-destructive/25 bg-danger-soft text-danger-text" },
@@ -170,7 +199,9 @@ export function AdsSyncStatus({ sync, serverNow, compact = false, className }: {
           : "Không tải được dữ liệu"
         : state === "never" || last === null
           ? "Chưa đồng bộ Ads"
-          : `Cập nhật ${minutesAgo(last, Math.max(now, last))}`;
+          : state === "stale"
+            ? `Chưa mới · cập nhật ${minutesAgo(last, Math.max(now, last))}`
+            : `Cập nhật ${minutesAgo(last, Math.max(now, last))}`;
   const view = STATE_VIEW[state === "fresh" && last === null ? "never" : state];
   const Icon = view.icon;
   return (

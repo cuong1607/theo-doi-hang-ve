@@ -60,6 +60,22 @@ Grain: **shop × report_date**, an independent fact. Unique key: `(shop_id, repo
 
 **Money:** NUMERIC(18,2), integer VND (đồng). There is no currency column: Shopee returns none. Currency is inferred from `shops.region = VN`. The dashboard refuses to add up shops from different regions.
 
+## ADS-2 additions (migration `00065_shopee_ads_scheduler.sql`, local only until reviewed)
+- **`shopee_ads_campaigns.status_changed_at`:** set by a trigger when `provider_status` changes. It stays NULL on first sight, because the onboarding backfill already covers today. It keeps recently paused / ended campaigns in the HOT / WARM candidate sets.
+- **`shopee_ads_shop_settings`** (one row per shop) holds scheduler configuration only, no Ads data:
+  - `ads_sync_enabled` (default false)
+  - optional `sync_slot` (0–9)
+  - the scheduler's slot bookkeeping `last_{hot_shop,hot_campaign,warm,cold,metadata}_slot_at`
+- **`channel_sync_jobs.lane`** (generated) makes the active-job unique key shop + sync_type + lane.
+- **RPCs** (all `service_role` only):
+
+  | RPC | access | purpose |
+  |---|---|---|
+  | `enqueue_ads_sync_job` | writes `channel_sync_jobs` only | enqueue with dedupe + coalescing |
+  | `claim_next_sync_job` v3 | — | gains `p_max_running_ads` |
+  | `ads_sync_freshness` | read | dashboard freshness |
+  | `get_ads_sync_metrics` | read | SLA metrics |
+
 ## Raw snapshots
 - Stored in the existing `channel_api_snapshots` with `entity_type = 'ads'` and `api_name` = the endpoint path.
 - The key is the request shape (e.g. `campaign_daily:2026-10-21:2026-10-27:<first id>:<n>`).
