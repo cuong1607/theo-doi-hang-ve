@@ -325,6 +325,83 @@ test("64 / 30. multi-shop: the same provider item ids in another shop are separa
   await db.from("shops").delete().eq("id", B.id);
 });
 
+/**
+ * ADS-3A.2.1: answers like production does on a re-read of the same items —
+ * a new request_id, the items in another order, a different set of
+ * shipping-fee warning lines — while the product data stays identical.
+ */
+class VolatileItemsProvider extends FixtureShopeeAdsProvider {
+  private n = 0;
+  async getItemBaseInfo(ctx: AdsProviderContext, input: { itemIds: readonly string[] }) {
+    const p = await super.getItemBaseInfo(ctx, input);
+    const n = ++this.n;
+    const raw = p.raw as Record<string, unknown>;
+    const response = raw.response as Record<string, unknown>;
+    const list = response.item_list as unknown[];
+    const shift = n % Math.max(1, list.length);
+    const channels = [5000, 5001, 50012, 50053, 50039, 5004].filter((_c, i) => (i + n) % 3 !== 0);
+    return {
+      ...p,
+      raw: {
+        ...raw,
+        request_id: `e3e3e7f35f04${n.toString(16).padStart(4, "0")}${Date.now().toString(16)}`,
+        warning: channels.map((c) => `fail to get channel estimated_shipping_fee for channel [${c}];`).join("\n"),
+        response: { ...response, item_list: [...list.slice(shift), ...list.slice(0, shift)] },
+      },
+    };
+  }
+}
+
+test("3A.2.1 / 8 / 9. snapshot dedupe: re-reading identical products with a new request_id / item order / shipping warnings adds NO snapshot; rows unchanged; request ids kept in the job log; a real change still adds one", async () => {
+  const D = await newShop();
+  provider.inner = new FixtureShopeeAdsProvider(fixtures);
+  await seed(D.id, provider);
+  await setAdsShopProductEnrichmentEnabled(db, { shopId: D.id, enabled: true });
+  const snapshots = async () => {
+    const { data, error } = await db.from("channel_api_snapshots").select("id, payload").eq("shop_id", D.id).eq("api_name", "/api/v2/product/get_item_base_info");
+    if (error) throw error;
+    return data as Array<{ id: string; payload: { request_id?: string; warning?: string } }>;
+  };
+  const rows = async () => {
+    const { data } = await db.from("shopee_ads_products").select("id, provider_item_id, product_name, image_url, item_sku, provider_status, enrichment_status").eq("shop_id", D.id).order("provider_item_id");
+    return data!;
+  };
+  const lastJobMeta = async () => (await jobs(D.id)).filter((x) => x.sync_type === "ads_product_enrichment_read").at(-1)!.metadata as { stats: Record<string, number>; requestIds: string[] };
+
+  provider.inner = new VolatileItemsProvider(fixtures);
+  await maybeEnqueueAdsProductEnrichment(db, { shopId: D.id, now: clock, config: CONFIG });
+  await drain([D.id], provider);
+  const first = await snapshots();
+  assert.equal(first.length, 3, "3 batches → 3 snapshots");
+  assert.ok(first.every((s) => s.payload.request_id?.startsWith("e3e3e7f35f04") && s.payload.warning?.includes("estimated_shipping_fee")), "stored raw keeps request_id + warning");
+  assert.equal((await lastJobMeta()).stats.snapshotsInserted, 3);
+  const rowsBefore = await rows();
+
+  clock = new Date(clock.getTime() + 60_000);
+  await maybeEnqueueAdsProductEnrichment(db, { shopId: D.id, now: clock, config: CONFIG, scope: "all" });
+  await drain([D.id], provider);
+  const second = await snapshots();
+  assert.equal(second.length, 3, "no duplicate snapshot caused by request_id / order / warnings");
+  assert.deepEqual(second.map((s) => s.payload.request_id).sort(), first.map((s) => s.payload.request_id).sort(), "deduped rows keep their first request_id");
+  const meta = await lastJobMeta();
+  assert.equal(meta.stats.snapshotsDeduped, 3);
+  assert.equal(meta.stats.snapshotsInserted ?? 0, 0);
+  assert.equal(meta.requestIds.length, 3, "9. the latest request ids stay auditable in the job log");
+  assert.ok(meta.requestIds.every((id) => !first.some((s) => s.payload.request_id === id)), "new request ids recorded");
+  assert.deepEqual(await rows(), rowsBefore, "canonical product rows unchanged");
+
+  // a real product change still produces a new snapshot (only the batch that changed)
+  const renamed = rowsBefore[0].provider_item_id;
+  provider.inner = new (class extends VolatileItemsProvider {})(fixtures, { item: (id, row) => (id === renamed ? { ...row, item_name: "Đổi tên thật" } : row) });
+  clock = new Date(clock.getTime() + 60_000);
+  await maybeEnqueueAdsProductEnrichment(db, { shopId: D.id, now: clock, config: CONFIG, scope: "all" });
+  await drain([D.id], provider);
+  assert.equal((await snapshots()).length, 4, "the changed batch → one new snapshot");
+  assert.equal((await lastJobMeta()).stats.snapshotsInserted, 1);
+  provider.inner = new FixtureShopeeAdsProvider(fixtures);
+  await db.from("shops").delete().eq("id", D.id);
+});
+
 test("19 / 65. new item fast path: the catalogue read that discovers a newly advertised item enqueues enrichment; the name lands without waiting for the next slot", async () => {
   const data: AdsFixtureData = { ...fixtures, settings: new Map(fixtures.settings), items: new Map(fixtures.items) };
   const [cid, setting] = [...data.settings.entries()][0];
@@ -451,6 +528,24 @@ test("49 / 50 / 52. dashboard campaign RPC: products joined in ONE aggregated re
   runs.sort((a, b) => a - b);
   console.log(JSON.stringify({ metric: "ads_dashboard_campaigns_with_products", campaigns: rows, medianMs: Math.round(runs[2]), maxMs: Math.round(runs[4]) }));
   assert.equal(rows, 143);
+});
+
+test("3A.2.1 / 16 / 17 / 29. display thumbnail derived in the presentation layer (flag ON → `_tn` + original kept; OFF → none); stored image_url never rewritten; no extra query", async () => {
+  const before = process.env.ADS_PRODUCT_THUMBNAIL_TN_ENABLED;
+  try {
+    process.env.ADS_PRODUCT_THUMBNAIL_TN_ENABLED = "true";
+    const on = (await dashboard(A.id)).campaigns.flatMap((c) => c.topProducts).filter((p) => p.imageUrl);
+    assert.ok(on.length > 0);
+    assert.ok(on.every((p) => p.thumbnailUrl === `${p.imageUrl}_tn` && !p.imageUrl!.endsWith("_tn")), "thumbnail = original + _tn; original kept as the fallback");
+    process.env.ADS_PRODUCT_THUMBNAIL_TN_ENABLED = "false";
+    const off = (await dashboard(A.id)).campaigns.flatMap((c) => c.topProducts);
+    assert.ok(off.every((p) => !p.thumbnailUrl), "flag OFF → original only");
+    const { data: stored } = await db.from("shopee_ads_products").select("image_url").eq("shop_id", A.id).like("image_url", "%_tn");
+    assert.equal(stored!.length, 0, "canonical image_url unchanged");
+  } finally {
+    if (before === undefined) delete process.env.ADS_PRODUCT_THUMBNAIL_TN_ENABLED;
+    else process.env.ADS_PRODUCT_THUMBNAIL_TN_ENABLED = before;
+  }
 });
 
 test("47 / 76. capacity — current 5-shop item profile (101 / 82 / 176 / 439 / 172 distinct Ads items), concurrency unchanged (2): initial enrichment workload, HOT cycle with vs without the enrichment backlog, steady state", async () => {

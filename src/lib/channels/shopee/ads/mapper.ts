@@ -336,6 +336,32 @@ export function safeShopeeImageUrl(v: unknown): string | null {
 }
 
 /**
+ * ADS-3A.2.1 display thumbnail, derived at presentation time (the stored
+ * canonical image_url is never rewritten). Verified read-only on 60 production
+ * images (5 shops, NORMAL / UNLIST / SELLER_DELETE): `<url>_tn` is the same
+ * image at 320 px wide, ~46 KB instead of ~680 KB, no redirect. Only the exact
+ * verified shape gets the suffix — any other host, a query string, an id that
+ * already carries a suffix (`_`) or a malformed value returns null (= show the
+ * original URL).
+ */
+export function adsProductThumbnailUrl(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const m = /^https:\/\/cf\.shopee\.vn\/file\/([A-Za-z0-9-]{1,200})$/.exec(v);
+  return m ? `https://cf.shopee.vn/file/${m[1]}_tn` : null;
+}
+
+/**
+ * Load order of a thumbnail: small variant → original → (caller shows the
+ * icon). Each source is tried once — no retry loop; blanks and duplicates are
+ * dropped.
+ */
+export function adsThumbnailSources(thumbnail: string | null | undefined, original: string | null | undefined): string[] {
+  const out: string[] = [];
+  for (const s of [thumbnail, original]) if (typeof s === "string" && s.trim() !== "" && !out.includes(s)) out.push(s);
+  return out;
+}
+
+/**
  * get_item_base_info → product rows for the requested ids. An id the provider
  * did not return is reported in `notReturned` (the meaning — deleted, other
  * shop, temporary — is not verified, so it is never treated as a deletion).

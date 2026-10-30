@@ -124,4 +124,58 @@ congtrangbedding and HOMIES are the first shops that will call this endpoint at 
 |---|---|
 | `ads-product-enrichment.test.ts` | Fixture provenance; field-by-field mapper; image safety; batch limits; read-only policy for the single product path; snapshot projection; priority / lane / TTL; search; placeholder |
 | `ads-product-enrichment.integration.test.ts` | Local DB: placeholders before enrichment; page load makes 0 calls and creates 0 jobs; enqueue switches and dedupe; initial 3 batched GETs; idempotency and rename; not-returned items; TTL; multi-shop isolation; new-item fast path; HOT / hourly / COLD before enrichment; failure isolation; scheduler cache hits; RPC latency; 5-shop capacity |
-| `scripts/e2e/shopee-ads-products.ts` | Browser: pending state → background enrichment → names / thumbnails (valid and broken) / SKU / search; page views make 0 calls; refresh dedupe; admin refresh; switch off |
+| `ads-product-delivery.test.ts` | ADS-3A.2.1: snapshot fingerprint (request_id / order / shipping warnings ignored; name, SKU, status, image, item set, other content counted; input untouched); thumbnail URL safety; load order; flag default |
+| `scripts/e2e/shopee-ads-products.ts` | Browser: pending state → background enrichment → names / thumbnails (`_tn` → original → icon, 36 px, no repeated request) / SKU / search; page views make 0 calls; refresh dedupe; admin refresh; switch off |
+
+## 8. Delivery optimisation (SHOPEE-ADS-3A.2.1)
+
+### Snapshot dedupe
+
+`saveAdsSnapshot` refreshes `synced_at` instead of inserting when the payload hash matches the latest snapshot of the same key. For `get_item_base_info` that never matched. On production (2026-10-30), re-reading the same 9 batches returned identical items, yet every raw hash differed:
+
+| Field | Observed on identical re-reads |
+|---|---|
+| `request_id` | different on every call |
+| `response.item_list` order | different order, not sorted by item id |
+| `warning` | ~20 KB of `fail to get channel estimated_shipping_fee for channel [N];` lines; the set of lines differs between reads (a logistics estimate, not product data) |
+
+`normalizeShopeeProductSnapshotForHash` (sync.ts) builds the **hash input only** for this endpoint. It drops `request_id`, sorts `item_list` by numeric item id, and removes exactly those shipping-fee warning lines.
+
+Everything else still changes the hash: names, SKU, status, images, `update_time`, the returned item set, `error` / `message`, and any other warning line. Other Ads endpoints keep the raw hash.
+
+The stored payload is unchanged: `request_id`, `warning` and the provider order are kept. A deduped snapshot keeps its first `request_id`, so the job metadata records the latest ones (`requestIds`, last 20) along with `stats.snapshotsInserted` / `snapshotsDeduped`.
+
+Results:
+- Against the real production pairs: 0 / 9 deduped before the change, 9 / 9 after.
+- First run after deploy: hashes stored with the old formula never match, so each key inserts one more snapshot, then dedupes.
+
+### Display thumbnail
+
+The stored `image_url` (`https://cf.shopee.vn/file/<id>`) is canonical and never rewritten. With `ADS_PRODUCT_THUMBNAIL_TN_ENABLED=true`, the dashboard source derives `thumbnailUrl = <image_url>_tn` per row. This is a pure string step, with no extra query.
+
+`adsProductThumbnailUrl` derives a thumbnail only for that exact shape (https, host `cf.shopee.vn`, path `/file/<[A-Za-z0-9-]+>`). It returns nothing (meaning: use the original) for:
+- another host;
+- `http`;
+- query strings, signatures or credentials;
+- other paths;
+- an id that already carries a suffix;
+- malformed values.
+
+`AdsProductThumb` tries the thumbnail, then the original, then the icon. Each URL is tried once, so there is no retry loop. The box is the same fixed 36 / 48 px square, with lazy loading and explicit width / height.
+
+Verification (read-only CDN GETs, no Shopee Partner API) used a deterministic sample of 60 production images: 12 per shop, all 5 shops, covering NORMAL / UNLIST / SELLER_DELETE.
+
+| | Original | `_tn` |
+|---|---|---|
+| Success | 60 / 60 | 60 / 60 (`image/jpeg`, no redirect) |
+| Dimensions | 750–1024 px | 320 px wide (58 × 320×320, 2 × 320×426/427); aspect ratio identical in 60 / 60 |
+| Average size | 677,664 B | 46,157 B (−93.2 %, 14.7× smaller) |
+| p50 / p95 | 717,403 / 1,178,063 B | 46,734 / 68,013 B |
+| 50-row page | ~32 MB | ~2.2 MB |
+
+Sameness check: both images were scaled to 16×16 grayscale and compared by mean absolute difference.
+- Original vs its own `_tn`: average 5.1, maximum 8.4.
+- Thumbnail vs a different product's original (control): average 50, minimum 28.
+
+An unknown id answers 404 for both forms, so the fallback chain handles it.
+

@@ -167,7 +167,7 @@ function CampaignDetail({ row }: { row: AdsCampaignRow }) {
             const status = productStatusLabel(p);
             return (
               <li key={p.itemId ?? p.name} data-product={p.itemId} data-enrichment={p.enrichment} className="flex items-center gap-2.5 rounded-lg border border-ads-border bg-card px-2.5 py-1.5 text-xs">
-                <AdsProductThumb src={p.imageUrl} alt={p.name} size="lg" />
+                <AdsProductThumb src={p.imageUrl} thumbSrc={p.thumbnailUrl} alt={p.name} size="lg" />
                 <span className="min-w-0 flex-1 space-y-0.5">
                   <span className="line-clamp-2 font-medium" title={p.name}>
                     {p.name}
@@ -306,7 +306,7 @@ export function AdsCampaignTable({
                           >
                             <ChevronRight aria-hidden="true" className={cn("size-4 transition-transform duration-(--ads-dur-normal) ease-ads", isOpen && "rotate-90")} />
                           </button>
-                          {shown.product?.enrichment ? <AdsProductThumb src={shown.product.imageUrl} alt={shown.name} /> : null}
+                          {shown.product?.enrichment ? <AdsProductThumb src={shown.product.imageUrl} thumbSrc={shown.product.thumbnailUrl} alt={shown.name} /> : null}
                           <div className="min-w-0">
                             <p className="truncate font-medium text-heading" title={shown.name === r.name ? r.name : `${shown.name}\nChiến dịch: ${r.name}`}>
                               {shown.name}

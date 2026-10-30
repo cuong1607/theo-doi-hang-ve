@@ -4,7 +4,8 @@
 // the sanitized production payloads as provider:
 //
 //   SHOPEE_ADS_DATA_SOURCE=real SHOPEE_ADS_PROVIDER=fixture ADS_AUTO_SYNC_ENABLED=true \
-//   ADS_PRODUCT_ENRICHMENT_ENABLED=true SHOPEE_TOKEN_KEEPALIVE_HOURS=100000 npx next dev -p 3100
+//   ADS_PRODUCT_ENRICHMENT_ENABLED=true ADS_PRODUCT_THUMBNAIL_TN_ENABLED=true \
+//   SHOPEE_TOKEN_KEEPALIVE_HOURS=100000 npx next dev -p 3100
 //   node --env-file=.env.local scripts/e2e/shopee-ads-products.ts http://localhost:3100
 //
 // Proves: before the per-shop switch the campaign table shows the campaign
@@ -19,6 +20,10 @@
 // the cache is fresh; "Làm mới TT SP" re-reads; "Tắt TT SP" stops the slot.
 // Image requests to cf.shopee.vn are intercepted (fixture image ids are
 // placeholders): nothing leaves the machine.
+// ADS-3A.2.1: thumbnails load the `_tn` variant first; the mock CDN makes three
+// groups (by the image id's last digit): `_tn` served → "thumbnail"; `_tn`
+// 404 but original served → "original"; both 404 → icon. Same 36 px box for
+// all, and no image URL is requested twice (no retry loop).
 // Throw-away admin; Ads rows, product rows, jobs and settings are removed.
 // ============================================================
 import { createClient } from "@supabase/supabase-js";
@@ -39,7 +44,8 @@ const EMAIL = `e2e-ads-products-${Date.now()}@example.test`;
 const PASSWORD = `E2e-${Math.random().toString(36).slice(2)}-Pw!`;
 const ADS_TYPES = ["ads_campaign_read", "ads_campaign_performance_read", "ads_shop_performance_read", "ads_shop_hourly_read", "ads_campaign_hourly_read", "ads_product_enrichment_read"];
 const PRODUCT = "ads_product_enrichment_read";
-// a 1×1 PNG served for "valid" images; fixture image ids ending in an odd digit are answered 404 (broken image path)
+// a 1×1 PNG served for "valid" images. By the image id's last digit: odd → original AND `_tn` 404 (icon);
+// 2 / 6 → `_tn` 404, original served (fallback to original); 0 / 4 / 8 → `_tn` served (thumbnail)
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
 
 const results: Array<{ name: string; ok: boolean; detail?: string }> = [];
@@ -124,7 +130,10 @@ async function main() {
     await ctx.route("https://cf.shopee.vn/file/**", (route) => {
       const u = route.request().url();
       imageRequests.push(u);
-      return /[13579]$/.test(u) ? route.fulfill({ status: 404, body: "" }) : route.fulfill({ status: 200, contentType: "image/png", body: PNG });
+      const tn = u.endsWith("_tn");
+      const digit = (tn ? u.slice(0, -3) : u).slice(-1);
+      const broken = /[13579]/.test(digit) || (tn && /[26]/.test(digit));
+      return broken ? route.fulfill({ status: 404, body: "" }) : route.fulfill({ status: 200, contentType: "image/png", body: PNG });
     });
     let page = await ctx.newPage();
     const shopeeApiRequests: string[] = [];
@@ -213,7 +222,8 @@ async function main() {
 
     page = await ctx.newPage();
     watch(page);
-    await check("after refresh: product names in the table, thumbnails (valid renders, broken → icon in the same 36 px box), SKU in the expanded row", async () => {
+    await check("after refresh: product names in the table, thumbnails (`_tn` first → original → icon, all in the same 36 px box, no URL loaded twice), SKU in the expanded row", async () => {
+      imageRequests.length = 0;
       await page.goto(`${BASE}/shopee/ads${Q}`, { timeout: 180_000 });
       const table = page.locator('[data-slot="ads-campaign-table"]');
       await table.waitFor({ timeout: 120_000 });
@@ -221,8 +231,21 @@ async function main() {
       await sleep(1500);
       const names = await table.locator("tr[data-campaign] p.font-medium").allInnerTexts();
       expect(names.length > 0 && names.every((n) => /^Item #\d+/.test(n)), names.slice(0, 3).join(" | "));
-      const states = await table.locator('tr[data-campaign] [data-slot="ads-product-thumb"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-state")));
+      const thumbs = await table.locator('tr[data-campaign] [data-slot="ads-product-thumb"]').evaluateAll((els) => els.map((e) => ({ state: e.getAttribute("data-state"), source: e.getAttribute("data-source"), src: e.querySelector("img")?.getAttribute("src") ?? null })));
+      const states = thumbs.map((t) => t.state);
       expect(states.includes("image") && states.includes("fallback"), `thumb states ${[...new Set(states)].join(",")}`);
+      // ADS-3A.2.1 load order, per mock CDN group
+      for (const t of thumbs) {
+        if (t.source === "thumbnail") expect(t.src?.endsWith("_tn") && /[048]_tn$/.test(t.src), `thumbnail ${t.src}`);
+        if (t.source === "original") expect(t.src && !t.src.endsWith("_tn") && /[26]$/.test(t.src), `original fallback ${t.src}`);
+      }
+      const sources = new Set(thumbs.map((t) => t.source));
+      expect(sources.has("thumbnail") && sources.has("original") && sources.has("icon"), `sources ${[...sources].join(",")}`);
+      const seen = new Map<string, number>();
+      for (const u of imageRequests) seen.set(u, (seen.get(u) ?? 0) + 1);
+      const repeated = [...seen].filter(([, n]) => n > 1);
+      expect(repeated.length === 0, `no retry loop: ${repeated.slice(0, 3).map(([u, n]) => `${u}×${n}`).join(", ")}`);
+      expect([...seen.keys()].some((u) => u.endsWith("_tn")), "thumbnails requested");
       const boxes = await table.locator('tr[data-campaign] [data-slot="ads-product-thumb"]').evaluateAll((els) => els.map((e) => `${Math.round(e.getBoundingClientRect().width)}x${Math.round(e.getBoundingClientRect().height)}`));
       expect(new Set(boxes).size === 1 && boxes[0] === "36x36", `boxes ${[...new Set(boxes)].join(",")}`);
       const img = table.locator('tr[data-campaign] [data-slot="ads-product-thumb"] img').first();
@@ -240,7 +263,8 @@ async function main() {
       const text = await li.innerText();
       expect(text.includes(withSku!.item_sku!) && text.includes(withSku!.provider_item_id) && text.includes(withSku!.product_name!), text);
       await table.screenshot({ path: path.join(SHOTS, "products-enriched.png") });
-      return `${states.filter((s) => s === "image").length} images, ${states.filter((s) => s === "fallback").length} fallbacks`;
+      const n = (s: string) => thumbs.filter((t) => t.source === s).length;
+      return `${n("thumbnail")} via _tn, ${n("original")} via original fallback, ${n("icon")} icons, ${imageRequests.length} image requests`;
     });
 
     await check("search: by product name and by provider item id (accent-insensitive, campaign search unchanged)", async () => {

@@ -24,7 +24,7 @@ import { addDays, daysBetween } from "../../../analytics/periods.ts";
 import { mapWithConcurrency } from "../../core/time-windows.ts";
 import { adsPreviousRange } from "./filters.ts";
 import { adsHourlyReconciliation, buildAdsIntraday, loadAdsHourlyReconciliation, loadAdsShopHourly, unavailableIntraday } from "./hourly.ts";
-import { mapAdsCampaignStatus, mapAdsCampaignType } from "./mapper.ts";
+import { adsProductThumbnailUrl, mapAdsCampaignStatus, mapAdsCampaignType } from "./mapper.ts";
 import { addTotals, deriveMetrics, subtractTotals, ZERO_TOTALS } from "./metrics.ts";
 import { ADS_SYNC_TYPES } from "./read-only-policy.ts";
 import { AdsDataUnavailableError, type AdsDashboardSource } from "./source.ts";
@@ -239,6 +239,8 @@ export class RealAdsDashboardSource implements AdsDashboardSource {
     // ---- campaign table: CAMPAIGN-LEVEL facts only
     const shopName = new Map(shops.map((s) => [s.id, s.shop_name]));
     const dayKeys = new Set(days);
+    // ADS-3A.2.1: pure string derivation per row — no extra query
+    const thumbTn = getAdsSyncConfig().productThumbnailTnEnabled;
     const allRows: AdsCampaignRow[] = campaignAgg.map((c) => {
       const metrics = deriveMetrics(totalsOf([c]));
       const daily = (c.daily ?? []).map((d) => ({ d: String(d.d).slice(0, 10), e: n(d.e), g: n(d.g) }));
@@ -267,6 +269,7 @@ export class RealAdsDashboardSource implements AdsDashboardSource {
           name: meta.get(itemId)?.n ?? adsProductPlaceholder(itemId),
           itemId,
           imageUrl: meta.get(itemId)?.img ?? null,
+          thumbnailUrl: thumbTn ? adsProductThumbnailUrl(meta.get(itemId)?.img) : null,
           sku: meta.get(itemId)?.sku ?? null,
           providerStatus: meta.get(itemId)?.st ?? null,
           enrichment: meta.get(itemId)?.es ?? "pending",

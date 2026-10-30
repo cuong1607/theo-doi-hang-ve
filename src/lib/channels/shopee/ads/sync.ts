@@ -105,6 +105,8 @@ export interface AdsSyncConfig {
   productEnrichmentEnabled: boolean;
   /** A cached item is re-read only after this many hours (ADS_PRODUCT_ENRICHMENT_TTL_HOURS). */
   productEnrichmentTtlHours: number;
+  /** ADS_PRODUCT_THUMBNAIL_TN_ENABLED (ADS-3A.2.1): table thumbnails load the verified `_tn` CDN variant first (original as fallback). Default OFF. */
+  productThumbnailTnEnabled: boolean;
 }
 
 const intEnv = (v: string | undefined, fallback: number, min: number, max: number) => {
@@ -150,6 +152,7 @@ export function getAdsSyncConfig(env: Record<string, string | undefined> = proce
     hourlyFinalizeTime: timesEnv(env.ADS_HOURLY_FINALIZE_TIME, ["02:30"])[0],
     productEnrichmentEnabled: boolEnv(env.ADS_PRODUCT_ENRICHMENT_ENABLED, false),
     productEnrichmentTtlHours: intEnv(env.ADS_PRODUCT_ENRICHMENT_TTL_HOURS, 24, 1, 30 * 24),
+    productThumbnailTnEnabled: boolEnv(env.ADS_PRODUCT_THUMBNAIL_TN_ENABLED, false),
   };
 }
 
@@ -298,10 +301,14 @@ export function changedPrimitives(stored: StoredFact, next: AdsPerformancePrimit
 
 // ------------------------------------------------------------------ snapshots (existing channel_api_snapshots, entity 'ads')
 
-/** Raw response history: identical payload for the same request key only refreshes synced_at. */
-export async function saveAdsSnapshot(db: SupabaseClient, input: { shopId: string; payload: ProviderPayload; key: string; sourceMode: "live" | "fixture"; syncedAt: string }) {
+/**
+ * Raw response history: identical payload for the same request key only refreshes synced_at.
+ * `canonicalize` (endpoint-specific, optional) shapes the HASH INPUT only — the
+ * stored payload is always the full sanitized response.
+ */
+export async function saveAdsSnapshot(db: SupabaseClient, input: { shopId: string; payload: ProviderPayload; key: string; sourceMode: "live" | "fixture"; syncedAt: string; canonicalize?: (raw: unknown) => unknown }) {
   const raw = sanitizeAdsPayload(input.payload.raw);
-  const hash = payloadHash(raw);
+  const hash = payloadHash(input.canonicalize ? input.canonicalize(raw) : raw);
   const match = { shop_id: input.shopId, entity_type: ADS_SNAPSHOT_ENTITY_TYPE, entity_external_id: input.key.slice(0, 200), api_name: input.payload.apiName };
   const { data: latest, error } = await db.from("channel_api_snapshots").select("id, payload_hash").match(match).order("synced_at", { ascending: false }).limit(1).maybeSingle<{ id: string; payload_hash: string | null }>();
   if (error) throw new Error(`Không đọc được snapshot Ads: ${error.message}`);
@@ -1075,6 +1082,42 @@ export function projectItemBaseInfo(raw: unknown): unknown {
   return { ...envelope, response: { ...response, item_list } };
 }
 
+/**
+ * ADS-3A.2.1 dedupe fingerprint for get_item_base_info snapshots (hash input
+ * only — never what is stored). Verified on production 2026-10-30 by re-reading
+ * the same 9 batches: the items were identical, yet
+ *   - request_id differs on every call,
+ *   - item_list comes back in a different order,
+ *   - `warning` lists "fail to get channel estimated_shipping_fee for channel
+ *     [N]" lines whose set differs between identical reads (a logistics
+ *     estimate, not product data).
+ * Those three are neutralised; every other field (names, SKU, status, images,
+ * the returned item set, error / message, any other warning line) still
+ * changes the hash.
+ */
+const VOLATILE_PRODUCT_WARNING_LINE = /^fail to get channel estimated_shipping_fee for channel \[\d+\];?$/;
+
+const byItemId = (a: string, b: string) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0);
+
+export function normalizeShopeeProductSnapshotForHash(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+  const envelope = { ...(raw as Record<string, unknown>) };
+  delete envelope.request_id;
+  if (typeof envelope.warning === "string") {
+    envelope.warning = envelope.warning
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l !== "" && !VOLATILE_PRODUCT_WARNING_LINE.test(l))
+      .join("\n");
+  }
+  const response = envelope.response && typeof envelope.response === "object" && !Array.isArray(envelope.response) ? (envelope.response as Record<string, unknown>) : null;
+  if (response && Array.isArray(response.item_list)) {
+    const keyOf = (it: unknown) => (it && typeof it === "object" ? String((it as Record<string, unknown>).item_id ?? "") : "");
+    envelope.response = { ...response, item_list: [...response.item_list].sort((a, b) => byItemId(keyOf(a), keyOf(b))) };
+  }
+  return envelope;
+}
+
 /** Items last checked before this instant are stale (ADS_PRODUCT_ENRICHMENT_TTL_HOURS). */
 export function adsProductStaleBefore(now: Date, config: Pick<AdsSyncConfig, "productEnrichmentTtlHours">): string {
   return new Date(now.getTime() - config.productEnrichmentTtlHours * 3_600_000).toISOString();
@@ -1257,7 +1300,11 @@ export class AdsProductEnrichmentReadRunner implements SyncJobRunner {
       const payload = await this.deps.provider.getItemBaseInfo(ctx, { itemIds: batch });
       callsThisSlice++;
       const checkedAt = now().toISOString();
-      await saveAdsSnapshot(this.deps.db, { shopId: shop.id, payload: { ...payload, raw: projectItemBaseInfo(payload.raw) }, key: `item_base_info:${batch[0]}:${batch.length}`, sourceMode: this.deps.provider.mode, syncedAt: checkedAt });
+      const snap = await saveAdsSnapshot(this.deps.db, { shopId: shop.id, payload: { ...payload, raw: projectItemBaseInfo(payload.raw) }, key: `item_base_info:${batch[0]}:${batch.length}`, sourceMode: this.deps.provider.mode, syncedAt: checkedAt, canonicalize: normalizeShopeeProductSnapshotForHash });
+      progress.incr(snap === "inserted" ? "snapshotsInserted" : "snapshotsDeduped", 1);
+      // auditability: a deduped snapshot keeps the FIRST request_id, so the latest ones live in the job log
+      const requestId = payload.raw && typeof payload.raw === "object" ? (payload.raw as Record<string, unknown>).request_id : undefined;
+      if (typeof requestId === "string" && requestId) progress.meta.requestIds = [...((progress.meta.requestIds as string[] | undefined) ?? []), requestId.slice(0, 64)].slice(-20);
       const parsed = parseItemBaseInfo(payload.raw, batch);
       const written = await upsertAdsProducts(this.deps.db, shop.id, parsed.items, checkedAt);
       await markAdsProductsNotReturned(this.deps.db, shop.id, parsed.notReturned, checkedAt);

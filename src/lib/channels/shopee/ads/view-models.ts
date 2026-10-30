@@ -92,6 +92,8 @@ export interface AdsAdvertisedProduct {
    * absent / null = not known. Never filled from fixtures in real mode.
    */
   imageUrl?: string | null;
+  /** ADS-3A.2.1 display-only small variant of imageUrl (null = load imageUrl directly). Never stored. */
+  thumbnailUrl?: string | null;
   sku?: string | null;
   /** Raw Shopee item_status (NORMAL / UNLIST / SELLER_DELETE …). */
   providerStatus?: string | null;
