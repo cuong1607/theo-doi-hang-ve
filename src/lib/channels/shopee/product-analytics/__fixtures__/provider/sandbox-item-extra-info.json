@@ -1,0 +1,54 @@
+{
+  "_meta": {
+    "path": "/api/v2/product/get_item_extra_info",
+    "method": "GET",
+    "httpStatus": 200,
+    "classification": "OK",
+    "requestedItems": 4,
+    "latencyMs": 110,
+    "note": "sanitized production payload (SHOPEE-PRODUCT-ANALYTICS-1); ids / names are stable placeholders"
+  },
+  "body": {
+    "error": "",
+    "message": "",
+    "warning": "",
+    "request_id": "e3e3e7f35f079bee1b8924c15c924000",
+    "response": {
+      "item_list": [
+        {
+          "item_id": 900000001,
+          "sale": 0,
+          "views": 0,
+          "likes": 0,
+          "rating_star": 0,
+          "comment_count": 0
+        },
+        {
+          "item_id": 900000002,
+          "sale": 0,
+          "views": 0,
+          "likes": 0,
+          "rating_star": 0,
+          "comment_count": 0
+        },
+        {
+          "item_id": 900000003,
+          "sale": 0,
+          "views": 0,
+          "likes": 0,
+          "rating_star": 0,
+          "comment_count": 0
+        },
+        {
+          "item_id": 900000004,
+          "sale": 0,
+          "views": 0,
+          "likes": 0,
+          "rating_star": 0,
+          "comment_count": 0
+        }
+      ]
+    },
+    "debug_message": ""
+  }
+}

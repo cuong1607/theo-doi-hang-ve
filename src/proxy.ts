@@ -14,7 +14,10 @@ import { getShopeeFlags, isLegacyShopeeApi, isLegacyShopeePage, legacyRedirectTa
 // ============================================================
 
 // Reachable without a session. Everything else is protected.
-const PUBLIC_PATHS = ["/login"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/zalo/webhook", // Zalo OA webhook (exact path) — own X-ZEvent-Signature check (fail closed), off unless ZALO_CONVERSATION_ENABLED
+];
 const PUBLIC_PREFIXES = [
   "/api/cron/", // Vercel Cron — own CRON_SECRET check, no user session
   "/api/internal/", // background sync scheduler/worker — own SYNC_WORKER_SECRET/CRON_SECRET check

@@ -1,0 +1,14 @@
+{
+  "_meta": {
+    "path": "/api/v2/product/get_this_endpoint_does_not_exist",
+    "method": "GET",
+    "httpStatus": 404,
+    "classification": "ENDPOINT_NOT_FOUND",
+    "requestedItems": 0,
+    "latencyMs": 196,
+    "note": "sanitized production payload (SHOPEE-PRODUCT-ANALYTICS-1); ids / names are stable placeholders"
+  },
+  "body": {
+    "error": "error_not_found"
+  }
+}
