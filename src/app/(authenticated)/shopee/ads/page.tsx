@@ -165,7 +165,7 @@ export default async function ShopeeAdsPage({ searchParams }: { searchParams: Pr
                 Dữ liệu thật từ Shopee Ads (chỉ đọc){sync.reportThrough ? ` · có số liệu đến ngày ${formatAdsRange(sync.reportThrough, sync.reportThrough)}` : ""}.{" "}
                 {sync.autoSync?.enabled ? "Đồng bộ nền tự động ~15 phút/lần, không cần mở trang." : "Chưa bật đồng bộ nền cho shop này — dữ liệu chỉ cập nhật khi bấm “Làm mới dữ liệu”."} Tổng quan lấy từ tổng quảng cáo cấp shop; bảng chiến dịch lấy từ từng chiến dịch sản phẩm.
               </p>
-              {autoSync ? <AdsAutoSyncPanel rows={autoSync} globalEnabled={getAdsSyncConfig().autoSyncEnabled} hourlyGlobalEnabled={getAdsSyncConfig().hourlySyncEnabled} serverNow={serverNow} /> : null}
+              {autoSync ? <AdsAutoSyncPanel rows={autoSync} globalEnabled={getAdsSyncConfig().autoSyncEnabled} hourlyGlobalEnabled={getAdsSyncConfig().hourlySyncEnabled} productGlobalEnabled={getAdsSyncConfig().productEnrichmentEnabled} serverNow={serverNow} /> : null}
             </div>
           ) : (
             <p className="mt-3 rounded-lg border border-dashed border-ads-border bg-ads-surface px-3 py-2 text-xs text-ads-muted">

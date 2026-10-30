@@ -5,12 +5,14 @@
 // the HOT SLA of the last 24 h. The switch only decides whether the scheduler
 // ENQUEUES read jobs for the shop (and only while ADS_AUTO_SYNC_ENABLED=true);
 // it never touches campaigns on Shopee.
+// ADS-3A.2: product metadata cache per shop (items enriched / referenced,
+// pending) + its rollout switch and an admin re-read — READ ONLY, queue only.
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import type { AdsShopSyncOverview } from "@/lib/channels/shopee/ads/schedule";
 import type { AdsHourlyReconciliationStatus } from "@/lib/channels/shopee/ads/view-models";
-import { toggleAdsAutoSyncAction, toggleAdsHourlySyncAction } from "@/app/(authenticated)/shopee/ads/actions";
+import { refreshAdsProductInfoAction, toggleAdsAutoSyncAction, toggleAdsHourlySyncAction, toggleAdsProductEnrichmentAction } from "@/app/(authenticated)/shopee/ads/actions";
 import { toast } from "@/components/patterns/toast";
 import { Button } from "@/components/ui/button";
 
@@ -30,7 +32,19 @@ const RECON_LABEL: Record<AdsHourlyReconciliationStatus, { text: string; cls: st
   IN_PROGRESS: { text: "Đang cập nhật", cls: "text-muted-foreground" },
 };
 
-export function AdsAutoSyncPanel({ rows, globalEnabled, hourlyGlobalEnabled, serverNow }: { rows: AdsShopSyncOverview[]; globalEnabled: boolean; hourlyGlobalEnabled: boolean; serverNow: string }) {
+export function AdsAutoSyncPanel({
+  rows,
+  globalEnabled,
+  hourlyGlobalEnabled,
+  productGlobalEnabled = false,
+  serverNow,
+}: {
+  rows: AdsShopSyncOverview[];
+  globalEnabled: boolean;
+  hourlyGlobalEnabled: boolean;
+  productGlobalEnabled?: boolean;
+  serverNow: string;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
@@ -43,6 +57,28 @@ export function AdsAutoSyncPanel({ rows, globalEnabled, hourlyGlobalEnabled, ser
       setBusy(null);
       if (r.ok) toast.success(r.message, hourlyGlobalEnabled ? "Dữ liệu theo giờ của hôm nay được đọc cùng nhịp HOT 15 phút (ưu tiên thấp hơn số liệu ngày)." : "ADS_HOURLY_SYNC_ENABLED đang tắt — chưa có job theo giờ nào được tạo.");
       else toast.error("Không đổi được cấu hình", r.message);
+      router.refresh();
+    });
+  };
+
+  const toggleProducts = (row: AdsShopSyncOverview) => {
+    setBusy(`p:${row.shopId}`);
+    start(async () => {
+      const r = await toggleAdsProductEnrichmentAction({ shopId: row.shopId, enabled: !row.products?.enabled });
+      setBusy(null);
+      if (r.ok) toast.success(r.message, productGlobalEnabled ? "Chỉ sản phẩm đang được quảng cáo, chỉ khi chưa có hoặc đã cũ; ưu tiên thấp hơn mọi số liệu quảng cáo." : "ADS_PRODUCT_ENRICHMENT_ENABLED đang tắt — chưa có job nào được tạo.");
+      else toast.error("Không đổi được cấu hình", r.message);
+      router.refresh();
+    });
+  };
+
+  const refreshProducts = (row: AdsShopSyncOverview) => {
+    setBusy(`pr:${row.shopId}`);
+    start(async () => {
+      const r = await refreshAdsProductInfoAction({ shopId: row.shopId });
+      setBusy(null);
+      if (r.ok) toast.success(r.message, "Đọc lại tên / ảnh / SKU của mọi sản phẩm đang quảng cáo (chỉ đọc).");
+      else toast.error("Không làm mới được", r.message);
       router.refresh();
     });
   };
@@ -69,10 +105,13 @@ export function AdsAutoSyncPanel({ rows, globalEnabled, hourlyGlobalEnabled, ser
           <span data-slot="ads-hourly-global" className={hourlyGlobalEnabled ? "rounded-full border border-success/30 bg-success-soft px-2.5 py-0.5 text-xs text-success-text" : "rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"}>
             {hourlyGlobalEnabled ? "Theo giờ: đang bật" : "Theo giờ: đang tắt (ADS_HOURLY_SYNC_ENABLED)"}
           </span>
+          <span data-slot="ads-products-global" className={productGlobalEnabled ? "rounded-full border border-success/30 bg-success-soft px-2.5 py-0.5 text-xs text-success-text" : "rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs text-muted-foreground"}>
+            {productGlobalEnabled ? "Thông tin SP: đang bật" : "Thông tin SP: đang tắt (ADS_PRODUCT_ENRICHMENT_ENABLED)"}
+          </span>
         </div>
       </div>
       <div className="overflow-x-auto rounded-lg border border-ads-border">
-        <table className="w-full min-w-[900px] text-xs">
+        <table className="w-full min-w-[1100px] text-xs">
           <thead className="bg-ads-surface text-left text-ads-muted">
             <tr>
               <th className="px-3 py-2 font-medium">Shop</th>
@@ -86,6 +125,8 @@ export function AdsAutoSyncPanel({ rows, globalEnabled, hourlyGlobalEnabled, ser
               <th className="border-l border-ads-border px-3 py-2 font-medium">Theo giờ hôm nay</th>
               <th className="px-3 py-2 text-right font-medium">Giờ 24h (gọi API)</th>
               <th className="px-3 py-2 font-medium">Đối chiếu hôm qua</th>
+              <th className="px-3 py-2" />
+              <th className="border-l border-ads-border px-3 py-2 text-right font-medium">Thông tin SP (đủ / tổng · chờ)</th>
               <th className="px-3 py-2" />
             </tr>
           </thead>
@@ -122,13 +163,36 @@ export function AdsAutoSyncPanel({ rows, globalEnabled, hourlyGlobalEnabled, ser
                     {r.hourly.enabled ? "Tắt theo giờ" : "Bật theo giờ"}
                   </Button>
                 </td>
+                <td className="border-l border-ads-border px-3 py-2 text-right tabular-nums" data-products-enabled={r.products?.enabled ?? false} title={r.products ? `Ảnh: ${r.products.withImage} · SKU: ${r.products.withSku} · không trả về: ${r.products.notReturned} · cập nhật: ${ago(r.products.lastEnrichedAt, now)}` : undefined}>
+                  {r.products ? (
+                    <>
+                      {r.products.enriched} / {r.products.referenced}
+                      {r.products.missing + r.products.stale > 0 ? <span className="text-muted-foreground"> · {r.products.missing + r.products.stale}</span> : null}
+                      {!r.products.enabled ? <span className="text-muted-foreground"> (tắt)</span> : null}
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <div className="flex justify-end gap-1.5">
+                    <Button type="button" size="sm" variant="outline" disabled={pending || !r.products} aria-busy={busy === `p:${r.shopId}`} onClick={() => toggleProducts(r)} data-action="toggle-products">
+                      {r.products?.enabled ? "Tắt TT SP" : "Bật TT SP"}
+                    </Button>
+                    {r.products?.enabled ? (
+                      <Button type="button" size="sm" variant="ghost" disabled={pending || !productGlobalEnabled} aria-busy={busy === `pr:${r.shopId}`} onClick={() => refreshProducts(r)} data-action="refresh-products">
+                        Làm mới TT SP
+                      </Button>
+                    ) : null}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <p className="text-xs text-ads-muted">
-        Mỗi shop chạy lệch vài phút trong mỗi khung 15 phút để không dồn request. Dữ liệu theo giờ chỉ đọc cho hôm nay, cùng nhịp HOT nhưng ưu tiên thấp hơn số liệu ngày; bật thử từng shop trước. Mở trang không bao giờ gọi Shopee — dữ liệu luôn đọc từ cơ sở dữ liệu.
+        Mỗi shop chạy lệch vài phút trong mỗi khung 15 phút để không dồn request. Dữ liệu theo giờ chỉ đọc cho hôm nay, cùng nhịp HOT nhưng ưu tiên thấp hơn số liệu ngày; bật thử từng shop trước. Thông tin sản phẩm (tên / ảnh / SKU) chỉ đọc cho sản phẩm đang được quảng cáo, khi chưa có hoặc đã quá hạn lưu. Mở trang không bao giờ gọi Shopee — dữ liệu luôn đọc từ cơ sở dữ liệu.
       </p>
     </div>
   );

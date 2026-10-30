@@ -131,7 +131,9 @@ const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/
 /** Search (accent-insensitive) → sort (nulls last either way) → page. */
 export function queryCampaigns(rows: AdsCampaignRow[], t: AdsTableQuery): { rows: AdsCampaignRow[]; total: number; page: number } {
   const needle = fold(t.q);
-  const matched = needle ? rows.filter((r) => fold(`${r.name} ${r.shopName}`).includes(needle)) : rows;
+  // campaign name, shop, and (ADS-3A.2) advertised product name / SKU / provider item id — accent-insensitive
+  const haystack = (r: AdsCampaignRow) => fold([r.name, r.shopName, ...r.topProducts.flatMap((p) => [p.name, p.sku ?? "", p.itemId ?? ""])].join(" "));
+  const matched = needle ? rows.filter((r) => haystack(r).includes(needle)) : rows;
   const sorted = [...matched].sort((a, b) => {
     const va = sortValue(a, t.sort);
     const vb = sortValue(b, t.sort);

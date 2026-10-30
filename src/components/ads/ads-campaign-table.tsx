@@ -6,14 +6,17 @@
 // screens, row hover tint, and expandable rows: height + opacity animate
 // via grid-template-rows (0fr → 1fr, no measuring, no layout jump); the
 // detail is mounted on first open and `inert` while closed.
+// ADS-3A.2: the campaign cell shows the advertised product (verified
+// thumbnail / name / SKU from shopee_ads_products); unknown metadata falls
+// back to the campaign name and a neutral icon — never blank, never invented.
 import { Fragment, useId, useState } from "react";
 import Link from "next/link";
-import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight, Package } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight } from "lucide-react";
 import { cn } from "cn";
 
 import { ADS_STATUS_OPTIONS, ADS_TYPE_OPTIONS, type AdsSortColumn } from "@/lib/channels/shopee/ads/filters";
 import { ADS_TARGETS, formatInt, formatMetric, formatMetricDetailed, meetsTarget } from "@/lib/channels/shopee/ads/metrics";
-import type { AdsCampaignRow, AdsCampaignStatus } from "@/lib/channels/shopee/ads/view-models";
+import type { AdsAdvertisedProduct, AdsCampaignRow, AdsCampaignStatus } from "@/lib/channels/shopee/ads/view-models";
 import { buildListHref } from "@/lib/ui/list-query";
 import { DataTablePagination } from "@/components/patterns/data-table-pagination";
 import { FilterBar, SearchInput, useFilterNav } from "@/components/patterns/filter-bar";
@@ -21,10 +24,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 
 import { AdsCampaignStatusBadge } from "./ads-campaign-status-badge";
 import { AdsProgress } from "./ads-efficiency-card";
+import { AdsProductThumb } from "./ads-product-thumb";
 import { ShopAvatar } from "./ads-filter-bar";
 import { AdsEmptyState } from "./ads-states";
 
 const TYPE_LABEL = Object.fromEntries(ADS_TYPE_OPTIONS.map((o) => [o.value, o.label]));
+
+/** Raw Shopee item_status → subtle label (NORMAL needs none; unknown values are shown raw). Never a campaign status. */
+const PRODUCT_STATUS_LABEL: Record<string, string> = { UNLIST: "Đang ẩn", SELLER_DELETE: "Người bán đã xoá SP", SHOPEE_DELETE: "Shopee đã xoá SP", BANNED: "Bị khoá", REVIEWING: "Đang duyệt" };
+
+function productStatusLabel(p: AdsAdvertisedProduct): string | null {
+  if (!p.providerStatus || p.providerStatus === "NORMAL") return null;
+  return PRODUCT_STATUS_LABEL[p.providerStatus] ?? p.providerStatus;
+}
+
+/** The row's display product: verified metadata only (fixture / pending rows keep the campaign name). */
+function displayProduct(r: AdsCampaignRow): { name: string; product: AdsAdvertisedProduct | null } {
+  const product = r.topProducts[0] ?? null;
+  return { name: product?.enrichment === "enriched" ? product.name : r.name, product };
+}
 
 const COLUMNS: Array<{ key: AdsSortColumn; label: string; align?: "right" }> = [
   { key: "name", label: "Chiến dịch" },
@@ -145,18 +163,46 @@ function CampaignDetail({ row }: { row: AdsCampaignRow }) {
         <p className="text-xs font-medium text-muted-foreground">Sản phẩm được quảng cáo</p>
         <ul className="space-y-1.5">
           {row.topProducts.length === 0 && <li className="text-xs text-muted-foreground">—</li>}
-          {row.topProducts.map((p) => (
-            <li key={p.itemId ?? p.name} className="flex items-center justify-between gap-3 rounded-lg border border-ads-border bg-card px-2.5 py-1.5 text-xs">
-              <span className="inline-flex min-w-0 items-center gap-1.5">
-                <Package aria-hidden="true" className="size-3.5 shrink-0 text-ads-accent" />
-                <span className="truncate">{p.name}</span>
-              </span>
-              <span className="shrink-0 text-muted-foreground tabular-nums">
-                {p.revenue === null ? "—" : formatMetric("revenue", p.revenue)} · {p.orders === null ? "—" : `${formatInt(p.orders)} đơn`}
-              </span>
-            </li>
-          ))}
+          {row.topProducts.map((p) => {
+            const status = productStatusLabel(p);
+            return (
+              <li key={p.itemId ?? p.name} data-product={p.itemId} data-enrichment={p.enrichment} className="flex items-center gap-2.5 rounded-lg border border-ads-border bg-card px-2.5 py-1.5 text-xs">
+                <AdsProductThumb src={p.imageUrl} alt={p.name} size="lg" />
+                <span className="min-w-0 flex-1 space-y-0.5">
+                  <span className="line-clamp-2 font-medium" title={p.name}>
+                    {p.name}
+                  </span>
+                  <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                    {p.itemId ? (
+                      <span>
+                        ID <span className="font-mono">{p.itemId}</span>
+                      </span>
+                    ) : null}
+                    {p.sku ? (
+                      <span>
+                        SKU <span className="font-mono">{p.sku}</span>
+                      </span>
+                    ) : null}
+                    {status ? (
+                      <span className="rounded-full bg-muted px-1.5 py-px" title={`Trạng thái sản phẩm trên Shopee: ${p.providerStatus}`}>
+                        {status}
+                      </span>
+                    ) : null}
+                    {p.enrichment === "pending" ? <span>Đang chờ bổ sung thông tin sản phẩm</span> : null}
+                  </span>
+                  <span className="block text-muted-foreground tabular-nums">
+                    {p.revenue === null ? "—" : formatMetric("revenue", p.revenue)} · {p.orders === null ? "—" : `${formatInt(p.orders)} đơn`}
+                  </span>
+                </span>
+              </li>
+            );
+          })}
         </ul>
+        {row.topProducts[0]?.enrichment === "enriched" && row.topProducts[0].name !== row.name ? (
+          <p className="text-[11px] text-muted-foreground">
+            Tên chiến dịch: <span className="text-foreground">{row.name}</span>
+          </p>
+        ) : null}
         {row.provider && (
           <p className="text-[11px] text-muted-foreground">
             Shopee: trạng thái <span className="font-mono">{row.provider.status}</span> · giá thầu <span className="font-mono">{row.provider.biddingMethod ?? "—"}</span> · vị trí <span className="font-mono">{row.provider.placement ?? "—"}</span> · ID <span className="font-mono">{row.provider.campaignId}</span>
@@ -210,7 +256,7 @@ export function AdsCampaignTable({
   return (
     <div className="space-y-3" data-slot="ads-campaign-table">
       <FilterBar filterKeys={["q", "status"]}>
-        <SearchInput paramKey="q" defaultValue={q} placeholder="Tìm chiến dịch / shop…" label="Tìm chiến dịch" className="sm:w-64 [&_input]:rounded-full" />
+        <SearchInput paramKey="q" defaultValue={q} placeholder="Tìm chiến dịch / sản phẩm / SKU…" label="Tìm chiến dịch" className="sm:w-64 [&_input]:rounded-full" />
         <StatusChips value={status} counts={statusCounts} />
       </FilterBar>
 
@@ -241,29 +287,36 @@ export function AdsCampaignTable({
               {rows.map((r) => {
                 const isOpen = open.has(r.id);
                 const detailId = `${id}-${r.id}`;
+                const shown = displayProduct(r);
+                const extraProducts = r.topProducts.length - 1;
                 const roasOk = meetsTarget("roas", r.metrics.roas);
                 const acosOk = meetsTarget("acos", r.metrics.acos);
                 return (
                   <Fragment key={r.id}>
                     <TableRow data-campaign={r.id} data-open={isOpen || undefined} className={cn("hover:bg-ads-surface-strong/70", isOpen && "border-b-0 bg-ads-surface-strong/60")}>
-                      <TableCell className="max-w-[18rem]">
+                      <TableCell className="max-w-[20rem]">
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
                             aria-expanded={isOpen}
                             aria-controls={detailId}
-                            aria-label={`${isOpen ? "Thu gọn" : "Xem chi tiết"} ${r.name}`}
+                            aria-label={`${isOpen ? "Thu gọn" : "Xem chi tiết"} ${shown.name}`}
                             onClick={() => toggle(r.id)}
                             className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-(--ads-dur-fast) hover:bg-ads-primary/10 hover:text-ads-primary-text focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
                           >
                             <ChevronRight aria-hidden="true" className={cn("size-4 transition-transform duration-(--ads-dur-normal) ease-ads", isOpen && "rotate-90")} />
                           </button>
+                          {shown.product?.enrichment ? <AdsProductThumb src={shown.product.imageUrl} alt={shown.name} /> : null}
                           <div className="min-w-0">
-                            <p className="truncate font-medium text-heading">{r.name}</p>
-                            <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={`${r.shopName} · ${TYPE_LABEL[r.type]}`}>
+                            <p className="truncate font-medium text-heading" title={shown.name === r.name ? r.name : `${shown.name}\nChiến dịch: ${r.name}`}>
+                              {shown.name}
+                              {extraProducts > 0 ? <span className="ml-1.5 rounded-full bg-muted px-1.5 text-[10px] font-normal text-muted-foreground">+{extraProducts} SP</span> : null}
+                            </p>
+                            <p className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={`${r.shopName} · ${TYPE_LABEL[r.type]}${shown.product?.sku ? ` · SKU ${shown.product.sku}` : ""}`}>
                               <ShopAvatar name={r.shopName} index={r.shopId.endsWith("2") ? 1 : 0} className="size-4 shrink-0 text-[8px]" />
                               <span className="truncate">
                                 {r.shopName} · {TYPE_LABEL[r.type]}
+                                {shown.product?.sku ? <span className="font-mono"> · {shown.product.sku}</span> : null}
                               </span>
                             </p>
                           </div>

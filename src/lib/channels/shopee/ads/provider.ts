@@ -27,7 +27,7 @@ import { ShopeeApiError } from "../errors.ts";
 import type { ProductProviderContext, ProviderMode, ProviderPayload } from "../product-provider.ts";
 import type { ShopeeTokenSource } from "../token.ts";
 import { formatAdsDate } from "./mapper.ts";
-import { ADS_READ_ENDPOINTS, assertAdsReadOnlyRequest, AdsWriteForbiddenError, type AdsReadEndpoint } from "./read-only-policy.ts";
+import { ADS_PRODUCT_READ_ENDPOINTS, ADS_READ_ENDPOINTS, assertAdsReadOnlyRequest, AdsWriteForbiddenError, type AdsReadEndpoint } from "./read-only-policy.ts";
 
 export type AdsProviderContext = ProductProviderContext;
 
@@ -36,6 +36,8 @@ export const ADS_CAMPAIGN_PAGE_SIZE = 100;
 export const ADS_ID_BATCH = 50;
 export const ADS_CAMPAIGN_RANGE_DAYS = 7;
 export const ADS_SHOP_RANGE_DAYS = 30;
+/** get_item_base_info: ≤ 50 item ids per call (documented limit; comma-separated id list verified in production). */
+export const ADS_ITEM_BATCH = 50;
 
 /** A reporting window, inclusive, as YYYY-MM-DD (shop-local report dates). */
 export interface AdsDateRange {
@@ -57,6 +59,8 @@ export interface ShopeeAdsProvider {
   getAllCpcAdsHourlyPerformance(ctx: AdsProviderContext, input: { date: string }): Promise<ProviderPayload>;
   /** get_product_campaign_hourly_performance — ≤ 50 ids, ONE date (performance_date), rows per campaign × hour. */
   getProductCampaignHourlyPerformance(ctx: AdsProviderContext, input: { campaignIds: readonly string[]; date: string }): Promise<ProviderPayload>;
+  /** ADS-3A.2 product/get_item_base_info — ≤ 50 item ids already referenced by Ads campaigns (metadata only). */
+  getItemBaseInfo(ctx: AdsProviderContext, input: { itemIds: readonly string[] }): Promise<ProviderPayload>;
 }
 
 const DAY_MS = 86_400_000;
@@ -68,12 +72,13 @@ function rangeDays(range: AdsDateRange): number {
 }
 
 /** Refuses any request shape outside the verified limits (fail closed, before any call). */
-export function assertVerifiedAdsRequest(kind: "list" | "ids" | "campaign_range" | "shop_range" | "shop_hourly" | "campaign_hourly", value: { limit?: number; ids?: readonly string[]; range?: AdsDateRange; date?: string }) {
+export function assertVerifiedAdsRequest(kind: "list" | "ids" | "campaign_range" | "shop_range" | "shop_hourly" | "campaign_hourly" | "item_ids", value: { limit?: number; ids?: readonly string[]; range?: AdsDateRange; date?: string }) {
   if (kind === "list" && (!value.limit || value.limit < 1 || value.limit > ADS_CAMPAIGN_PAGE_SIZE)) throw new Error(`limit phải trong 1…${ADS_CAMPAIGN_PAGE_SIZE}.`);
   // hourly: one performance_date per call (verified shape) — a single valid day, never a range
   if (kind === "shop_hourly" || kind === "campaign_hourly") rangeDays({ from: value.date ?? "", to: value.date ?? "" });
   if ((kind === "ids" || kind === "campaign_range" || kind === "campaign_hourly") && (!value.ids?.length || value.ids.length > ADS_ID_BATCH)) throw new Error(`Cần 1…${ADS_ID_BATCH} campaign id mỗi lần gọi.`);
-  if (value.ids?.some((id) => !/^\d{1,20}$/.test(id))) throw new Error("campaign id không hợp lệ.");
+  if (kind === "item_ids" && (!value.ids?.length || value.ids.length > ADS_ITEM_BATCH || new Set(value.ids).size !== value.ids.length)) throw new Error(`Cần 1…${ADS_ITEM_BATCH} item id khác nhau mỗi lần gọi.`);
+  if (value.ids?.some((id) => !/^\d{1,20}$/.test(id))) throw new Error(kind === "item_ids" ? "item id không hợp lệ." : "campaign id không hợp lệ.");
   if (kind === "campaign_range" && rangeDays(value.range!) > ADS_CAMPAIGN_RANGE_DAYS) throw new Error(`Hiệu quả chiến dịch: tối đa ${ADS_CAMPAIGN_RANGE_DAYS} ngày mỗi lần gọi.`);
   if (kind === "shop_range" && rangeDays(value.range!) > ADS_SHOP_RANGE_DAYS) throw new Error(`Hiệu quả shop: tối đa ${ADS_SHOP_RANGE_DAYS} ngày mỗi lần gọi.`);
 }
@@ -91,7 +96,10 @@ export class RealShopeeAdsProvider implements ShopeeAdsProvider {
   }
 
   private async get(ctx: AdsProviderContext, endpoint: AdsReadEndpoint, query: Record<string, string | number>): Promise<ProviderPayload> {
-    const apiPath = ADS_READ_ENDPOINTS[endpoint];
+    return this.getPath(ctx, ADS_READ_ENDPOINTS[endpoint], query);
+  }
+
+  private async getPath(ctx: AdsProviderContext, apiPath: string, query: Record<string, string | number>): Promise<ProviderPayload> {
     assertAdsReadOnlyRequest("GET", apiPath); // read-only policy: GET + allowlisted read path, always
     const accessToken = await this.connections.getValidAccessToken(ctx.shopId);
     try {
@@ -132,6 +140,11 @@ export class RealShopeeAdsProvider implements ShopeeAdsProvider {
     assertVerifiedAdsRequest("campaign_hourly", { ids: input.campaignIds, date: input.date });
     return this.get(ctx, "campaign_hourly_performance", { performance_date: formatAdsDate(input.date), campaign_id_list: input.campaignIds.join(",") });
   }
+
+  async getItemBaseInfo(ctx: AdsProviderContext, input: { itemIds: readonly string[] }) {
+    assertVerifiedAdsRequest("item_ids", { ids: input.itemIds });
+    return this.getPath(ctx, ADS_PRODUCT_READ_ENDPOINTS.item_base_info, { item_id_list: input.itemIds.join(",") });
+  }
 }
 
 // ------------------------------------------------------------------ fixture (sanitized production payloads)
@@ -157,6 +170,8 @@ export interface AdsFixtureData {
    * Tests that need exact data turn it off.
    */
   replayHourly: boolean;
+  /** ADS-3A.2: item id → get_item_base_info entry (sanitized production projection, item-base-info.json). */
+  items: Map<string, Obj>;
 }
 
 /** Loads the production fixtures captured by ADS-1A / 1A.1 (masked ids, real metrics). */
@@ -164,7 +179,7 @@ export function loadAdsFixtures(dir: string = ADS_FIXTURE_DIR): AdsFixtureData {
   const files = readdirSync(dir).filter((f) => f.endsWith(".json") && !f.startsWith("_"));
   const read = (f: string) => JSON.parse(readFileSync(path.join(dir, f), "utf8")) as { response?: { response?: unknown } };
   const body = (f: string) => read(f).response?.response;
-  const data: AdsFixtureData = { campaignIds: [], settings: new Map(), campaignDaily: new Map(), shopDaily: new Map(), shopHourly: new Map(), campaignHourly: new Map(), replayHourly: true };
+  const data: AdsFixtureData = { campaignIds: [], settings: new Map(), campaignDaily: new Map(), shopDaily: new Map(), shopHourly: new Map(), campaignHourly: new Map(), replayHourly: true, items: new Map() };
   // the expansion run (exp-*) holds the complete, consistently masked campaign set
   for (const f of files.filter((n) => /^exp-campaign-id-list/.test(n)).sort()) {
     for (const c of ((body(f) as Obj)?.campaign_list as Obj[]) ?? []) data.campaignIds.push(String(c.campaign_id));
@@ -193,6 +208,10 @@ export function loadAdsFixtures(dir: string = ADS_FIXTURE_DIR): AdsFixtureData {
       for (const m of (c.metrics_list as Obj[]) ?? []) byDate.set(String(m.date), [...(byDate.get(String(m.date)) ?? []), m]);
       data.campaignHourly.set(String(c.campaign_id), byDate);
     }
+  }
+  // product metadata (ADS-3A.2): masked ids = the Ads fixtures' item ids
+  for (const f of files.filter((n) => n === "item-base-info.json")) {
+    for (const it of ((body(f) as Obj)?.item_list as Obj[]) ?? []) data.items.set(String(it.item_id), it);
   }
   return data;
 }
@@ -229,6 +248,8 @@ export class FixtureShopeeAdsProvider implements ShopeeAdsProvider {
     shopDaily?: (date: string, row: Obj) => Obj;
     shopHourly?: (date: string, row: Obj) => Obj;
     campaignHourly?: (id: string, date: string, row: Obj) => Obj;
+    /** ADS-3A.2: change an item entry; null = the provider does not return this item. */
+    item?: (id: string, row: Obj) => Obj | null;
   };
 
   constructor(data: AdsFixtureData = loadAdsFixtures(), overrides: FixtureShopeeAdsProvider["overrides"] = {}) {
@@ -239,6 +260,20 @@ export class FixtureShopeeAdsProvider implements ShopeeAdsProvider {
   private guard(endpoint: AdsReadEndpoint) {
     assertAdsReadOnlyRequest("GET", ADS_READ_ENDPOINTS[endpoint]);
     return ADS_READ_ENDPOINTS[endpoint];
+  }
+
+  async getItemBaseInfo(_ctx: AdsProviderContext, input: { itemIds: readonly string[] }) {
+    assertVerifiedAdsRequest("item_ids", { ids: input.itemIds });
+    const apiName = ADS_PRODUCT_READ_ENDPOINTS.item_base_info;
+    assertAdsReadOnlyRequest("GET", apiName);
+    // like the real API: entries for the requested items it knows, nothing for the others
+    const item_list = input.itemIds.flatMap((id) => {
+      const row = this.data.items.get(id);
+      if (!row) return [];
+      const out = this.overrides.item ? this.overrides.item(id, { ...row }) : row;
+      return out ? [out] : [];
+    });
+    return { apiName, requestId: "fixture", raw: envelope({ item_list }) };
   }
 
   async listProductLevelCampaignIds(_ctx: AdsProviderContext, input: { offset: number; limit: number }) {
@@ -352,5 +387,9 @@ export class MeteredShopeeAdsProvider implements ShopeeAdsProvider {
 
   async getProductCampaignHourlyPerformance(ctx: AdsProviderContext, input: { campaignIds: readonly string[]; date: string }) {
     return this.meter.track(ADS_READ_ENDPOINTS.campaign_hourly_performance, () => this.inner.getProductCampaignHourlyPerformance(ctx, input));
+  }
+
+  async getItemBaseInfo(ctx: AdsProviderContext, input: { itemIds: readonly string[] }) {
+    return this.meter.track(ADS_PRODUCT_READ_ENDPOINTS.item_base_info, () => this.inner.getItemBaseInfo(ctx, input));
   }
 }

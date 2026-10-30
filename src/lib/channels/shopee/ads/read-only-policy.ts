@@ -35,8 +35,21 @@ export const ADS_READ_ENDPOINTS = {
 } as const;
 export type AdsReadEndpoint = keyof typeof ADS_READ_ENDPOINTS;
 
+/**
+ * ADS-3A.2 product enrichment: the ONE product-module read the Ads domain may
+ * call — metadata (name / SKU / image / status) of items already referenced by
+ * Ads campaigns. Verified in production (docs/shopee-ads-product-enrichment.md).
+ * Exact paths only: no other /api/v2/product/ endpoint (no item list / catalogue
+ * scan, no update_item / price / stock / unlist …) is reachable from Ads code.
+ */
+export const ADS_PRODUCT_READ_ENDPOINTS = {
+  item_base_info: "/api/v2/product/get_item_base_info",
+} as const;
+export type AdsProductReadEndpoint = keyof typeof ADS_PRODUCT_READ_ENDPOINTS;
+const PRODUCT_READ_PATHS = new Set<string>(Object.values(ADS_PRODUCT_READ_ENDPOINTS));
+
 /** Queue job types of the Ads domain — read / sync only (ads_<what>_read). */
-export const ADS_SYNC_TYPES = ["ads_campaign_read", "ads_campaign_performance_read", "ads_shop_performance_read", "ads_shop_hourly_read", "ads_campaign_hourly_read"] as const;
+export const ADS_SYNC_TYPES = ["ads_campaign_read", "ads_campaign_performance_read", "ads_shop_performance_read", "ads_shop_hourly_read", "ads_campaign_hourly_read", "ads_product_enrichment_read"] as const;
 export type AdsSyncType = (typeof ADS_SYNC_TYPES)[number];
 
 export function isAdsSyncType(type: string): type is AdsSyncType {
@@ -73,6 +86,8 @@ export const ADS_FORBIDDEN_IDENTIFIERS: readonly string[] = [
   "pauseCampaign", "resumeCampaign", "stopCampaign", "setBudget", "updateBudget", "changeBudget",
   "setBid", "updateBid", "changeBid", "changeStatus", "setStatus", "updateStatus",
   "setTargetRoas", "updateKeyword", "addKeyword", "deleteKeyword", "applyRecommendation",
+  // ADS-3A.2: product / listing writes
+  "updateItem", "addItem", "deleteItem", "unlistItem", "updatePrice", "updateStock", "updateModel", "updateSku",
 ];
 
 export class AdsWriteForbiddenError extends Error {
@@ -82,8 +97,9 @@ export class AdsWriteForbiddenError extends Error {
   }
 }
 
-/** "/api/v2/ads/get_xxx" with a read verb and no mutation token. */
+/** "/api/v2/ads/get_xxx" with a read verb and no mutation token, or one exact allowlisted product read. */
 export function isAdsReadOnlyPath(path: string): boolean {
+  if (PRODUCT_READ_PATHS.has(path)) return /^\/api\/v2\/product\/get_[a-z_]+$/.test(path) && path.split("/").pop()!.split("_").every((t) => !ADS_MUTATION_TOKENS.includes(t));
   const m = /^\/api\/v2\/ads\/([a-z0-9_]+)$/.exec(path);
   if (!m) return false;
   const name = m[1];

@@ -172,9 +172,9 @@ test("no-browser flow: tick → metadata + 30-day backfill + HOT; 15 min later H
   const jitter = Date.parse(due![0].next_attempt_at) - T0.getTime();
   assert.ok(jitter >= 0 && jitter <= 20_000, `jitter ${jitter} ms`);
   assert.deepEqual(queued.map((j) => [j.sync_type, j.lane, j.priority]).sort(), [
-    ["ads_campaign_performance_read", "ads_backfill", 9],
+    ["ads_campaign_performance_read", "ads_backfill", 10],
     ["ads_campaign_read", "ads_meta", 2],
-    ["ads_shop_performance_read", "ads_backfill", 9],
+    ["ads_shop_performance_read", "ads_backfill", 10],
     ["ads_shop_performance_read", "ads_hot", 2],
   ]);
   const reports = await drain([A.id], fixtureProvider);

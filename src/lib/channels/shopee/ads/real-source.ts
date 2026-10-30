@@ -65,6 +65,13 @@ interface CampaignAggRow extends Omit<ShopDailyRow, "report_date"> {
   roas_target: Num;
   item_ids: string[] | null;
   daily: Array<{ d: string; e: Num; g: Num }> | null;
+  /** ADS-3A.2 (migration 00068): advertised items' metadata; absent on an older RPC. */
+  products?: Array<{ i: string; n: string | null; img: string | null; sku: string | null; st: string | null; es: "enriched" | "not_returned" | null }> | null;
+}
+
+/** Neutral placeholder while an item's metadata is unknown (never "error", never a fixture name). */
+export function adsProductPlaceholder(itemId: string): string {
+  return `Sản phẩm Shopee #${itemId}`;
 }
 
 export const ADS_SYNC_LABELS: Record<(typeof ADS_SYNC_TYPES)[number], string> = {
@@ -73,6 +80,7 @@ export const ADS_SYNC_LABELS: Record<(typeof ADS_SYNC_TYPES)[number], string> = 
   ads_shop_performance_read: "Tổng quảng cáo cấp shop",
   ads_shop_hourly_read: "Tổng shop theo giờ",
   ads_campaign_hourly_read: "Chiến dịch theo giờ",
+  ads_product_enrichment_read: "Thông tin sản phẩm",
 };
 
 const NO_SHOP = "00000000-0000-0000-0000-000000000000";
@@ -238,6 +246,7 @@ export class RealAdsDashboardSource implements AdsDashboardSource {
       const dailyBudget = budget !== null && budget > 0 ? budget : null; // 0 = meaning unknown → "—"
       const activeDays = daily.filter((d) => d.e > 0).length;
       const items = c.item_ids ?? [];
+      const meta = new Map((c.products ?? []).map((p) => [String(p.i), p]));
       const dailyByDate = new Map(daily.map((d) => [d.d, d]));
       return {
         id: c.campaign_id,
@@ -255,8 +264,12 @@ export class RealAdsDashboardSource implements AdsDashboardSource {
         trend: granularity === "day" ? days.filter((d) => dayKeys.has(d)).map((d) => ({ label: dayLabel(d), spend: dailyByDate.get(d)?.e ?? 0, revenue: dailyByDate.get(d)?.g ?? 0 })) : [],
         // Shopee reports metrics per CAMPAIGN, not per item: per-product numbers only when the campaign has exactly one item
         topProducts: items.map((itemId) => ({
-          name: `Sản phẩm #${itemId}`,
+          name: meta.get(itemId)?.n ?? adsProductPlaceholder(itemId),
           itemId,
+          imageUrl: meta.get(itemId)?.img ?? null,
+          sku: meta.get(itemId)?.sku ?? null,
+          providerStatus: meta.get(itemId)?.st ?? null,
+          enrichment: meta.get(itemId)?.es ?? "pending",
           spend: items.length === 1 ? metrics.spend : null,
           revenue: items.length === 1 ? metrics.revenue : null,
           orders: items.length === 1 ? metrics.orders : null,

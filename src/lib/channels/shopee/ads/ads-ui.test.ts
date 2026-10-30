@@ -286,7 +286,7 @@ test("64. the dashboard never calls Shopee: no client / fetch / endpoint in the 
   }
 });
 
-test("65. Ads canonical tables exist ONLY in migration 00064 (ADS-1B), the scheduler settings table only in 00065 (ADS-2), the hourly tables only in 00067 (ADS-3A.1); no Ads write / mutation RPC exists", () => {
+test("65. Ads canonical tables exist ONLY in migration 00064 (ADS-1B), the scheduler settings table only in 00065 (ADS-2), the hourly tables only in 00067 (ADS-3A.1), the product cache only in 00068 (ADS-3A.2); no Ads write / mutation RPC exists", () => {
   const migrations = readdirSync(path.join(ROOT, "supabase/migrations"));
   let enqueueVersions = 0;
   for (const m of migrations) {
@@ -295,9 +295,15 @@ test("65. Ads canonical tables exist ONLY in migration 00064 (ADS-1B), the sched
     if (m.startsWith("00064_")) assert.equal(adsTables.length, 4, m);
     else if (m.startsWith("00065_")) assert.deepEqual(adsTables, ["shopee_ads_shop_settings"], `${m}: only the per-shop scheduler switch / slots (no Ads data)`);
     else if (m.startsWith("00067_")) assert.deepEqual(adsTables, ["shopee_ads_shop_hourly_performance", "shopee_ads_campaign_hourly_performance"], `${m}: only the two hourly fact tables`);
+    else if (m.startsWith("00068_")) assert.deepEqual(adsTables, ["shopee_ads_products"], `${m}: only the Ads product metadata cache`);
     else assert.equal(adsTables.length, 0, `${m}: Ads tables belong to 00064`);
     // read RPCs only (ads_dashboard_* / ads_sync_freshness) — never a function that could push changes to Shopee
-    for (const fn of sql.match(/function\s+public\.(ads_\w+)/gi) ?? []) assert.match(fn, /ads_dashboard_|ads_sync_freshness/i, `${m}: ${fn}`);
+    for (const fn of sql.match(/function\s+public\.(ads_\w+)/gi) ?? []) assert.match(fn, /ads_dashboard_|ads_sync_freshness|ads_product_enrichment_(candidates|summary)\b/i, `${m}: ${fn}`);
+    // ADS-3A.2 read RPCs are plain STABLE SQL selects
+    for (const body of sql.matchAll(/FUNCTION public\.ads_product_enrichment_\w+\([\s\S]*?\n\$\$;/g)) {
+      assert.match(body[0], /LANGUAGE sql STABLE/, `${m}: enrichment RPC must be a STABLE read`);
+      assert.doesNotMatch(body[0], /\b(INSERT INTO|UPDATE|DELETE FROM)\b/, `${m}: enrichment RPC writes`);
+    }
     // every version of the Ads enqueue RPC only touches the local job queue
     const enqueue = /CREATE (?:OR REPLACE )?FUNCTION public\.enqueue_ads_sync_job[\s\S]*?\n\$\$;/.exec(sql)?.[0];
     if (enqueue) enqueueVersions++;

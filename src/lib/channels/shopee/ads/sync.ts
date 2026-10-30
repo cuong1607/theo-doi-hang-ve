@@ -10,6 +10,9 @@
 //   ads_shop_hourly_read           ADS-3A.1: one date per call → shop × hour rows
 //   ads_campaign_hourly_read       ADS-3A.1: one date × ≤50 ids → campaign × hour
 //                                  (today: hours ≤ current shop hour only)
+//   ads_product_enrichment_read    ADS-3A.2: product/get_item_base_info × ≤50 item
+//                                  ids → shopee_ads_products (only items referenced
+//                                  by Ads campaigns that are unknown / TTL-expired)
 //
 // ADS-2 strategies (metadata.strategy, each in its own queue lane):
 //   hot       every 15 min, TODAY only; campaigns = active candidates
@@ -21,6 +24,8 @@
 //   repair    metadata re-read when a performance answer names an unknown campaign
 //   finalize  ADS-3A.1: yesterday's hourly rows once after the day rollover
 //             (all campaigns) + hourly-vs-daily reconciliation
+//   enrichment ADS-3A.2: product metadata, lowest priority above backfill;
+//             the canonical table is the cache (fresh items are never re-read)
 //
 // Runs only inside the existing queue worker (claim / lease / checkpoint /
 // retry / backoff / stale recovery). Never called from a page render.
@@ -43,11 +48,13 @@ import {
   parseCampaignSettings,
   parseShopDailyPerformance,
   parseShopHourlyPerformance,
+  parseItemBaseInfo,
   type AdsCampaignWrite,
+  type AdsProductWrite,
   type AdsHourlyPrimitives,
   type AdsPerformancePrimitives,
 } from "./mapper.ts";
-import { ADS_CAMPAIGN_PAGE_SIZE, ADS_CAMPAIGN_RANGE_DAYS, ADS_ID_BATCH, ADS_SHOP_RANGE_DAYS, type AdsDateRange, type AdsProviderContext, type ShopeeAdsProvider } from "./provider.ts";
+import { ADS_CAMPAIGN_PAGE_SIZE, ADS_CAMPAIGN_RANGE_DAYS, ADS_ID_BATCH, ADS_ITEM_BATCH, ADS_SHOP_RANGE_DAYS, type AdsDateRange, type AdsProviderContext, type ShopeeAdsProvider } from "./provider.ts";
 import { type AdsSyncType } from "./read-only-policy.ts";
 import { sanitizeAdsPayload } from "./sanitize.ts";
 import { ADS_SNAPSHOT_ENTITY_TYPE } from "./types.ts";
@@ -94,6 +101,10 @@ export interface AdsSyncConfig {
   hourlyStaleMinutes: number;
   /** Shop-local "HH:MM" when YESTERDAY's hourly rows are re-read once (all campaigns) and reconciled with the daily facts. */
   hourlyFinalizeTime: string;
+  /** ADS_PRODUCT_ENRICHMENT_ENABLED (ADS-3A.2): product metadata reads for Ads-referenced items. Default OFF until the pilot is validated. */
+  productEnrichmentEnabled: boolean;
+  /** A cached item is re-read only after this many hours (ADS_PRODUCT_ENRICHMENT_TTL_HOURS). */
+  productEnrichmentTtlHours: number;
 }
 
 const intEnv = (v: string | undefined, fallback: number, min: number, max: number) => {
@@ -137,6 +148,8 @@ export function getAdsSyncConfig(env: Record<string, string | undefined> = proce
     hourlyFreshTargetMinutes: intEnv(env.ADS_HOURLY_FRESH_TARGET_MINUTES, 25, 5, 240),
     hourlyStaleMinutes: intEnv(env.ADS_HOURLY_STALE_MINUTES, 35, 10, 480),
     hourlyFinalizeTime: timesEnv(env.ADS_HOURLY_FINALIZE_TIME, ["02:30"])[0],
+    productEnrichmentEnabled: boolEnv(env.ADS_PRODUCT_ENRICHMENT_ENABLED, false),
+    productEnrichmentTtlHours: intEnv(env.ADS_PRODUCT_ENRICHMENT_TTL_HOURS, 24, 1, 30 * 24),
   };
 }
 
@@ -146,18 +159,23 @@ export function resolveAdsSyncConfig(config?: Partial<AdsSyncConfig>): AdsSyncCo
 }
 
 /** finalize (ADS-3A.1): yesterday's hourly rows re-read once after the day rollover (all campaigns) + reconciliation. */
-export const ADS_STRATEGIES = ["hot", "warm", "cold", "backfill", "manual", "metadata", "repair", "finalize"] as const;
+/** enrichment (ADS-3A.2): product metadata of Ads-referenced items (unknown / stale / admin refresh). */
+export const ADS_STRATEGIES = ["hot", "warm", "cold", "backfill", "manual", "metadata", "repair", "finalize", "enrichment"] as const;
 export type AdsStrategy = (typeof ADS_STRATEGIES)[number];
 /** Queue lane per strategy (one active job per shop + type + lane). */
 export type AdsLane = "ads_hot" | "ads_warm" | "ads_cold" | "ads_backfill" | "ads_meta";
 /** Which campaigns a campaign-performance job reads. */
 export type AdsCampaignScope = "all" | "hot" | "warm";
+/** Which items an enrichment job reads: unknown + stale (default), or every referenced item (admin refresh). */
+export type AdsProductScope = "stale" | "all";
 
 /**
  * Claim order (lower first). Current-day data always outranks restatement /
  * backfill; a continued slice goes to the back of its own priority line.
  * ADS-3A.1: hourly reads rank right below the daily HOT reads (hourly never
  * makes daily freshness worse); manual hourly follows every manual daily slice.
+ * ADS-3A.2: product enrichment ranks below every performance read (only the
+ * first backfill is lower) — metadata never delays HOT / hourly / WARM / COLD.
  */
 export const ADS_PRIORITY = {
   manual: 1,
@@ -172,7 +190,8 @@ export const ADS_PRIORITY = {
   metadata: 7,
   cold: 8,
   hourlyFinalize: 8,
-  backfill: 9,
+  productEnrichment: 9,
+  backfill: 10,
 } as const;
 
 // ------------------------------------------------------------------ dates (pure)
@@ -517,6 +536,8 @@ interface CampaignCheckpoint {
   offset: number;
   ids: string[];
   settingsIndex: number;
+  /** Product links inserted by this job (ADS-3A.2 new-item fast path). */
+  linksInserted?: number;
 }
 
 interface RunnerDeps {
@@ -568,12 +589,23 @@ export class AdsCampaignReadRunner implements SyncJobRunner {
       progress.counters.failed += parsed.failures.length;
       progress.incr("productLinksInserted", links.inserted);
       progress.incr("productLinksRemoved", links.removed);
+      cp.linksInserted = (cp.linksInserted ?? 0) + links.inserted;
       for (const f of parsed.failures) failures.push({ externalId: f.id, reason: f.reason });
       progress.meta.adsFailures = failures.slice(0, 20);
       cp.settingsIndex++;
       if (await save()) return { kind: "cancelled" };
     }
     progress.meta.campaignsSeen = cp.ids.length;
+    // ADS-3A.2 new-item fast path: a newly advertised item gets its name without waiting for the next enrichment slot.
+    // Never fails the catalogue read (the scheduler's enrichment slot is the safety net).
+    if ((cp.linksInserted ?? 0) > 0) {
+      try {
+        const r = await maybeEnqueueAdsProductEnrichment(this.deps.db, { shopId: shop.id, now: now(), config: this.deps.config });
+        progress.meta.productEnrichment = r ? { jobId: r.jobId, created: r.created } : "not_needed";
+      } catch (err) {
+        progress.meta.productEnrichment = { error: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200) };
+      }
+    }
     return doneOutcome(null, failures.length, failures[0]?.reason ?? null, now());
   }
 }
@@ -1027,6 +1059,226 @@ export class AdsCampaignHourlyReadRunner implements SyncJobRunner {
 }
 
 /** Retryable: the campaign catalogue is not there yet (backoff, then the job runs again). */
+// ------------------------------------------------------------------ ADS-3A.2 product enrichment (READ ONLY, cache-first)
+
+/** get_item_base_info fields kept in the snapshot: a projection (no description / attributes / logistics / promotion data). */
+const ITEM_SNAPSHOT_FIELDS = ["item_id", "item_name", "item_sku", "item_status", "image", "has_model", "update_time"];
+
+export function projectItemBaseInfo(raw: unknown): unknown {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw;
+  const envelope = raw as Record<string, unknown>;
+  const response = envelope.response && typeof envelope.response === "object" ? (envelope.response as Record<string, unknown>) : null;
+  if (!response || !Array.isArray(response.item_list)) return raw;
+  const item_list = response.item_list.map((it) =>
+    it && typeof it === "object" ? Object.fromEntries(Object.entries(it as Record<string, unknown>).filter(([k]) => ITEM_SNAPSHOT_FIELDS.includes(k))) : it,
+  );
+  return { ...envelope, response: { ...response, item_list } };
+}
+
+/** Items last checked before this instant are stale (ADS_PRODUCT_ENRICHMENT_TTL_HOURS). */
+export function adsProductStaleBefore(now: Date, config: Pick<AdsSyncConfig, "productEnrichmentTtlHours">): string {
+  return new Date(now.getTime() - config.productEnrichmentTtlHours * 3_600_000).toISOString();
+}
+
+export interface AdsProductEnrichmentStatus {
+  shopId: string;
+  /** Distinct items referenced by the shop's Ads campaigns. */
+  referenced: number;
+  enriched: number;
+  notReturned: number;
+  /** Referenced but never read. */
+  missing: number;
+  /** Read before the TTL. */
+  stale: number;
+  withImage: number;
+  withSku: number;
+  lastEnrichedAt: string | null;
+}
+
+export async function loadAdsProductEnrichmentStatus(db: SupabaseClient, shopIds: string[], staleBefore: string): Promise<AdsProductEnrichmentStatus[]> {
+  if (!shopIds.length) return [];
+  const { data, error } = await db.rpc("ads_product_enrichment_summary", { p_shop_ids: shopIds, p_stale_before: staleBefore });
+  if (error) throw new Error(`Không đọc được trạng thái thông tin sản phẩm: ${error.message}`);
+  type Row = { shop_id: string; referenced: number; enriched: number; not_returned: number; missing: number; stale: number; with_image: number; with_sku: number; last_enriched_at: string | null };
+  return ((data ?? []) as Row[]).map((r) => ({
+    shopId: r.shop_id,
+    referenced: Number(r.referenced),
+    enriched: Number(r.enriched),
+    notReturned: Number(r.not_returned),
+    missing: Number(r.missing),
+    stale: Number(r.stale),
+    withImage: Number(r.with_image),
+    withSku: Number(r.with_sku),
+    lastEnrichedAt: r.last_enriched_at,
+  }));
+}
+
+/** Per-shop enrichment switch (shopee_ads_shop_settings.ads_product_enrichment_enabled, default OFF). */
+export async function adsProductEnrichmentEnabled(db: SupabaseClient, shopId: string): Promise<boolean> {
+  const { data, error } = await db.from("shopee_ads_shop_settings").select("ads_product_enrichment_enabled").eq("shop_id", shopId).maybeSingle<{ ads_product_enrichment_enabled: boolean }>();
+  if (error) throw new Error(`Không đọc được cấu hình thông tin sản phẩm: ${error.message}`);
+  return !!data?.ads_product_enrichment_enabled;
+}
+
+/** PostgREST returns ≤ 1000 rows: one job reads at most this many items; the next slot continues (unknown items first). */
+const ENRICHMENT_MAX_ITEMS_PER_JOB = 1000;
+
+/**
+ * Enqueues an enrichment job only when it would read something: global flag +
+ * shop switch on, and (unless an admin forces every item) at least one
+ * referenced item is unknown or stale. Fresh cache → no job, no provider call.
+ */
+export async function maybeEnqueueAdsProductEnrichment(
+  db: SupabaseClient,
+  input: { shopId: string; now?: Date; config?: Partial<AdsSyncConfig>; scope?: AdsProductScope; createdBy?: string | null; notBefore?: Date | null; mode?: SyncMode },
+): Promise<AdsEnqueueResult | null> {
+  const now = input.now ?? new Date();
+  const config = resolveAdsSyncConfig(input.config);
+  if (!config.productEnrichmentEnabled || !(await adsProductEnrichmentEnabled(db, input.shopId))) return null;
+  const scope = input.scope ?? "stale";
+  if (scope === "stale") {
+    const [status] = await loadAdsProductEnrichmentStatus(db, [input.shopId], adsProductStaleBefore(now, config));
+    if (!status || status.missing + status.stale === 0) return null;
+  }
+  return enqueueAdsJob(db, { shopId: input.shopId, syncType: "ads_product_enrichment_read", strategy: "enrichment", priority: ADS_PRIORITY.productEnrichment, scope, now, notBefore: input.notBefore ?? null, createdBy: input.createdBy ?? null, mode: input.mode });
+}
+
+/**
+ * Returned items → current metadata (a rename simply updates the row; campaign
+ * history is untouched). Returns how many rows were new / changed.
+ */
+export async function upsertAdsProducts(db: SupabaseClient, shopId: string, items: AdsProductWrite[], checkedAt: string): Promise<{ created: number; changed: number; renamed: number }> {
+  if (!items.length) return { created: 0, changed: 0, renamed: 0 };
+  const { data: existing, error } = await db
+    .from("shopee_ads_products")
+    .select("provider_item_id, product_name, image_url, item_sku, provider_status, enrichment_status")
+    .eq("shop_id", shopId)
+    .in("provider_item_id", items.map((i) => i.providerItemId));
+  if (error) throw new Error(`Không đọc được thông tin sản phẩm: ${error.message}`);
+  type Row = { provider_item_id: string; product_name: string | null; image_url: string | null; item_sku: string | null; provider_status: string | null; enrichment_status: string };
+  const have = new Map(((existing ?? []) as Row[]).map((r) => [r.provider_item_id, r]));
+  let created = 0;
+  let changed = 0;
+  let renamed = 0;
+  for (const i of items) {
+    const old = have.get(i.providerItemId);
+    if (!old) created++;
+    else if (old.product_name !== i.productName || old.image_url !== i.imageUrl || old.item_sku !== i.itemSku || old.provider_status !== i.providerStatus || old.enrichment_status !== "enriched") changed++;
+    if (old && old.product_name !== null && old.product_name !== i.productName) renamed++;
+  }
+  for (const part of chunk(items, UPSERT_CHUNK)) {
+    const { error: upError } = await db.from("shopee_ads_products").upsert(
+      part.map((i) => ({
+        shop_id: shopId,
+        provider_item_id: i.providerItemId,
+        product_name: i.productName,
+        image_url: i.imageUrl,
+        item_sku: i.itemSku,
+        provider_status: i.providerStatus,
+        enrichment_status: "enriched",
+        last_enriched_at: checkedAt,
+        last_checked_at: checkedAt,
+      })),
+      { onConflict: "shop_id,provider_item_id" },
+    );
+    if (upError) throw new Error(`Không lưu được thông tin sản phẩm: ${upError.message}`);
+  }
+  return { created, changed, renamed };
+}
+
+/**
+ * Items the provider did not return: only the status + check time change —
+ * metadata of an earlier read is kept, nothing is deleted (meaning unverified).
+ */
+export async function markAdsProductsNotReturned(db: SupabaseClient, shopId: string, itemIds: string[], checkedAt: string): Promise<void> {
+  for (const part of chunk(itemIds, UPSERT_CHUNK)) {
+    const { error } = await db
+      .from("shopee_ads_products")
+      .upsert(part.map((id) => ({ shop_id: shopId, provider_item_id: id, enrichment_status: "not_returned", last_checked_at: checkedAt })), { onConflict: "shop_id,provider_item_id" });
+    if (error) throw new Error(`Không lưu được trạng thái sản phẩm: ${error.message}`);
+  }
+}
+
+interface EnrichmentCheckpoint {
+  /** Item ids of this job, frozen on the first slice (batches never shift between slices). */
+  ids: string[];
+  batchIndex: number;
+}
+
+export class AdsProductEnrichmentReadRunner implements SyncJobRunner {
+  private readonly deps: RunnerDeps;
+
+  constructor(deps: RunnerDeps) {
+    this.deps = deps;
+  }
+
+  async runSlice(input: SliceInput): Promise<SliceOutcome> {
+    const { job, lease, budget, now } = input;
+    const config = resolveAdsSyncConfig(this.deps.config);
+    const progress = input.progress as SliceInput<EnrichmentCheckpoint>["progress"];
+    const shop = await loadAdsShop(this.deps.db, job.shop_id);
+    const ctx: AdsProviderContext = { shopId: shop.id, externalShopId: shop.external_shop_id };
+    if (!progress.checkpoint) {
+      // switched off since the job was queued → finish without any provider call
+      if (!config.productEnrichmentEnabled || !(await adsProductEnrichmentEnabled(this.deps.db, shop.id))) {
+        progress.meta.skipped = "disabled";
+        return doneOutcome(null, 0, null, now());
+      }
+      const force = job.metadata?.adsScope === "all";
+      const staleBefore = adsProductStaleBefore(now(), config);
+      const [status] = await loadAdsProductEnrichmentStatus(this.deps.db, [shop.id], staleBefore);
+      const { data, error } = await this.deps.db.rpc("ads_product_enrichment_candidates", { p_shop_id: shop.id, p_stale_before: staleBefore, p_force: force, p_limit: ENRICHMENT_MAX_ITEMS_PER_JOB });
+      if (error) throw new Error(`Không đọc được danh sách sản phẩm cần bổ sung: ${error.message}`);
+      const candidates = (data ?? []) as Array<{ provider_item_id: string; reason: string }>;
+      progress.checkpoint = { ids: [...new Set(candidates.map((c) => c.provider_item_id))], batchIndex: 0 };
+      const referenced = status?.referenced ?? 0;
+      progress.meta.productScope = {
+        scope: force ? "all" : "stale",
+        referenced,
+        candidates: progress.checkpoint.ids.length,
+        missing: candidates.filter((c) => c.reason === "missing").length,
+        stale: candidates.filter((c) => c.reason === "stale").length,
+        // product_enrichment_cache_hit_rate: referenced items served from the canonical cache (no provider call)
+        cacheHits: Math.max(0, referenced - progress.checkpoint.ids.length),
+        cacheHitRate: referenced > 0 ? Math.round((Math.max(0, referenced - progress.checkpoint.ids.length) / referenced) * 10_000) / 10_000 : null,
+        ttlHours: config.productEnrichmentTtlHours,
+      };
+      if ((await lease.checkpoint(progress.toPatch())).cancelRequested) return { kind: "cancelled" };
+    }
+    const cp = progress.checkpoint;
+    const batches = chunk(cp.ids, ADS_ITEM_BATCH);
+    const failures = (progress.meta.adsFailures as FailureList | undefined) ?? [];
+    let callsThisSlice = 0;
+    while (cp.batchIndex < batches.length) {
+      if (!budget.canSpend(1)) return continuation(budget, "more_records");
+      // bounded work: large need-sets yield to performance jobs between slices
+      if (callsThisSlice >= config.batchesPerSlice) return { kind: "more", reason: "batch_limit", remaining: "more_records" };
+      const batch = batches[cp.batchIndex];
+      const payload = await this.deps.provider.getItemBaseInfo(ctx, { itemIds: batch });
+      callsThisSlice++;
+      const checkedAt = now().toISOString();
+      await saveAdsSnapshot(this.deps.db, { shopId: shop.id, payload: { ...payload, raw: projectItemBaseInfo(payload.raw) }, key: `item_base_info:${batch[0]}:${batch.length}`, sourceMode: this.deps.provider.mode, syncedAt: checkedAt });
+      const parsed = parseItemBaseInfo(payload.raw, batch);
+      const written = await upsertAdsProducts(this.deps.db, shop.id, parsed.items, checkedAt);
+      await markAdsProductsNotReturned(this.deps.db, shop.id, parsed.notReturned, checkedAt);
+      progress.counters.fetched += parsed.items.length;
+      progress.counters.created += written.created;
+      progress.counters.updated += written.changed;
+      progress.counters.failed += parsed.failures.length;
+      progress.incr("itemsRequested", batch.length);
+      progress.incr("itemsReturned", parsed.items.length);
+      progress.incr("itemsNotReturned", parsed.notReturned.length);
+      progress.incr("imagesRejected", parsed.imagesRejected);
+      progress.incr("productsRenamed", written.renamed);
+      for (const f of parsed.failures) failures.push({ externalId: f.id, reason: f.reason });
+      progress.meta.adsFailures = failures.slice(0, 20);
+      cp.batchIndex++;
+      if ((await lease.checkpoint(progress.toPatch())).cancelRequested) return { kind: "cancelled" };
+    }
+    return doneOutcome(null, failures.length, failures[0]?.reason ?? null, now());
+  }
+}
+
 export class AdsDependencyPendingError extends Error {
   readonly code = "ads_campaigns_pending";
   constructor() {
@@ -1047,6 +1299,8 @@ export function createAdsRunner(job: SyncJobRow, deps: RunnerDeps): SyncJobRunne
       return new AdsShopHourlyReadRunner(deps);
     case "ads_campaign_hourly_read":
       return new AdsCampaignHourlyReadRunner(deps);
+    case "ads_product_enrichment_read":
+      return new AdsProductEnrichmentReadRunner(deps);
     default:
       throw new Error(`Không phải job Ads: ${job.sync_type}`);
   }
@@ -1055,10 +1309,11 @@ export function createAdsRunner(job: SyncJobRow, deps: RunnerDeps): SyncJobRunne
 // ------------------------------------------------------------------ enqueue (dedupe + coalescing in the DB)
 
 // finalize reads a COMPLETED day only → the WARM lane (never counted as today's freshness, never blocks HOT)
-const LANE_OF: Record<AdsStrategy, AdsLane> = { hot: "ads_hot", manual: "ads_hot", warm: "ads_warm", cold: "ads_cold", backfill: "ads_backfill", metadata: "ads_meta", repair: "ads_meta", finalize: "ads_warm" };
+const LANE_OF: Record<AdsStrategy, AdsLane> = { hot: "ads_hot", manual: "ads_hot", warm: "ads_warm", cold: "ads_cold", backfill: "ads_backfill", metadata: "ads_meta", repair: "ads_meta", finalize: "ads_warm", enrichment: "ads_meta" };
 
+/** Catalogue and product metadata always run in the metadata lane (one active job per shop + type). */
 export function adsLaneFor(syncType: AdsSyncType, strategy: AdsStrategy): AdsLane {
-  return syncType === "ads_campaign_read" ? "ads_meta" : LANE_OF[strategy];
+  return syncType === "ads_campaign_read" || syncType === "ads_product_enrichment_read" ? "ads_meta" : LANE_OF[strategy];
 }
 
 export interface AdsEnqueueInput {
@@ -1067,7 +1322,7 @@ export interface AdsEnqueueInput {
   strategy: AdsStrategy;
   priority: number;
   range?: AdsDateRange | null;
-  scope?: AdsCampaignScope;
+  scope?: AdsCampaignScope | AdsProductScope;
   /** Not claimable before this instant (stagger jitter). */
   notBefore?: Date | null;
   createdBy?: string | null;
@@ -1097,7 +1352,10 @@ export async function enqueueAdsJob(db: SupabaseClient, input: AdsEnqueueInput):
   const mode: SyncMode = input.mode ?? (input.strategy === "manual" ? "manual" : input.strategy === "backfill" ? "backfill" : "incremental");
   const metadata: Record<string, unknown> = { strategy: input.strategy, requestedAt: (input.now ?? new Date()).toISOString() };
   if (input.syncType === "ads_campaign_performance_read" || input.syncType === "ads_campaign_hourly_read") metadata.adsScope = input.scope ?? "all";
-  if (input.syncType !== "ads_campaign_read" && !input.range) throw new Error("Job hiệu quả Ads cần khoảng ngày.");
+  // enrichment: "stale" (unknown + TTL-expired items) unless an admin asked for every referenced item ("all" covers "stale")
+  if (input.syncType === "ads_product_enrichment_read") metadata.adsScope = input.scope === "all" ? "all" : "stale";
+  const ranged = input.syncType !== "ads_campaign_read" && input.syncType !== "ads_product_enrichment_read";
+  if (ranged && !input.range) throw new Error("Job hiệu quả Ads cần khoảng ngày.");
   const { data, error } = await db
     .rpc("enqueue_ads_sync_job", {
       p_shop_id: input.shopId,
@@ -1106,8 +1364,8 @@ export async function enqueueAdsJob(db: SupabaseClient, input: AdsEnqueueInput):
       p_mode: mode,
       p_priority: input.priority,
       p_metadata: metadata,
-      p_from: input.syncType === "ads_campaign_read" ? null : input.range!.from,
-      p_to: input.syncType === "ads_campaign_read" ? null : input.range!.to,
+      p_from: ranged ? input.range!.from : null,
+      p_to: ranged ? input.range!.to : null,
       p_not_before: input.notBefore?.toISOString() ?? null,
       p_created_by: input.createdBy ?? null,
       p_coalesce: input.coalesce ?? true,
@@ -1181,10 +1439,21 @@ export async function requestAdsRefresh(
     await add({ syncType: "ads_campaign_hourly_read", strategy: "manual", priority: ADS_PRIORITY.manualHourly, range: today, scope: "all" }, false);
   };
 
+  // ADS-3A.2: product metadata only for unknown / stale items (cache hit → nothing); lowest priority, not awaited
+  const addEnrichment = async () => {
+    try {
+      const r = await maybeEnqueueAdsProductEnrichment(db, { shopId: shop.id, now, config, createdBy: input.createdBy ?? null, mode: "manual" });
+      if (r) jobs.push({ syncType: "ads_product_enrichment_read", strategy: "enrichment", jobId: r.jobId, created: r.created, coalesced: r.coalesced, status: r.status, poll: false });
+    } catch (err) {
+      console.warn(JSON.stringify({ source: "ads-refresh", event: "product_enrichment_enqueue_failed", shopId: shop.id, message: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200) }));
+    }
+  };
+
   if (!initial && !input.force && config.manualDedupeMinutes > 0) {
     const f = await adsTodayFreshness(db, shop.id);
     if (recent(f.shop) && recent(f.campaign)) {
       await addHourly();
+      await addEnrichment();
       return { shopId: shop.id, jobs, range, initial, fresh: true };
     }
   }
@@ -1197,6 +1466,7 @@ export async function requestAdsRefresh(
     await add(backfilled.campaign ? { syncType: "ads_campaign_performance_read", strategy: "manual", priority: ADS_PRIORITY.manual, range: adsHotRange(now, shop.timezone), scope: "all" } : { syncType: "ads_campaign_performance_read", strategy: "backfill", priority: ADS_PRIORITY.manual, range, scope: "all" }, true);
     await add(backfilled.shop ? { syncType: "ads_shop_performance_read", strategy: "manual", priority: ADS_PRIORITY.manual, range: adsHotRange(now, shop.timezone) } : { syncType: "ads_shop_performance_read", strategy: "backfill", priority: ADS_PRIORITY.manual, range }, true);
     await addHourly();
+    await addEnrichment();
     return { shopId: shop.id, jobs, range, initial, fresh: false };
   }
   await add({ syncType: "ads_campaign_performance_read", strategy: "manual", priority: ADS_PRIORITY.manual, range, scope: "all" }, true);
@@ -1221,6 +1491,7 @@ export async function requestAdsRefresh(
     }
   }
   await addHourly();
+  await addEnrichment();
   return { shopId: shop.id, jobs, range, initial, fresh: false };
 }
 

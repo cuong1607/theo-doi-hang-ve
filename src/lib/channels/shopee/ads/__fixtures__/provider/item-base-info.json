@@ -1,0 +1,1880 @@
+{
+  "_meta": {
+    "endpoint": "/api/v2/product/get_item_base_info",
+    "method": "GET",
+    "params": {
+      "item_id_list": "<≤ 50 masked item ids, comma-separated>"
+    },
+    "purpose": "ADS-3A.2 product enrichment: metadata of the items advertised by the Ads fixture campaigns",
+    "environment": "production",
+    "captured_at": "2026-10-29T00:00:00.000Z",
+    "source": "latest live channel_api_snapshots row of v2.product.get_item_base_info per item, for the 101 Ads-referenced items of the ADS-1A shop (the real API returned every one of them)",
+    "note": "Sanitized PROJECTION of real responses: only the fields ADS-3A.2 reads are kept (item_id, item_name, item_sku, item_status, image, has_model, create/update_time); item ids remapped order-preserving onto the masked item ids of the exp-* Ads fixtures (not reversible); names / SKUs / image ids replaced by placeholders; image arrays truncated to the first image; statuses, ratios, timestamps and value types untouched. The live URL shape https://cf.shopee.vn/file/<image_id> (no query string) was verified on 657/657 real snapshots.",
+    "observed_item_keys": [
+      "attribute_list",
+      "authorised_brand_id",
+      "brand",
+      "category_id",
+      "compatibility_info",
+      "condition",
+      "create_time",
+      "deboost",
+      "description",
+      "description_info",
+      "description_type",
+      "dimension",
+      "has_model",
+      "has_promotion",
+      "image",
+      "is_fulfillment_by_shopee",
+      "item_dangerous",
+      "item_id",
+      "item_name",
+      "item_sku",
+      "item_status",
+      "logistic_info",
+      "pre_order",
+      "promotion_id",
+      "promotion_image",
+      "purchase_limit_info",
+      "size_chart",
+      "size_chart_id",
+      "tag",
+      "update_time",
+      "video_info",
+      "weight"
+    ],
+    "truncated_arrays": [
+      "image.image_url_list",
+      "image.image_id_list"
+    ]
+  },
+  "response": {
+    "request_id": "fixture",
+    "error": "",
+    "message": "",
+    "warning": "",
+    "response": {
+      "item_list": [
+        {
+          "item_id": 900000144,
+          "item_name": "Item #1",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000001"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000001"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1751391361,
+          "update_time": 1791764751
+        },
+        {
+          "item_id": 900000145,
+          "item_name": "Item #2",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000002"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000002"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1742921464,
+          "update_time": 1792403182
+        },
+        {
+          "item_id": 900000146,
+          "item_name": "Item #3",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000003"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000003"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1741887629,
+          "update_time": 1789619902
+        },
+        {
+          "item_id": 900000147,
+          "item_name": "Item #4",
+          "item_sku": "SKU-001",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000004"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000004"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1742484650,
+          "update_time": 1787219852
+        },
+        {
+          "item_id": 900000148,
+          "item_name": "Item #5",
+          "item_sku": "",
+          "item_status": "UNLIST",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000005"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000005"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1743181375,
+          "update_time": 1787633917
+        },
+        {
+          "item_id": 900000149,
+          "item_name": "Item #6",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000006"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000006"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1742486328,
+          "update_time": 1790756404
+        },
+        {
+          "item_id": 900000150,
+          "item_name": "Item #7",
+          "item_sku": "",
+          "item_status": "UNLIST",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000007"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000007"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1741706456,
+          "update_time": 1790570982
+        },
+        {
+          "item_id": 900000151,
+          "item_name": "Item #8",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000008"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000008"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1743872658,
+          "update_time": 1787101940
+        },
+        {
+          "item_id": 900000152,
+          "item_name": "Item #9",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000009"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000009"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1743266445,
+          "update_time": 1787997615
+        },
+        {
+          "item_id": 900000153,
+          "item_name": "Item #10",
+          "item_sku": "SKU-002",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000010"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000010"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1750218570,
+          "update_time": 1787128482
+        },
+        {
+          "item_id": 900000154,
+          "item_name": "Item #11",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000011"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000011"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1741799597,
+          "update_time": 1786087797
+        },
+        {
+          "item_id": 900000155,
+          "item_name": "Item #12",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000012"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000012"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1741885143,
+          "update_time": 1792929180
+        },
+        {
+          "item_id": 900000156,
+          "item_name": "Item #13",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000013"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000013"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1750179715,
+          "update_time": 1787651482
+        },
+        {
+          "item_id": 900000157,
+          "item_name": "Item #14",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000014"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000014"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1743170289,
+          "update_time": 1785920140
+        },
+        {
+          "item_id": 900000158,
+          "item_name": "Item #15",
+          "item_sku": "",
+          "item_status": "UNLIST",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000015"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000015"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1743172878,
+          "update_time": 1781572615
+        },
+        {
+          "item_id": 900000159,
+          "item_name": "Item #16",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000016"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000016"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1741710263,
+          "update_time": 1792709869
+        },
+        {
+          "item_id": 900000160,
+          "item_name": "Item #17",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000017"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000017"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1741712172,
+          "update_time": 1791019066
+        },
+        {
+          "item_id": 900000161,
+          "item_name": "Item #18",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000018"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000018"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1741755503,
+          "update_time": 1791250455
+        },
+        {
+          "item_id": 900000162,
+          "item_name": "Item #19",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000019"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000019"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1743323748,
+          "update_time": 1791338818
+        },
+        {
+          "item_id": 900000163,
+          "item_name": "Item #20",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000020"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000020"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1741595533,
+          "update_time": 1791250489
+        },
+        {
+          "item_id": 900000164,
+          "item_name": "Item #21",
+          "item_sku": "",
+          "item_status": "SELLER_DELETE",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000021"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000021"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1741410067,
+          "update_time": 1761198124
+        },
+        {
+          "item_id": 900000165,
+          "item_name": "Item #22",
+          "item_sku": "SKU-003",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000022"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000022"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1761961183,
+          "update_time": 1792134991
+        },
+        {
+          "item_id": 900000166,
+          "item_name": "Item #23",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000023"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000023"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1742396368,
+          "update_time": 1792135602
+        },
+        {
+          "item_id": 900000167,
+          "item_name": "Item #24",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000024"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000024"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1742148230,
+          "update_time": 1791434938
+        },
+        {
+          "item_id": 900000168,
+          "item_name": "Item #25",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000025"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000025"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1746547352,
+          "update_time": 1785988395
+        },
+        {
+          "item_id": 900000169,
+          "item_name": "Item #26",
+          "item_sku": "",
+          "item_status": "UNLIST",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000026"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000026"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1740889667,
+          "update_time": 1787633919
+        },
+        {
+          "item_id": 900000170,
+          "item_name": "Item #27",
+          "item_sku": "SKU-004",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000027"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000027"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1741627056,
+          "update_time": 1787731549
+        },
+        {
+          "item_id": 900000171,
+          "item_name": "Item #28",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000028"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000028"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1743527906,
+          "update_time": 1790386145
+        },
+        {
+          "item_id": 900000172,
+          "item_name": "Item #29",
+          "item_sku": "SKU-005",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000029"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000029"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1742750850,
+          "update_time": 1787797695
+        },
+        {
+          "item_id": 900000173,
+          "item_name": "Item #30",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000030"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000030"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1741596232,
+          "update_time": 1792709869
+        },
+        {
+          "item_id": 900000174,
+          "item_name": "Item #31",
+          "item_sku": "",
+          "item_status": "UNLIST",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000031"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000031"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1741753766,
+          "update_time": 1781572615
+        },
+        {
+          "item_id": 900000175,
+          "item_name": "Item #32",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000032"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000032"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1741624522,
+          "update_time": 1791944798
+        },
+        {
+          "item_id": 900000176,
+          "item_name": "Item #33",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000033"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000033"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1746288999,
+          "update_time": 1791509006
+        },
+        {
+          "item_id": 900000177,
+          "item_name": "Item #34",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000034"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000034"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1749661097,
+          "update_time": 1792709869
+        },
+        {
+          "item_id": 900000178,
+          "item_name": "Item #35",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000035"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000035"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1755795405,
+          "update_time": 1785918911
+        },
+        {
+          "item_id": 900000179,
+          "item_name": "Item #36",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000036"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000036"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1741704342,
+          "update_time": 1785859100
+        },
+        {
+          "item_id": 900000180,
+          "item_name": "Item #37",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000037"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000037"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1741921376,
+          "update_time": 1788669056
+        },
+        {
+          "item_id": 900000181,
+          "item_name": "Item #38",
+          "item_sku": "",
+          "item_status": "UNLIST",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000038"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000038"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1741444075,
+          "update_time": 1790571252
+        },
+        {
+          "item_id": 900000182,
+          "item_name": "Item #39",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000039"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000039"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1743434643,
+          "update_time": 1785918997
+        },
+        {
+          "item_id": 900000183,
+          "item_name": "Item #40",
+          "item_sku": "SKU-006",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000040"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000040"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1750345952,
+          "update_time": 1781054771
+        },
+        {
+          "item_id": 900000184,
+          "item_name": "Item #41",
+          "item_sku": "SKU-007",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000041"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000041"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1757004713,
+          "update_time": 1785919170
+        },
+        {
+          "item_id": 900000185,
+          "item_name": "Item #42",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000042"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000042"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1752079155,
+          "update_time": 1783742305
+        },
+        {
+          "item_id": 900000186,
+          "item_name": "Item #43",
+          "item_sku": "SKU-008",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000043"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000043"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1742834171,
+          "update_time": 1787794471
+        },
+        {
+          "item_id": 900000187,
+          "item_name": "Item #44",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000044"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000044"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1743270197,
+          "update_time": 1788772536
+        },
+        {
+          "item_id": 900000188,
+          "item_name": "Item #45",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000045"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000045"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1751186464,
+          "update_time": 1785988408
+        },
+        {
+          "item_id": 900000189,
+          "item_name": "Item #46",
+          "item_sku": "",
+          "item_status": "SELLER_DELETE",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000046"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000046"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1743350057,
+          "update_time": 1775553149
+        },
+        {
+          "item_id": 900000190,
+          "item_name": "Item #47",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000047"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000047"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1741491485,
+          "update_time": 1788671016
+        },
+        {
+          "item_id": 900000191,
+          "item_name": "Item #48",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000048"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000048"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1741597034,
+          "update_time": 1792709870
+        },
+        {
+          "item_id": 900000192,
+          "item_name": "Item #49",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000049"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000049"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1758560586,
+          "update_time": 1787648047
+        },
+        {
+          "item_id": 900000193,
+          "item_name": "Item #50",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000050"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000050"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1742402902,
+          "update_time": 1785919346
+        },
+        {
+          "item_id": 900000194,
+          "item_name": "Item #51",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000051"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000051"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1749872432,
+          "update_time": 1787650337
+        },
+        {
+          "item_id": 900000195,
+          "item_name": "Item #52",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000052"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000052"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1741446613,
+          "update_time": 1785862771
+        },
+        {
+          "item_id": 900000196,
+          "item_name": "Item #53",
+          "item_sku": "SKU-009",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000053"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000053"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1752251177,
+          "update_time": 1781054798
+        },
+        {
+          "item_id": 900000197,
+          "item_name": "Item #54",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000054"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000054"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1753635202,
+          "update_time": 1787016716
+        },
+        {
+          "item_id": 900000198,
+          "item_name": "Item #55",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000055"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000055"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1750349198,
+          "update_time": 1789966601
+        },
+        {
+          "item_id": 900000199,
+          "item_name": "Item #56",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000056"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000056"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1755622455,
+          "update_time": 1785988446
+        },
+        {
+          "item_id": 900000200,
+          "item_name": "Item #57",
+          "item_sku": "",
+          "item_status": "SELLER_DELETE",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000057"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000057"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1759158972,
+          "update_time": 1772701438
+        },
+        {
+          "item_id": 900000201,
+          "item_name": "Item #58",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000058"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000058"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1749700029,
+          "update_time": 1787653415
+        },
+        {
+          "item_id": 900000202,
+          "item_name": "Item #59",
+          "item_sku": "SKU-010",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000059"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000059"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1749805176,
+          "update_time": 1781054763
+        },
+        {
+          "item_id": 900000203,
+          "item_name": "Item #60",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000060"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000060"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1750956578,
+          "update_time": 1785988237
+        },
+        {
+          "item_id": 900000204,
+          "item_name": "Item #61",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000061"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000061"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1755959377,
+          "update_time": 1785920988
+        },
+        {
+          "item_id": 900000205,
+          "item_name": "Item #62",
+          "item_sku": "SKU-011",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000062"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000062"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": false,
+          "create_time": 1753415566,
+          "update_time": 1787022771
+        },
+        {
+          "item_id": 900000206,
+          "item_name": "Item #63",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000063"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000063"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1758473124,
+          "update_time": 1787710885
+        },
+        {
+          "item_id": 900000207,
+          "item_name": "Item #64",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000064"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000064"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1764783867,
+          "update_time": 1787650980
+        },
+        {
+          "item_id": 900000208,
+          "item_name": "Item #65",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000065"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000065"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1759073742,
+          "update_time": 1785992449
+        },
+        {
+          "item_id": 900000209,
+          "item_name": "Item #66",
+          "item_sku": "SKU-012",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000066"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000066"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1754402514,
+          "update_time": 1791425331
+        },
+        {
+          "item_id": 900000210,
+          "item_name": "Item #67",
+          "item_sku": "SKU-013",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000067"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000067"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1752252479,
+          "update_time": 1790135040
+        },
+        {
+          "item_id": 900000211,
+          "item_name": "Item #68",
+          "item_sku": "SKU-014",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000068"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000068"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1749888723,
+          "update_time": 1792210869
+        },
+        {
+          "item_id": 900000212,
+          "item_name": "Item #69",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000069"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000069"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1750699791,
+          "update_time": 1785988252
+        },
+        {
+          "item_id": 900000213,
+          "item_name": "Item #70",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000070"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000070"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1757174828,
+          "update_time": 1785988129
+        },
+        {
+          "item_id": 900000214,
+          "item_name": "Item #71",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000071"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000071"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1751564123,
+          "update_time": 1788837628
+        },
+        {
+          "item_id": 900000215,
+          "item_name": "Item #72",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000072"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000072"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1748315217,
+          "update_time": 1778945530
+        },
+        {
+          "item_id": 900000216,
+          "item_name": "Item #73",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000073"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000073"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1749575821,
+          "update_time": 1789088743
+        },
+        {
+          "item_id": 900000217,
+          "item_name": "Item #74",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000074"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000074"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1755260831,
+          "update_time": 1787653507
+        },
+        {
+          "item_id": 900000218,
+          "item_name": "Item #75",
+          "item_sku": "SKU-015",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000075"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000075"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1759336373,
+          "update_time": 1787729627
+        },
+        {
+          "item_id": 900000219,
+          "item_name": "Item #76",
+          "item_sku": "SKU-016",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000076"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000076"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1765357757,
+          "update_time": 1781054765
+        },
+        {
+          "item_id": 900000220,
+          "item_name": "Item #77",
+          "item_sku": "SKU-017",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000077"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000077"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1749718045,
+          "update_time": 1787392033
+        },
+        {
+          "item_id": 900000221,
+          "item_name": "Item #78",
+          "item_sku": "SKU-018",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000078"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000078"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1749658156,
+          "update_time": 1788777706
+        },
+        {
+          "item_id": 900000222,
+          "item_name": "Item #79",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000079"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000079"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1747228936,
+          "update_time": 1785988351
+        },
+        {
+          "item_id": 900000223,
+          "item_name": "Item #80",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000080"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000080"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1752938998,
+          "update_time": 1778945531
+        },
+        {
+          "item_id": 900000224,
+          "item_name": "Item #81",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000081"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000081"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1762270861,
+          "update_time": 1787103065
+        },
+        {
+          "item_id": 900000225,
+          "item_name": "Item #82",
+          "item_sku": "SKU-019",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000082"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000082"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1761673950,
+          "update_time": 1789719414
+        },
+        {
+          "item_id": 900000226,
+          "item_name": "Item #83",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000083"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000083"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1765334403,
+          "update_time": 1790239814
+        },
+        {
+          "item_id": 900000227,
+          "item_name": "Item #84",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000084"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000084"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1762530224,
+          "update_time": 1792146060
+        },
+        {
+          "item_id": 900000228,
+          "item_name": "Item #85",
+          "item_sku": "SKU-020",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000085"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000085"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1762178801,
+          "update_time": 1783742094
+        },
+        {
+          "item_id": 900000229,
+          "item_name": "Item #86",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000086"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000086"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1761236515,
+          "update_time": 1790243184
+        },
+        {
+          "item_id": 900000230,
+          "item_name": "Item #87",
+          "item_sku": "SKU-021",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000087"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000087"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1767105105,
+          "update_time": 1791861409
+        },
+        {
+          "item_id": 900000231,
+          "item_name": "Item #88",
+          "item_sku": "",
+          "item_status": "UNLIST",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000088"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000088"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1764434780,
+          "update_time": 1790569386
+        },
+        {
+          "item_id": 900000232,
+          "item_name": "Item #89",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000089"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000089"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1773937075,
+          "update_time": 1787195537
+        },
+        {
+          "item_id": 900000233,
+          "item_name": "Item #90",
+          "item_sku": "SKU-022",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000090"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000090"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1761838002,
+          "update_time": 1790219305
+        },
+        {
+          "item_id": 900000234,
+          "item_name": "Item #91",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000091"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000091"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1762098833,
+          "update_time": 1791193090
+        },
+        {
+          "item_id": 900000235,
+          "item_name": "Item #92",
+          "item_sku": "SKU-023",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000092"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000092"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1761404211,
+          "update_time": 1789562413
+        },
+        {
+          "item_id": 900000236,
+          "item_name": "Item #93",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000093"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000093"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1764954095,
+          "update_time": 1788596761
+        },
+        {
+          "item_id": 900000237,
+          "item_name": "Item #94",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000094"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000094"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1764695405,
+          "update_time": 1785924711
+        },
+        {
+          "item_id": 900000238,
+          "item_name": "Item #95",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000095"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000095"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1784888477,
+          "update_time": 1790200333
+        },
+        {
+          "item_id": 900000239,
+          "item_name": "Item #96",
+          "item_sku": "SKU-024",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000096"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000096"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1762443762,
+          "update_time": 1792228073
+        },
+        {
+          "item_id": 900000240,
+          "item_name": "Item #97",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000097"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000097"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1774367477,
+          "update_time": 1785862212
+        },
+        {
+          "item_id": 900000241,
+          "item_name": "Item #98",
+          "item_sku": "SKU-025",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000098"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000098"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1762005039,
+          "update_time": 1787199422
+        },
+        {
+          "item_id": 900000242,
+          "item_name": "Item #99",
+          "item_sku": "",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000099"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000099"
+            ],
+            "image_ratio": "3:4"
+          },
+          "has_model": true,
+          "create_time": 1786592969,
+          "update_time": 1788511374
+        },
+        {
+          "item_id": 900000243,
+          "item_name": "Item #100",
+          "item_sku": "SKU-026",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000100"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000100"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1761573205,
+          "update_time": 1781054763
+        },
+        {
+          "item_id": 900000244,
+          "item_name": "Item #101",
+          "item_sku": "SKU-027",
+          "item_status": "NORMAL",
+          "image": {
+            "image_url_list": [
+              "https://cf.shopee.vn/file/vn-11134207-fixture-00000101"
+            ],
+            "image_id_list": [
+              "vn-11134207-fixture-00000101"
+            ],
+            "image_ratio": "1:1"
+          },
+          "has_model": true,
+          "create_time": 1767281147,
+          "update_time": 1781054806
+        }
+      ]
+    }
+  }
+}

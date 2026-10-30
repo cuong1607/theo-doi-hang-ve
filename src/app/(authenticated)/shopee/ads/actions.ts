@@ -10,6 +10,9 @@
 //   adsFreshnessAction      DB freshness stamp for the page's background polling
 //                           (never enqueues, never calls Shopee)
 //   toggleAdsAutoSyncAction    per-shop rollout switch for the background sync
+//   toggleAdsProductEnrichmentAction / refreshAdsProductInfoAction (ADS-3A.2)
+//                           per-shop product metadata switch / admin re-read of
+//                           every Ads-referenced item (queue only, READ ONLY)
 // Never calls Shopee inside the request and never writes to Shopee: the jobs
 // are read-only syncs (read-only policy) executed by the existing worker.
 import { headers } from "next/headers";
@@ -19,8 +22,8 @@ import { z } from "zod";
 
 import { authorizeAction } from "@/lib/auth/session";
 import { adsFreshnessStamp, loadAdsFreshness } from "@/lib/channels/shopee/ads/real-source";
-import { setAdsShopHourlyEnabled, setAdsShopSyncEnabled } from "@/lib/channels/shopee/ads/schedule";
-import { requestAdsRefresh } from "@/lib/channels/shopee/ads/sync";
+import { setAdsShopHourlyEnabled, setAdsShopProductEnrichmentEnabled, setAdsShopSyncEnabled } from "@/lib/channels/shopee/ads/schedule";
+import { getAdsSyncConfig, maybeEnqueueAdsProductEnrichment, requestAdsRefresh } from "@/lib/channels/shopee/ads/sync";
 import { kickShopeeSyncWorker } from "@/lib/channels/shopee/server";
 import { getShopeeFlags } from "@/lib/feature-flags";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -156,4 +159,42 @@ export async function toggleAdsHourlySyncAction(input: { shopId: string; enabled
   console.info(JSON.stringify({ source: "ads-auto-sync", event: parsed.data.enabled ? "shop_hourly_enabled" : "shop_hourly_disabled", shopId: parsed.data.shopId, by: authz.auth.user.id }));
   revalidatePath("/shopee/ads");
   return { ok: true, message: parsed.data.enabled ? "Đã bật dữ liệu theo giờ cho shop." : "Đã tắt dữ liệu theo giờ cho shop." };
+}
+
+/** ADS-3A.2 product metadata rollout switch (admin): enrichment READ jobs for the shop — only while ADS_PRODUCT_ENRICHMENT_ENABLED=true. */
+export async function toggleAdsProductEnrichmentAction(input: { shopId: string; enabled: boolean }): Promise<{ ok: boolean; message: string }> {
+  const authz = await authorizeAction("channel:manage");
+  if (!authz.ok) return { ok: false, message: authz.message };
+  const parsed = z.object({ shopId: z.string().uuid(), enabled: z.boolean() }).safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Dữ liệu không hợp lệ." };
+  const shops = await liveShopIds(parsed.data.shopId);
+  if (!shops?.length) return { ok: false, message: "Không tìm thấy shop Shopee đang hoạt động." };
+  try {
+    await setAdsShopProductEnrichmentEnabled(createAdminClient(), { shopId: parsed.data.shopId, enabled: parsed.data.enabled, updatedBy: authz.auth.user.id });
+  } catch {
+    return { ok: false, message: "Không lưu được cấu hình thông tin sản phẩm." };
+  }
+  console.info(JSON.stringify({ source: "ads-auto-sync", event: parsed.data.enabled ? "shop_products_enabled" : "shop_products_disabled", shopId: parsed.data.shopId, by: authz.auth.user.id }));
+  revalidatePath("/shopee/ads");
+  return { ok: true, message: parsed.data.enabled ? "Đã bật thông tin sản phẩm cho shop." : "Đã tắt thông tin sản phẩm cho shop." };
+}
+
+/** ADS-3A.2 admin: re-read the metadata of EVERY item the shop's campaigns advertise (still READ ONLY, low priority, queue only). */
+export async function refreshAdsProductInfoAction(input: { shopId: string }): Promise<{ ok: boolean; message: string }> {
+  const authz = await authorizeAction("channel:manage");
+  if (!authz.ok) return { ok: false, message: authz.message };
+  const parsed = z.object({ shopId: z.string().uuid() }).safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Dữ liệu không hợp lệ." };
+  const shops = await liveShopIds(parsed.data.shopId);
+  if (!shops?.length) return { ok: false, message: "Không tìm thấy shop Shopee đang hoạt động." };
+  if (!getAdsSyncConfig().productEnrichmentEnabled) return { ok: false, message: "ADS_PRODUCT_ENRICHMENT_ENABLED đang tắt." };
+  try {
+    const r = await maybeEnqueueAdsProductEnrichment(createAdminClient(), { shopId: parsed.data.shopId, scope: "all", createdBy: authz.auth.user.id, mode: "manual" });
+    if (!r) return { ok: false, message: "Thông tin sản phẩm đang tắt cho shop này." };
+    await kickAfterResponse();
+    console.info(JSON.stringify({ source: "ads-auto-sync", event: "shop_products_refresh", shopId: parsed.data.shopId, jobId: r.jobId, created: r.created, by: authz.auth.user.id }));
+    return { ok: true, message: r.created ? "Đã xếp lịch đọc lại thông tin sản phẩm." : "Đang có lượt đọc thông tin sản phẩm cho shop này." };
+  } catch {
+    return { ok: false, message: "Không tạo được yêu cầu đọc thông tin sản phẩm." };
+  }
 }

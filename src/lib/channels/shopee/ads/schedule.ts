@@ -11,6 +11,10 @@
 //   METADATA      every 6 h (prio 5); every 15 min until the first success
 //   BACKFILL      first sync of a shop: 30 days (prio 7), replaces WARM/COLD
 //                 until a performance read has succeeded
+//   PRODUCT       ADS-3A.2: every 15 min (offset +7) a DB-only need check; an
+//                 enrichment job is enqueued ONLY when an Ads-referenced item
+//                 is unknown or older than the TTL (prio 9, below every
+//                 performance read). Fresh cache → no job, no provider call.
 //
 // Staggering: every shop has a stable minute offset inside each window
 // (explicit sync_slot, else (rank × 2) mod 10 among enabled shops sorted by
@@ -24,7 +28,25 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { adsHourlyReconciliation, loadAdsHourlyReconciliation } from "./hourly.ts";
-import { ADS_PRIORITY, addDaysIso, adsBackfillRange, adsBackfillStatus, adsColdRange, adsHotRange, adsWarmRange, enqueueAdsJob, shopToday, type AdsCampaignScope, type AdsStrategy, type AdsSyncConfig } from "./sync.ts";
+import {
+  ADS_PRIORITY,
+  addDaysIso,
+  adsBackfillRange,
+  adsBackfillStatus,
+  adsColdRange,
+  adsHotRange,
+  adsProductStaleBefore,
+  adsWarmRange,
+  enqueueAdsJob,
+  getAdsSyncConfig,
+  loadAdsProductEnrichmentStatus,
+  shopToday,
+  type AdsCampaignScope,
+  type AdsProductEnrichmentStatus,
+  type AdsProductScope,
+  type AdsStrategy,
+  type AdsSyncConfig,
+} from "./sync.ts";
 import type { AdsHourlyReconciliationStatus } from "./view-models.ts";
 import type { AdsDateRange } from "./provider.ts";
 import type { AdsSyncType } from "./read-only-policy.ts";
@@ -40,7 +62,8 @@ export type AdsSlotColumn =
   | "last_cold_slot_at"
   | "last_metadata_slot_at"
   | "last_hot_hourly_slot_at"
-  | "last_hourly_finalize_slot_at";
+  | "last_hourly_finalize_slot_at"
+  | "last_product_enrichment_slot_at";
 export const ADS_SLOT_COLUMNS: readonly AdsSlotColumn[] = [
   "last_hot_shop_slot_at",
   "last_hot_campaign_slot_at",
@@ -49,6 +72,7 @@ export const ADS_SLOT_COLUMNS: readonly AdsSlotColumn[] = [
   "last_metadata_slot_at",
   "last_hot_hourly_slot_at",
   "last_hourly_finalize_slot_at",
+  "last_product_enrichment_slot_at",
 ];
 
 export type AdsSlotState = Partial<Record<AdsSlotColumn, string | null>>;
@@ -58,11 +82,11 @@ export interface AdsJobSpec {
   strategy: AdsStrategy;
   priority: number;
   range: AdsDateRange | null;
-  scope?: AdsCampaignScope;
+  scope?: AdsCampaignScope | AdsProductScope;
 }
 
 export interface AdsPlannedSlot {
-  kind: "hot_shop" | "hot_campaign" | "warm" | "backfill" | "cold" | "metadata" | "hot_hourly" | "hourly_finalize";
+  kind: "hot_shop" | "hot_campaign" | "warm" | "backfill" | "cold" | "metadata" | "hot_hourly" | "hourly_finalize" | "product_enrichment";
   column: AdsSlotColumn;
   slotAt: Date;
   jobs: AdsJobSpec[];
@@ -147,6 +171,8 @@ export function planAdsShop(input: {
   hourlyEnabled?: boolean;
   /** A daily HOT read of an EARLIER slot is still waiting: hourly waits too (daily freshness first). */
   dailyHotBacklog?: boolean;
+  /** ADS-3A.2: ADS_PRODUCT_ENRICHMENT_ENABLED AND the shop's ads_product_enrichment_enabled. */
+  productEnrichmentEnabled?: boolean;
 }): AdsPlannedSlot[] {
   const { now, timeZone, offsetMinutes: off, slots, config } = input;
   const out: AdsPlannedSlot[] = [];
@@ -182,6 +208,14 @@ export function planAdsShop(input: {
     add("hourly_finalize", "last_hourly_finalize_slot_at", finalizeSlot, [
       { syncType: "ads_shop_hourly_read", strategy: "finalize", priority: ADS_PRIORITY.hourlyFinalize, range: yesterday },
       ...(input.hasCampaigns ? [{ syncType: "ads_campaign_hourly_read" as const, strategy: "finalize" as const, priority: ADS_PRIORITY.hourlyFinalize, range: yesterday, scope: "all" as const }] : []),
+    ]);
+  }
+
+  // PRODUCT ENRICHMENT (ADS-3A.2): a need check every 15 min, 7 min after the shop's HOT minute (never the same burst).
+  // The job is only enqueued when the tick finds unknown / stale items; a daily HOT backlog defers it like hourly.
+  if (input.productEnrichmentEnabled && input.hasCampaigns && !input.dailyHotBacklog) {
+    add("product_enrichment", "last_product_enrichment_slot_at", latestAdsSlot(now, config.hotIntervalMinutes, off + 7), [
+      { syncType: "ads_product_enrichment_read", strategy: "enrichment", priority: ADS_PRIORITY.productEnrichment, range: null, scope: "stale" },
     ]);
   }
 
@@ -226,6 +260,8 @@ export interface AdsSchedulerTickResult {
   errors: Array<{ shopId: string; message: string }>;
   /** ADS-3A.1: shops whose hourly slot waited because a daily HOT read of an earlier slot was still queued. */
   hourlyDeferred: string[];
+  /** ADS-3A.2: enrichment slots whose need check found every referenced item fresh (no job, no provider call). */
+  productCacheHits: string[];
   durationMs: number;
 }
 
@@ -242,6 +278,8 @@ interface SettingsRow {
   ads_hourly_enabled: boolean;
   last_hot_hourly_slot_at: string | null;
   last_hourly_finalize_slot_at: string | null;
+  ads_product_enrichment_enabled: boolean;
+  last_product_enrichment_slot_at: string | null;
 }
 
 /**
@@ -253,7 +291,7 @@ export async function runAdsSchedulerTick(db: SupabaseClient, options: { config:
   const started = Date.now();
   const now = options.now ?? new Date();
   const config = options.config;
-  const result: AdsSchedulerTickResult = { disabled: false, shops: 0, enqueued: [], slotsClaimed: 0, skippedShops: [], errors: [], hourlyDeferred: [], durationMs: 0 };
+  const result: AdsSchedulerTickResult = { disabled: false, shops: 0, enqueued: [], slotsClaimed: 0, skippedShops: [], errors: [], hourlyDeferred: [], productCacheHits: [], durationMs: 0 };
   if (!config.autoSyncEnabled) {
     result.disabled = true;
     result.durationMs = Date.now() - started;
@@ -262,7 +300,7 @@ export async function runAdsSchedulerTick(db: SupabaseClient, options: { config:
 
   let q = db
     .from("shopee_ads_shop_settings")
-    .select("shop_id, sync_slot, last_hot_shop_slot_at, last_hot_campaign_slot_at, last_warm_slot_at, last_cold_slot_at, last_metadata_slot_at, ads_hourly_enabled, last_hot_hourly_slot_at, last_hourly_finalize_slot_at")
+    .select("shop_id, sync_slot, last_hot_shop_slot_at, last_hot_campaign_slot_at, last_warm_slot_at, last_cold_slot_at, last_metadata_slot_at, ads_hourly_enabled, last_hot_hourly_slot_at, last_hourly_finalize_slot_at, ads_product_enrichment_enabled, last_product_enrichment_slot_at")
     .eq("ads_sync_enabled", true);
   if (options.shopIds) q = q.in("shop_id", [...options.shopIds]);
   const { data: settings, error } = await q;
@@ -314,15 +352,24 @@ export async function runAdsSchedulerTick(db: SupabaseClient, options: { config:
       const facts = await shopFacts(db, s.shop_id);
       const offset = offsets.get(s.shop_id) ?? 0;
       const hourlyEnabled = config.hourlySyncEnabled && !!s.ads_hourly_enabled;
-      const dailyHotBacklog = hourlyEnabled ? await adsDailyHotBacklog(db, s.shop_id, latestAdsSlot(now, config.hotIntervalMinutes, offset)) : false;
-      if (dailyHotBacklog) result.hourlyDeferred.push(s.shop_id);
-      const plan = planAdsShop({ now, timeZone: shop.timezone || "Asia/Ho_Chi_Minh", offsetMinutes: offset, slots: s, config, ...facts, hourlyEnabled, dailyHotBacklog });
+      const productEnrichmentEnabled = config.productEnrichmentEnabled && !!s.ads_product_enrichment_enabled;
+      const dailyHotBacklog = hourlyEnabled || productEnrichmentEnabled ? await adsDailyHotBacklog(db, s.shop_id, latestAdsSlot(now, config.hotIntervalMinutes, offset)) : false;
+      if (dailyHotBacklog && hourlyEnabled) result.hourlyDeferred.push(s.shop_id);
+      const plan = planAdsShop({ now, timeZone: shop.timezone || "Asia/Ho_Chi_Minh", offsetMinutes: offset, slots: s, config, ...facts, hourlyEnabled, dailyHotBacklog, productEnrichmentEnabled });
       // ONE start offset per shop and tick: every job of the shop becomes claimable together, priority decides the order
       const notBefore = new Date(now.getTime() + adsJitterMs(s.shop_id, latestAdsSlot(now, config.hotIntervalMinutes, offset), config.jitterSeconds));
       for (const slot of plan) {
         if (!(await claimSlot(db, s.shop_id, slot.column, slot.slotAt))) continue;
         result.slotsClaimed++;
         try {
+          // cache-first: the slot is consumed, but nothing is enqueued while every referenced item is fresh
+          if (slot.kind === "product_enrichment") {
+            const [status] = await loadAdsProductEnrichmentStatus(db, [s.shop_id], adsProductStaleBefore(now, config));
+            if (!status || status.missing + status.stale === 0) {
+              result.productCacheHits.push(s.shop_id);
+              continue;
+            }
+          }
           for (const job of slot.jobs) {
             const r = await enqueueAdsJob(db, { shopId: s.shop_id, syncType: job.syncType, strategy: job.strategy, priority: job.priority, range: job.range, scope: job.scope, notBefore, now });
             result.enqueued.push({ shopId: s.shop_id, kind: slot.kind, syncType: job.syncType, jobId: r.jobId, created: r.created, coalesced: r.coalesced });
@@ -404,6 +451,8 @@ export interface AdsShopSyncOverview {
     /** Yesterday's hourly Σ vs daily. */
     reconciliation: AdsHourlyReconciliationStatus | null;
   };
+  /** ADS-3A.2: product metadata cache of the shop's Ads-referenced items (null = unreadable, e.g. before migration 00068). */
+  products: (Omit<AdsProductEnrichmentStatus, "shopId"> & { enabled: boolean }) | null;
 }
 
 /** Per shop: switch, stagger offset, campaign count, HOT SLA over the last 24 h. */
@@ -416,6 +465,20 @@ export async function loadAdsSyncOverview(db: SupabaseClient, now: Date = new Da
   const { data: settings, error: sError } = await db.from("shopee_ads_shop_settings").select("shop_id, ads_sync_enabled, sync_slot, ads_hourly_enabled").in("shop_id", ids);
   if (sError) throw new Error(`Không đọc được cấu hình đồng bộ Ads: ${sError.message}`);
   const settingOf = new Map(((settings ?? []) as Array<{ shop_id: string; ads_sync_enabled: boolean; sync_slot: number | null; ads_hourly_enabled: boolean }>).map((s) => [s.shop_id, s]));
+  // product enrichment layer (tolerant like the hourly one: never hides the daily overview)
+  const productsOf = new Map<string, NonNullable<AdsShopSyncOverview["products"]>>();
+  try {
+    const { data: pSettings, error: pError } = await db.from("shopee_ads_shop_settings").select("shop_id, ads_product_enrichment_enabled").in("shop_id", ids);
+    if (pError) throw pError;
+    const pEnabled = new Map(((pSettings ?? []) as Array<{ shop_id: string; ads_product_enrichment_enabled: boolean }>).map((r) => [r.shop_id, !!r.ads_product_enrichment_enabled]));
+    for (const st of await loadAdsProductEnrichmentStatus(db, ids, adsProductStaleBefore(now, getAdsSyncConfig()))) {
+      const { shopId, ...rest } = st;
+      productsOf.set(shopId, { ...rest, enabled: pEnabled.get(shopId) ?? false });
+    }
+    for (const id of ids) if (!productsOf.has(id)) productsOf.set(id, { referenced: 0, enriched: 0, notReturned: 0, missing: 0, stale: 0, withImage: 0, withSku: 0, lastEnrichedAt: null, enabled: pEnabled.get(id) ?? false });
+  } catch (err) {
+    console.warn(JSON.stringify({ source: "ads-sync-overview", event: "products_unavailable", message: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200) }));
+  }
   const enabled = list.filter((s) => settingOf.get(s.id)?.ads_sync_enabled);
   const offsets = adsShopOffsets(enabled.map((s) => ({ id: s.id, syncSlot: settingOf.get(s.id)?.sync_slot ?? null })));
   const { data: metrics, error: mError } = await db.rpc("get_ads_sync_metrics", { p_hours: 24 });
@@ -469,6 +532,7 @@ export async function loadAdsSyncOverview(db: SupabaseClient, now: Date = new Da
         p95TotalMs: hourlyHot.p95TotalMs,
         reconciliation: reconOf.get(s.id) ?? null,
       },
+      products: productsOf.get(s.id) ?? null,
     });
   }
   return out;
@@ -491,4 +555,12 @@ export async function setAdsShopHourlyEnabled(db: SupabaseClient, input: { shopI
   if (input.enabled) row.hourly_enabled_at = new Date().toISOString();
   const { error } = await db.from("shopee_ads_shop_settings").upsert(row, { onConflict: "shop_id" });
   if (error) throw new Error(`Không lưu được cấu hình theo giờ: ${error.message}`);
+}
+
+/** ADS-3A.2 product enrichment rollout switch for one shop (pilot first). Only decides whether metadata READ jobs are enqueued. */
+export async function setAdsShopProductEnrichmentEnabled(db: SupabaseClient, input: { shopId: string; enabled: boolean; updatedBy?: string | null }) {
+  const row: Record<string, unknown> = { shop_id: input.shopId, ads_product_enrichment_enabled: input.enabled, updated_by: input.updatedBy ?? null };
+  if (input.enabled) row.product_enrichment_enabled_at = new Date().toISOString();
+  const { error } = await db.from("shopee_ads_shop_settings").upsert(row, { onConflict: "shop_id" });
+  if (error) throw new Error(`Không lưu được cấu hình thông tin sản phẩm: ${error.message}`);
 }

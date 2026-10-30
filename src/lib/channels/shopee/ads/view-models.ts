@@ -87,6 +87,16 @@ export interface AdsAdvertisedProduct {
   name: string;
   /** Provider item id (real data). */
   itemId?: string;
+  /**
+   * ADS-3A.2 verified product metadata (real data, shopee_ads_products) —
+   * absent / null = not known. Never filled from fixtures in real mode.
+   */
+  imageUrl?: string | null;
+  sku?: string | null;
+  /** Raw Shopee item_status (NORMAL / UNLIST / SELLER_DELETE …). */
+  providerStatus?: string | null;
+  /** enriched = metadata read; not_returned = last read did not return the item; pending = never read yet. */
+  enrichment?: "enriched" | "not_returned" | "pending";
   /** null = not available per product (Shopee reports metrics per campaign only). */
   spend: number | null;
   revenue: number | null;

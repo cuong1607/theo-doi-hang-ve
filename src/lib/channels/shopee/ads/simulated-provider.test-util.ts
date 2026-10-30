@@ -8,7 +8,7 @@
 // ============================================================
 import { formatAdsDate } from "./mapper.ts";
 import { FixtureShopeeAdsProvider, loadAdsFixtures, type AdsDateRange, type AdsFixtureData, type AdsProviderContext, type ShopeeAdsProvider } from "./provider.ts";
-import { ADS_READ_ENDPOINTS, assertAdsReadOnlyRequest, type AdsReadEndpoint } from "./read-only-policy.ts";
+import { ADS_PRODUCT_READ_ENDPOINTS, ADS_READ_ENDPOINTS, assertAdsReadOnlyRequest, type AdsProductReadEndpoint, type AdsReadEndpoint } from "./read-only-policy.ts";
 
 type Obj = Record<string, unknown>;
 
@@ -32,7 +32,8 @@ export function simulatedShopData(base: AdsFixtureData, shop: SimulatedShop, dat
   const template = base.settings.values().next().value as Obj;
   const metricsTemplate = [...base.campaignDaily.values()].flatMap((m) => [...m.values()]).find((r) => Number(r.expense) > 0)!;
   const hourlyTemplate = ([...base.campaignHourly.values()][0]?.values().next().value ?? []) as Obj[];
-  const data: AdsFixtureData = { campaignIds: [], settings: new Map(), campaignDaily: new Map(), shopDaily: new Map(), shopHourly: new Map(), campaignHourly: new Map(), replayHourly: false };
+  const data: AdsFixtureData = { campaignIds: [], settings: new Map(), campaignDaily: new Map(), shopDaily: new Map(), shopHourly: new Map(), campaignHourly: new Map(), replayHourly: false, items: new Map() };
+  const itemTemplate = (base.items.values().next().value ?? { item_status: "NORMAL" }) as Obj;
   const ongoing = Math.round(shop.campaigns * (shop.ongoingShare ?? 0.3));
   let spend = 0;
   for (let i = 0; i < shop.campaigns; i++) {
@@ -42,6 +43,7 @@ export function simulatedShopData(base: AdsFixtureData, shop: SimulatedShop, dat
     s.common_info.campaign_status = i < ongoing ? "ongoing" : i % 2 ? "paused" : "ended";
     s.common_info.ad_name = `Sim ${shop.externalShopId} #${i}`;
     s.common_info.item_id_list = [700000 + i];
+    data.items.set(String(700000 + i), { ...itemTemplate, item_id: 700000 + i, item_name: `Sim item ${shop.externalShopId} #${i}` });
     data.campaignIds.push(id);
     data.settings.set(id, s);
     if (i < ongoing) {
@@ -75,8 +77,8 @@ export class SimulatedAdsProvider implements ShopeeAdsProvider {
     for (const s of shops) this.shops.set(s.externalShopId, new FixtureShopeeAdsProvider(simulatedShopData(base, s, date)));
   }
 
-  private async run<T>(ctx: AdsProviderContext, endpoint: AdsReadEndpoint, ids: number, fn: (p: FixtureShopeeAdsProvider) => Promise<T>): Promise<T> {
-    assertAdsReadOnlyRequest("GET", ADS_READ_ENDPOINTS[endpoint]);
+  private async run<T>(ctx: AdsProviderContext, endpoint: AdsReadEndpoint | AdsProductReadEndpoint, ids: number, fn: (p: FixtureShopeeAdsProvider) => Promise<T>): Promise<T> {
+    assertAdsReadOnlyRequest("GET", endpoint === "item_base_info" ? ADS_PRODUCT_READ_ENDPOINTS[endpoint] : ADS_READ_ENDPOINTS[endpoint]);
     const p = this.shops.get(ctx.externalShopId);
     if (!p) throw new Error(`simulated provider: unknown shop ${ctx.externalShopId}`);
     const startedAt = Date.now();
@@ -115,5 +117,9 @@ export class SimulatedAdsProvider implements ShopeeAdsProvider {
 
   async getProductCampaignHourlyPerformance(ctx: AdsProviderContext, input: { campaignIds: readonly string[]; date: string }) {
     return this.run(ctx, "campaign_hourly_performance", input.campaignIds.length, (p) => p.getProductCampaignHourlyPerformance(ctx, input));
+  }
+
+  async getItemBaseInfo(ctx: AdsProviderContext, input: { itemIds: readonly string[] }) {
+    return this.run(ctx, "item_base_info", input.itemIds.length, (p) => p.getItemBaseInfo(ctx, input));
   }
 }

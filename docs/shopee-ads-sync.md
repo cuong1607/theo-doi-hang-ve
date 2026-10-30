@@ -53,9 +53,10 @@ Opening the dashboard never calls Shopee and never enqueues anything.
 | metadata | every 6 h | — | all | 7 | `ads_meta` |
 | cold | 03:00 & 15:00 VN | 7 completed days + today | **all** | 8 | `ads_cold` |
 | finalize (hourly, ADS-3A.1) | once a day after 02:30 | yesterday | **all** | 8 | `ads_warm` |
-| backfill | first sync (replaces WARM/COLD until it succeeds) | 30 days + today | all | 9 | `ads_backfill` |
+| backfill | first sync (replaces WARM/COLD until it succeeds) | 30 days + today | all | 10 | `ads_backfill` |
+| enrichment | ADS-3A.2: product slot every 15 min, only when an Ads-referenced item is unknown / stale; new-item fast path; admin refresh | — | items, not campaigns | 9 | `ads_meta` |
 
-ADS-3A.1 renumbered the priorities (WARM 4 → 6, metadata 5 → 7, COLD 6 → 8, backfill 7 → 9) to make room for the hourly reads right below the daily HOT reads. The relative order of the daily strategies is unchanged. Hourly runs only with `ADS_HOURLY_SYNC_ENABLED` + the shop's `ads_hourly_enabled`; see [shopee-ads-hourly.md](shopee-ads-hourly.md).
+ADS-3A.1 renumbered the priorities (WARM 4 → 6, metadata 5 → 7, COLD 6 → 8, backfill 7 → 9) to make room for the hourly reads right below the daily HOT reads. The relative order of the daily strategies is unchanged. Hourly runs only with `ADS_HOURLY_SYNC_ENABLED` + the shop's `ads_hourly_enabled`; see [shopee-ads-hourly.md](shopee-ads-hourly.md). ADS-3A.2 put product enrichment at 9 (below every performance read) and moved backfill to 10; enrichment runs only with `ADS_PRODUCT_ENRICHMENT_ENABLED` + the shop's `ads_product_enrichment_enabled`; see [shopee-ads-product-enrichment.md](shopee-ads-product-enrichment.md).
 
 **Campaign candidates** are derived from the DB before any call:
 - **HOT:** `provider_status = ongoing`, + `status_changed_at` / `provider_end_at` within 36 h, + campaigns already non-zero today.

@@ -48,7 +48,7 @@ Migration: `supabase/migrations/00067_shopee_ads_hourly.sql`. Applied **locally 
 | both | manual | "Làm mới dữ liệu" | today | all | 2 (after every manual daily slice at 1) | `ads_hot` |
 | both | finalize | once a day after `ADS_HOURLY_FINALIZE_TIME` (02:30, shop-local) | yesterday | **all** | 8 | `ads_warm` |
 
-Full order: manual 1 · HOT shop 2 · HOT campaign 3 · hourly shop 4 · hourly campaign 5 · WARM 6 · metadata 7 · COLD 8 (finalize 8) · backfill 9.
+Full order: manual 1 · HOT shop 2 · HOT campaign 3 · hourly shop 4 · hourly campaign 5 · WARM 6 · metadata 7 · COLD 8 (finalize 8) · product enrichment 9 (ADS-3A.2) · backfill 10.
 
 - **No new scheduler.** The hourly slot (`last_hot_hourly_slot_at`) uses the same 15-minute boundary and stagger offset as HOT. The finalize slot is `last_hourly_finalize_slot_at`.
 - **Daily first:**

@@ -308,7 +308,71 @@ export function parseCampaignHourlyPerformance(envelope: unknown): { rows: AdsCa
 
 // ------------------------------------------------------------------ UI mapping of raw provider values
 
-export type AdsUiStatus = "active" | "paused" | "ended" | "closed" | "unknown";
+// ------------------------------------------------------------------ ADS-3A.2 product enrichment (get_item_base_info)
+
+/** Current metadata of one advertised item (only fields verified in production). */
+export interface AdsProductWrite {
+  providerItemId: string;
+  productName: string | null;
+  /** First image, only when it has the verified stable shape (see safeShopeeImageUrl). */
+  imageUrl: string | null;
+  itemSku: string | null;
+  /** Raw item_status (verified: NORMAL / UNLIST / SELLER_DELETE; unknown values kept as-is). */
+  providerStatus: string | null;
+}
+
+/** Image hosts seen in production (657/657 snapshots: https://cf.shopee.vn/file/<image_id>). */
+export const ADS_PRODUCT_IMAGE_HOSTS: readonly string[] = ["cf.shopee.vn"];
+
+/**
+ * Keeps a provider image URL only when it is the verified stable shape:
+ * https, an allowlisted Shopee CDN host, /file/<id>, no query / fragment
+ * (nothing signed or expiring is ever persisted). Anything else → null.
+ */
+export function safeShopeeImageUrl(v: unknown): string | null {
+  if (typeof v !== "string") return null;
+  const m = /^https:\/\/([a-z0-9.-]+)\/file\/([A-Za-z0-9_-]{1,200})$/.exec(v.trim());
+  return m && ADS_PRODUCT_IMAGE_HOSTS.includes(m[1]) ? `https://${m[1]}/file/${m[2]}` : null;
+}
+
+/**
+ * get_item_base_info → product rows for the requested ids. An id the provider
+ * did not return is reported in `notReturned` (the meaning — deleted, other
+ * shop, temporary — is not verified, so it is never treated as a deletion).
+ * One bad entry never fails the batch; items that were not requested are ignored.
+ */
+export function parseItemBaseInfo(envelope: unknown, requestedIds: readonly string[]): { items: AdsProductWrite[]; notReturned: string[]; imagesRejected: number; failures: Array<{ id: string | null; reason: string }> } {
+  const r = responseOf(envelope);
+  if (!isObj(r)) throw new AdsPayloadError("Thông tin sản phẩm không có response.");
+  const wanted = new Set(requestedIds);
+  const items = new Map<string, AdsProductWrite>();
+  const failures: Array<{ id: string | null; reason: string }> = [];
+  let imagesRejected = 0;
+  for (const raw of arr(r.item_list)) {
+    let id: string | null = null;
+    try {
+      if (!isObj(raw)) throw new AdsPayloadError("Sản phẩm không phải object.");
+      id = providerId(raw.item_id, "item_id");
+      if (!wanted.has(id)) continue;
+      const image = isObj(raw.image) ? raw.image : {};
+      const firstUrl = arr(image.image_url_list)[0];
+      const imageUrl = safeShopeeImageUrl(firstUrl);
+      if (firstUrl !== undefined && !imageUrl) imagesRejected++;
+      items.set(id, {
+        providerItemId: id,
+        productName: optionalText(raw.item_name),
+        imageUrl,
+        itemSku: optionalText(raw.item_sku),
+        providerStatus: optionalText(raw.item_status),
+      });
+    } catch (err) {
+      failures.push({ id, reason: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  return { items: [...items.values()], notReturned: requestedIds.filter((id) => !items.has(id)), imagesRejected, failures };
+}
+
+export type AdsUiStatus ="active" | "paused" | "ended" | "closed" | "unknown";
 
 /** Verified raw statuses (docs §3.5). Anything else stays raw and shows as neutral "unknown". */
 export function mapAdsCampaignStatus(raw: string | null | undefined): AdsUiStatus {
