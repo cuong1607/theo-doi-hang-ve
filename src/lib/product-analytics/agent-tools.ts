@@ -17,6 +17,7 @@ import { salesComparable, type SalesCoverage } from "./coverage.ts";
 import { buildProductDataQuality, PRODUCT_METRIC_META } from "./data-quality.ts";
 import { resolveProductPeriod, type ProductPeriod, type ProductPeriodPreset } from "./periods.ts";
 import { loadProductDetail, loadShopFreshness, ProductAnalyticsReadError, type ProductDetail, type ProductRef } from "./read-model.ts";
+import type { ProductSignal } from "./signals.ts";
 import type { PaDelta } from "./types.ts";
 import { addDays, vnToday } from "../analytics/periods.ts";
 
@@ -28,7 +29,7 @@ export interface ProductToolScope {
 
 export type ProductToolPeriodInput = { preset: ProductPeriodPreset } | { from: string; to: string };
 
-export const PRODUCT_TOOL_NAMES = ["get_product_overview", "compare_product_periods", "get_product_sales_summary", "get_product_ads_performance", "get_product_baseline"] as const;
+export const PRODUCT_TOOL_NAMES = ["get_product_overview", "compare_product_periods", "get_product_sales_summary", "get_product_ads_performance", "get_product_baseline", "get_product_signals"] as const;
 export type ProductToolName = (typeof PRODUCT_TOOL_NAMES)[number];
 
 export class ProductToolAccessError extends Error {
@@ -110,6 +111,9 @@ function qualityOut(d: ProductDetail) {
 
 const meta = (...keys: string[]) => Object.fromEntries(keys.map((k) => [k, { source: PRODUCT_METRIC_META[k].source, semantic_confidence: PRODUCT_METRIC_META[k].semantic_confidence }]));
 
+/** Compact factual signal (evidence included, no wording that implies a cause). */
+const signalOut = (s: ProductSignal) => ({ type: s.type, severity: s.severity, confidence: s.confidence, polarity: s.polarity, current: s.current, previous: s.previous, change_pct: s.change_pct });
+
 async function detail(db: SupabaseClient, scope: ProductToolScope, input: ProductToolPeriodInput | undefined, now: Date): Promise<{ d: ProductDetail; p: ProductPeriod }> {
   const ref = await authorizeProductTool(db, scope);
   const p = period(input, now);
@@ -134,7 +138,8 @@ export async function get_product_overview(db: SupabaseClient, scope: ProductToo
     ads: { campaigns: s.ads.single_item_campaigns, spend: s.ads.spend.current, broad_gmv: s.ads.broad_gmv.current, broad_roas: s.ads.broad_roas.current, clicks: s.ads.clicks.current },
     // current provider snapshot — no period delta (semantics unverified)
     provider_snapshot: s.snapshot ? { captured_at: s.snapshot.captured_at, views: s.snapshot.views, sale: s.snapshot.sale, likes: s.snapshot.likes, rating_star: s.snapshot.rating_star, comment_count: s.snapshot.comment_count } : null,
-    signals: d.signals.map((x) => ({ type: x.type, metric: x.metric, pct: x.pct })),
+    health: { label: d.intel.row.intel.health.label, rule: d.intel.row.intel.health.rule, confidence: d.intel.row.intel.health.confidence },
+    signals: d.intel.row.intel.top_signals.map(signalOut),
     data_quality: qualityOut(d),
     metric_meta: meta("sales_gmv", "orders", "units", "ads_spend", "ads_broad_gmv", "views_snapshot", "sale_snapshot"),
   };
@@ -157,7 +162,37 @@ export async function compare_product_periods(db: SupabaseClient, scope: Product
       ads_broad_gmv: pick(s.ads.broad_gmv),
       ads_broad_roas: pick(s.ads.broad_roas),
     },
-    signals: d.signals.map((x) => ({ type: x.type, metric: x.metric, current: x.current, previous: x.previous, pct: x.pct })),
+    signals: d.intel.row.intel.signals.map(signalOut),
+    data_quality: qualityOut(d),
+    metric_meta: meta("sales_gmv", "orders", "units", "ads_spend", "ads_broad_gmv"),
+  };
+}
+
+/**
+ * PA-3: what changed, how significant, how sure — factual signals with evidence,
+ * explainable health, attention priority, data-quality signals and shop context.
+ * It does NOT say why (no cause is inferred anywhere in the engine).
+ */
+export async function get_product_signals(db: SupabaseClient, scope: ProductToolScope, input?: { period?: ProductToolPeriodInput }, now = new Date()) {
+  const { d, p } = await detail(db, scope, input?.period, now);
+  const i = d.intel.row.intel;
+  return {
+    tool: "get_product_signals" as const,
+    product: productOut(d),
+    period: periodOut(p),
+    health: { label: i.health.label, severity: i.health.severity, confidence: i.health.confidence, rule: i.health.rule, basis: i.health.basis },
+    attention: { needs_attention: i.needs_attention, score: i.priority.score, level: i.priority.level, signal_points: i.priority.signal_points, scale_points: i.priority.scale_points },
+    signals: i.signals.map(signalOut),
+    evidence_note: "change_pct = (current − previous) / previous × 100 over the same-length previous period; ratios are ratio of sums.",
+    data_quality_signals: i.data_quality.map((x) => ({ type: x.type, scope: x.scope })),
+    // shop-level comparison only — not a market / category claim
+    shop_context: {
+      products_compared: d.intel.shop_context.sales_comparable_products,
+      products_with_sales_down: d.intel.shop_context.sales_down,
+      shop_median_sales_change_pct: d.intel.shop_context.median_gmv_pct,
+      product_minus_shop_median_pct_points: d.intel.shop_context.product_gmv_pct_minus_median,
+      product_roas_vs_shop_median_pct: d.intel.shop_context.product_roas_vs_median_pct,
+    },
     data_quality: qualityOut(d),
     metric_meta: meta("sales_gmv", "orders", "units", "ads_spend", "ads_broad_gmv"),
   };

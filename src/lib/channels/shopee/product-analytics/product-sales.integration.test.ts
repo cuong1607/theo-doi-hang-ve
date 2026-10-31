@@ -24,7 +24,7 @@ import { toJobFailure } from "../sync-errors.ts";
 import { getProductAnalyticsSyncConfig, type ProductAnalyticsSyncConfig } from "../../../product-analytics/config.ts";
 import { resolveProductPeriod } from "../../../product-analytics/periods.ts";
 import { loadProductDetail, loadProductList, resolveProductById } from "../../../product-analytics/read-model.ts";
-import { compare_product_periods, get_product_ads_performance, get_product_baseline, get_product_overview, get_product_sales_summary, ProductToolAccessError } from "../../../product-analytics/agent-tools.ts";
+import { compare_product_periods, get_product_ads_performance, get_product_baseline, get_product_overview, get_product_sales_summary, get_product_signals, ProductToolAccessError } from "../../../product-analytics/agent-tools.ts";
 import { FixtureProductSalesReader, MeteredProductSalesReader } from "./sales-reader.ts";
 import { createProductAnalyticsRunner, enqueueProductAnalyticsJob, PRODUCT_ANALYTICS_SYNC_TYPES, upsertProductSalesFacts } from "./sales-sync.ts";
 import { runProductAnalyticsSchedulerTick } from "./sales-schedule.ts";
@@ -305,11 +305,16 @@ test("PA2 / §52 §53 §58 §70. agent tools: backend authorization, compact pay
     await get_product_sales_summary(db, scope, period, clock),
     await get_product_ads_performance(db, scope, period, clock),
     await get_product_baseline(db, scope, { days: 28 }, clock),
+    await get_product_signals(db, scope, period, clock),
   ];
   assert.equal(readerA.calls.length, calls0, "tools read the DB only");
   for (const o of outs) {
     const text = JSON.stringify(o);
+    // PA-3: typical product analysis context < 8 KB (each tool well below)
     assert.ok(text.length < 6000, `${o.tool}: compact (${text.length} bytes)`);
+    // (the explicit negative warning "… NOT the part of sales caused by Ads … NOT organic" is the only allowed mention)
+    const withoutWarning = JSON.stringify({ ...o, attribution_warning: undefined });
+    assert.ok(!/organic|contribution|caused by|root_cause/i.test(withoutWarning), `${o.tool}: no causal / organic wording`);
     assert.ok(!/provider_order_id|line_item_id|0901234567|recipient|buyer|message_to_seller/.test(text), `${o.tool}: no raw order rows / PII`);
     assert.ok(!/\bselect\b.*\bfrom\b|insert into|execute_sql/i.test(text), `${o.tool}: no SQL text`);
     // 2P: every tool carries freshness / backfill state and source + confidence per metric
@@ -319,6 +324,14 @@ test("PA2 / §52 §53 §58 §70. agent tools: backend authorization, compact pay
   assert.match((outs[3] as Awaited<ReturnType<typeof get_product_ads_performance>>).attribution_warning, /NOT organic/);
   assert.ok((outs[0] as Awaited<ReturnType<typeof get_product_overview>>).metric_meta.views_snapshot.semantic_confidence === "UNKNOWN");
   assert.ok((outs[0] as Awaited<ReturnType<typeof get_product_overview>>).metric_meta.sales_gmv.semantic_confidence === "HIGH");
+  // PA-3 get_product_signals: health + signals with evidence + confidence + data quality, no raw facts
+  const sig = outs[5] as Awaited<ReturnType<typeof get_product_signals>>;
+  assert.equal(sig.tool, "get_product_signals");
+  assert.ok(sig.health.label && sig.health.rule && sig.health.confidence);
+  assert.ok(Array.isArray(sig.signals) && sig.signals.every((x) => "change_pct" in x && "previous" in x && "confidence" in x));
+  assert.ok(Array.isArray(sig.data_quality_signals));
+  assert.ok(typeof sig.attention.score === "number");
+  assert.ok(JSON.stringify(outs.slice(0, 2).concat(outs[5])).length < 8000, "overview + compare + signals together < 8 KB");
 
   const denied = async (s: typeof scope, code: string) => assert.rejects(() => get_product_overview(db, s, period, clock), (e: unknown) => e instanceof ProductToolAccessError && e.code === code);
   await denied({ ...scope, internal_user_id: staff }, "user_not_allowed");

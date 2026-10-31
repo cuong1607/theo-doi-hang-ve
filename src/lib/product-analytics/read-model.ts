@@ -8,20 +8,13 @@
 // ============================================================
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { foldVietnamese } from "../conversation/router.ts";
-
-import { salesComparable, type SalesCoverage } from "./coverage.ts";
 import { buildProductDataQuality, type ProductDataQuality } from "./data-quality.ts";
+import { ProductAnalyticsReadError } from "./errors.ts";
+import { loadIntelligenceDetail, type IntelDetail } from "./intelligence.ts";
 import type { ProductPeriod } from "./periods.ts";
-import { buildProductSignals, type ProductSignal } from "./signals.ts";
 import type { ProductDailyRow, ProductListRow, ProductSummary, ShopFreshnessRow } from "./types.ts";
 
-export class ProductAnalyticsReadError extends Error {
-  constructor(what: string, cause?: string) {
-    super(`Không đọc được ${what}${cause ? `: ${cause.slice(0, 160)}` : ""}`);
-    this.name = "ProductAnalyticsReadError";
-  }
-}
+export { ProductAnalyticsReadError };
 
 export interface ProductRef {
   productId: string;
@@ -80,6 +73,7 @@ export async function loadProductDaily(db: SupabaseClient, ref: Pick<ProductRef,
   }));
 }
 
+/** PA-2 flat list (all rows, no signals) — kept for pilot scripts; the page uses product_intelligence_list. */
 export async function loadProductList(db: SupabaseClient, shopIds: string[], period: ProductPeriod): Promise<ProductListRow[]> {
   if (!shopIds.length) return [];
   const { data, error } = await db.rpc("product_analytics_list", { p_shop_ids: shopIds, p_from: period.from, p_to: period.to, p_prev_from: period.prevFrom, p_prev_to: period.prevTo });
@@ -94,65 +88,25 @@ export async function timedRead<T>(fn: () => Promise<T>): Promise<{ value: T; ms
   return { value, ms: Math.round(performance.now() - started) };
 }
 
-// ------------------------------------------------------------------ list filtering (pure)
-
-export type ProductListSort = "gmv" | "orders" | "units" | "spend" | "broad_gmv" | "broad_roas" | "gmv_pct" | "spend_pct";
-export const PRODUCT_LIST_SORTS: readonly ProductListSort[] = ["gmv", "orders", "units", "spend", "broad_gmv", "broad_roas", "gmv_pct", "spend_pct"];
-
-export interface ProductListQuery {
-  q?: string;
-  ads?: "all" | "with" | "without";
-  status?: string;
-  sort?: ProductListSort;
-  dir?: "asc" | "desc";
-}
-
-/** Accent-insensitive search over name, SKU and item id; Ads presence / status filter; stable sort. */
-export function filterProductList(rows: readonly ProductListRow[], query: ProductListQuery): ProductListRow[] {
-  const q = foldVietnamese(query.q ?? "").trim();
-  const terms = q ? q.split(/\s+/) : [];
-  const out = rows.filter((r) => {
-    if (query.ads === "with" && r.campaigns === 0) return false;
-    if (query.ads === "without" && r.campaigns > 0) return false;
-    if (query.status && query.status !== "all" && (r.status ?? "UNKNOWN") !== query.status) return false;
-    if (!terms.length) return true;
-    const hay = foldVietnamese(`${r.name ?? ""} ${r.sku ?? ""} ${r.item_id}`);
-    return terms.every((t) => hay.includes(t));
-  });
-  const key = query.sort ?? "gmv";
-  const dir = query.dir === "asc" ? 1 : -1;
-  return out.sort((a, b) => {
-    const av = a[key];
-    const bv = b[key];
-    // nulls (no comparison possible) always last
-    if (av === null && bv === null) return a.id.localeCompare(b.id);
-    if (av === null) return 1;
-    if (bv === null) return -1;
-    return av === bv ? a.id.localeCompare(b.id) : (av < bv ? -1 : 1) * dir;
-  });
-}
-
-/** Sales % change only where both periods are covered (missing data is not a −100 % / +500 %). */
-export function applySalesCoverage(rows: readonly ProductListRow[], coverageOf: (shopId: string) => SalesCoverage): ProductListRow[] {
-  return rows.map((r) => (salesComparable(coverageOf(r.shop_id)) ? r : { ...r, gmv_pct: null }));
-}
-
 // ------------------------------------------------------------------ detail
 
 export interface ProductDetail {
   summary: ProductSummary;
   daily: ProductDailyRow[];
   quality: ProductDataQuality;
-  signals: ProductSignal[];
+  /** SQL signal engine: every signal with evidence, health, priority, shop context */
+  intel: IntelDetail;
 }
 
+/** Everything one product page / agent tool needs, read in parallel (4 RPC round trips, one wait). */
 export async function loadProductDetail(db: SupabaseClient, ref: ProductRef, period: ProductPeriod, now: Date = new Date()): Promise<ProductDetail | null> {
-  const [summary, daily, freshness] = await Promise.all([
+  const [summary, daily, freshness, intel] = await Promise.all([
     loadProductSummary(db, ref, period),
     loadProductDaily(db, ref, period.from, period.to),
     loadShopFreshness(db, [ref.shopId]),
+    loadIntelligenceDetail(db, ref, period),
   ]);
-  if (!summary) return null;
+  if (!summary || !intel) return null;
   const quality = buildProductDataQuality({ now, freshness: freshness.get(ref.shopId) ?? null, summary, partialToday: period.partialToday, hourCutoff: period.hourCutoff, period });
-  return { summary, daily, quality, signals: buildProductSignals(summary, quality) };
+  return { summary, daily, quality, intel };
 }

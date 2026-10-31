@@ -97,3 +97,143 @@ Permanent rules added in this phase:
 1. Production T0 / T1 probe rounds (`docs/shopee-product-analytics-api.md` §6, §9), plus the 3–7 day follow-up if one interval is not conclusive (§10), to settle the `sale` / `views` semantics.
 2. **Do NOT re-enable the legacy sync** (`SHOPEE_AUTO_SYNC_ENABLED` / `SHOPEE_LEGACY_MODULES_ENABLED` stay off: they would resurrect orders, escrow, returns, payout and legacy products). Sales facts come from the new minimal `product_sales_facts_read` concept instead (§11 of the API doc, recommended option A).
 3. Then design the canonical daily product metrics (minimal sales facts + Ads + optional extra-info snapshot deltas) with an explicit `DataQuality` per source.
+
+---
+
+## PA-3: unified product intelligence + signal layer
+
+```
+shopee_product_sales_facts ─┐                     (order lines, HOT/COLD/backfill, read-only Shopee)
+shopee_ads_campaign_*  ─────┤                     (Ads canonical daily / hourly, single-item campaigns)
+shopee_products ────────────┤  product_intelligence_rows   ← SQL OWNS TRUTH
+shopee_product_extra_snaps ─┤        │  metrics + deltas (ratio of sums) + coverage + freshness
+product_analytics_baseline ─┘        ▼
+                              pa_intelligence_eval (pure)  ← thresholds = p_cfg (config.ts)
+                                     │  signals · data-quality signals · health · priority
+                                     ▼
+              product_intelligence_list ── page / filter / search / sort + summary (1 round trip)
+              product_intelligence_detail ─ one product, every signal + shop context
+              product_signal_summary ────── summary only (agent / digest)
+                                     ▼
+              Next.js server components (labels only)   ·   agent tools (JSON < 8 KB)
+                                     ▼
+                       future Claude Product Analyst (interpretation; NOT in PA-3)
+```
+
+### Layers
+
+| layer | where | owns |
+|---|---|---|
+| Canonical facts | migrations 00064–00070 | order facts, Ads facts, product identity, snapshots |
+| Intelligence | `00071_product_intelligence.sql` | per-product metrics for the period and the previous comparable period, sales coverage (mirrors `coverage.ts`), freshness, signals, health, priority, shop medians, hero totals |
+| Config | `src/lib/product-analytics/config.ts` | every threshold, passed as `p_cfg`; the SQL refuses a missing key |
+| Read model | `intelligence.ts`, `read-model.ts` | typed RPC calls; no business math |
+| Wording | `signals.ts`, `display.ts` | Vietnamese labels, health reasons, priority explanation, "—" / "≥" rules |
+| UI | `src/components/product-analytics/*`, `app/(authenticated)/shopee/product-analytics/*` | rendering in the Ads design language |
+| Agent tools | `agent-tools.ts` | authorized, compact, typed outputs (incl. `get_product_signals`) |
+
+### Unified model (`ProductIntelligence`)
+
+* **identity:** id, shop, item id, name, SKU, image, status
+* **period:** from / to; previous from / to; hour cutoff; partial today
+* **sales:** gmv, orders, units (current + previous), gmv_pct, orders_pct
+  * The values are NULL when the shop has no sales data.
+  * The pct fields are set only when both periods are covered.
+* **ads:** campaigns, shared campaigns, spend, impressions, clicks, broad / direct orders and GMV, broad ROAS (current + previous), spend_pct, roas_pct
+* **coverage:** sales_state, covered_from, sales_exact, sales_comparable, ads_comparable
+* **intel:** `pa_intelligence_eval`. It holds signals[], data_quality[], top_signals[], health, priority and needs_attention.
+* **baseline:** `product_analytics_baseline` gives mean, median, p25, p75, stddev and CV over the 7 / 30 completed days before the period.
+* **shop context:** shop medians of Δ sales and Broad ROAS, plus the product's distance from them.
+
+The model is a set of read functions. No table duplicates the facts.
+
+### Server-side list
+
+`product_intelligence_list(shops, period…, cfg, q, ads, status, health, signal, sort, dir, page, page_size, with_summary, top)`
+does everything in one round trip:
+
+* builds the rows once (`MATERIALIZED`);
+* filters:
+  * accent-insensitive search (`pa_fold`: NFD, strip marks, đ→d) over name, SKU and item id;
+  * Ads presence, status;
+  * health (or `ATTENTION`), signal type;
+* sorts by priority, gmv, gmv_pct, orders, units, spend, broad_roas, roas_pct or name;
+  nulls go last and ties are stable;
+* clamps the page to the last page, and the page size to 100;
+* returns 50 rows by default.
+
+The summary comes from the same CTE:
+
+* health counts, plus sales-declining / sales-growing / Ads-efficiency-declining counts;
+* top attention products and per-shop medians;
+* **hero totals at shop level:** DISTINCT orders across products, and Ads from the shop-level
+  table. Shops without any sales data are left out of the sales totals and named in a notice.
+
+#### Performance (local replica of production: 5 shops, 1 087 products, 31.9 k fact lines)
+
+| read | before (PA-2) | PA-3 |
+|---|---|---|
+| list RPC, all shops | 705 KB, 1 153 rows (filtered in JS) | page 1 + summary ≈ 114 KB, 50 rows |
+| list page 1 + summary | — | ≈ 350 ms (local Docker) |
+| list page 2 (no summary) | — | ≈ 310 ms |
+| detail page reads (4 RPCs in parallel) | — | ≈ 200 ms |
+
+The engine went from about 0.22 to about 0.15 ms per product, after its tallies moved from SPI queries to in-memory loops.
+
+### Agent readiness
+
+| tool | answers |
+|---|---|
+| `get_product_overview` | what the product did (+ health, top signals) |
+| `compare_product_periods` | which metrics changed, with evidence |
+| `get_product_signals` | how significant (severity, priority), how sure (confidence, data-quality signals), shop context |
+| `get_product_sales_summary` / `get_product_ads_performance` | the numbers + semantics + attribution warning |
+| `get_product_baseline` | is this move unusual vs history (median, CV) |
+
+Each tool output stays under 6 KB. Overview + compare + signals together stay under 8 KB.
+Outputs contain no raw fact rows, no PII and no SQL. No Claude call exists in PA-3, and the
+Zalo agent stays off.
+
+### HOT sync optimisation — discovery only (spec §71–72)
+
+**Current production load** (2026-10-31, after all 5 shops were enabled):
+
+| shop | orders updated in 48 h | in last 90 min | calls / HOT cycle (list + detail) | reread rows unchanged |
+|---|---|---|---|---|
+| HOMIES | 1 246 | 66 | 38.5 | 96.0 % |
+| congtrangbedding | 1 196 | 80 | 36.6 | 95.6 % |
+| congtrang carpet | 377 | 23 | 12.0 | 96.1 % |
+| CTV | 206 | 17 | 8.0 | 95.8 % |
+| RUGLUX | 172 | 13 | 6.0 | 95.5 % |
+
+That is about 101 calls per round of 5 shops and about 4 850 calls a day at 48 rounds. Rate limits from product sync: 0.
+
+**Can `get_order_list` skip unnecessary details?** Not by itself.
+
+* The reader requests only `order_sn`.
+* The documented optional field of `get_order_list` is `order_status`, not `update_time`
+  or item data.
+* A status-unchanged filter would miss quantity / cancellation changes that keep the same
+  status, so it is unproven and unsafe.
+
+**Promising option: an incremental HOT window.**
+
+* Every 30 min, read `update_time ∈ [last successful HOT window end − overlap, now]` instead of the last 48 h.
+* The list already filters on `update_time`, so every order changed since the last run still appears.
+* `channel_sync_states.last_window_to` already exists as the watermark.
+* With a 60 min overlap the window is about 90 min. That is 13–80 orders per shop, so 1 list call + 1–2 detail calls per shop: about 12 calls per round instead of about 101 (**−88 %**, about 580 calls a day).
+
+**Risks:**
+
+* A failed or skipped run leaves a gap. The fix is to advance the watermark only on success and widen the next window.
+* Shopee `update_time` might lag the change. The fix is the overlap.
+* Clock skew.
+* COLD (8 days, twice a day) stays as the safety net and catches anything missed.
+
+**Proof required before changing production:**
+
+1. A shadow run for ≥ 3 days: compute the incremental window's order set next to the current 48 h set and confirm that every fact change the 48 h read produced is covered.
+2. A replay test of the watermark under failure, retry and long gaps.
+3. A unit test on window planning.
+
+Until then, the production algorithm is unchanged. Ads HOT priority (2–5) stays above product HOT (6); global concurrency is unchanged; the freshness target stays < 45 min (observed: 7–32 min).

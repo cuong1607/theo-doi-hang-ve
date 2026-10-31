@@ -15,13 +15,13 @@ import path from "node:path";
 import { classifyProductSalesOrderStatus, PRODUCT_SALES_STATUS_TABLE } from "./sales-status.ts";
 import { mapOrderToSalesFacts, productSalesReportDate, PRODUCT_SALES_FACT_KEYS, providerId } from "./sales-facts.ts";
 import { resolveProductPeriod } from "./periods.ts";
-import { buildProductSignals } from "./signals.ts";
+import { deltaTone, describeSignal, HEALTH_LABELS, HEALTH_TEXT, healthRuleText, priorityExplain, PRIORITY_TEXT, signalTone } from "./signals.ts";
 import { buildProductDataQuality } from "./data-quality.ts";
-import { applySalesCoverage, filterProductList } from "./read-model.ts";
+import { ATTRIBUTION_INDICATOR_LABEL, ATTRIBUTION_INDICATOR_TOOLTIP, formatAge, formatPct, formatSalesValue, salesAvailability } from "./display.ts";
 import { salesComparable, salesCoverage, salesCoverageNote, salesExact } from "./coverage.ts";
-import { getProductAnalyticsSyncConfig, PRODUCT_ANALYTICS_PRIORITY } from "./config.ts";
+import { getProductAnalyticsSyncConfig, intelligenceConfigJson, PRODUCT_ANALYTICS_PRIORITY } from "./config.ts";
 import { parseProductAnalyticsQuery } from "./url-state.ts";
-import type { PaDelta, ProductListRow, ProductSummary, ShopFreshnessRow } from "./types.ts";
+import type { PaDelta, ProductSummary, ShopFreshnessRow } from "./types.ts";
 import { resolveProductPhrase } from "../conversation/service.ts";
 import { isProductSalesReadRequest, PRODUCT_SALES_READ_ENDPOINTS } from "../channels/shopee/product-analytics/read-only-policy.ts";
 import { parseExtraInfo, parseSalesOrderListPage, planSalesWindows } from "../channels/shopee/product-analytics/sales-sync.ts";
@@ -171,26 +171,57 @@ function summary(over: Partial<{ gmv: PaDelta; orders: PaDelta; spend: PaDelta; 
 const FRESH: ShopFreshnessRow = { shop_id: "s", sales_enabled: true, extra_info_enabled: false, sales_last_success_at: "2026-10-30T08:00:00Z", sales_backfill_done_at: "2026-10-29T00:00:00Z", sales_active_jobs: 0, fact_lines: 10, first_report_date: "2026-09-30", last_report_date: "2026-10-30", last_order_created_at: null, extra_info_last_captured_at: null, products: 3, ads_campaign_today_at: "2026-10-30T08:10:00Z" };
 const NOW = new Date("2026-10-30T08:20:00Z");
 
-test("PA2 / §36 §37 §38. signals are facts with thresholds from config; no cause field anywhere", () => {
-  const s = summary({ gmv: D(2_000_000, 4_000_000), orders: D(10, 20), spend: D(500_000, 300_000), roas: D(2, 4), clicks: D(100, 400) });
-  s.ads.spend = D(500_000, 300_000);
-  const q = buildProductDataQuality({ now: NOW, freshness: FRESH, summary: s, partialToday: false, hourCutoff: null });
-  const sig = buildProductSignals(s, q);
-  assert.deepEqual(sig.map((x) => x.type).sort(), ["ADS_CLICKS_DOWN", "ADS_ROAS_DOWN", "ADS_SPEND_UP", "ORDERS_DOWN", "SALES_DOWN"]);
-  for (const x of sig) assert.deepEqual(Object.keys(x).sort(), ["current", "metric", "pct", "previous", "type"], "no cause / explanation field");
-  // tiny bases never fire
-  const tiny = buildProductSignals(summary({ gmv: D(10_000, 100_000), orders: D(1, 3) }), q);
-  assert.equal(tiny.filter((x) => x.type.startsWith("SALES") || x.type.startsWith("ORDERS")).length, 0);
+test("PA3 / §14 §25 §53. signal wording is factual: 'Doanh số giảm 21%', never a cause", () => {
+  assert.equal(describeSignal({ metric: "sales_gmv", direction: "down", change_pct: -21.04 }), "Doanh số giảm 21%");
+  assert.equal(describeSignal({ metric: "ads_cpc", direction: "up", change_pct: 12.5 }), "CPC tăng 12,5%");
+  assert.match(describeSignal({ metric: "sales_gmv", direction: "flat", change_pct: -3 }), /ổn định/);
+  const texts = [...HEALTH_LABELS.map((h) => HEALTH_TEXT[h]), ...(["no_comparable_data", "low_volume", "sales_and_efficiency_down", "sales_down_sharply", "warning_signals", "multiple_notices", "sales_growing", "no_significant_change"] as const).map((r) => healthRuleText(r))];
+  for (const t of texts) {
+    assert.ok(t.length > 0);
+    assert.ok(!/do quảng cáo|vì quảng cáo|Ads gây|Ads tạo ra|nguyên nhân là|caused|thị trường/i.test(t), `no causal / market claim: ${t}`);
+  }
+  assert.equal(Object.keys(HEALTH_TEXT).length, 5);
+  assert.deepEqual(HEALTH_LABELS.map((h) => HEALTH_TEXT[h]), ["Tốt", "Ổn định", "Cần theo dõi", "Yếu", "Chưa đủ dữ liệu"]);
+});
+
+test("PA3 / §49. semantic colour: CPC down is good, spend is neutral, sales down is bad — never 'negative = red'", () => {
+  assert.equal(deltaTone("ads_cpc", -20), "good");
+  assert.equal(deltaTone("ads_cpc", 20), "bad");
+  assert.equal(deltaTone("ads_spend", -40), "neutral");
+  assert.equal(deltaTone("ads_spend", 40), "neutral");
+  assert.equal(deltaTone("sales_gmv", -15), "bad");
+  assert.equal(deltaTone("ads_broad_roas", 15), "good");
+  assert.equal(deltaTone("sales_gmv", 1), "neutral", "tiny moves stay neutral");
+  assert.equal(deltaTone("cancelled_orders", 30), "bad");
+  assert.equal(signalTone({ polarity: "negative", severity: "WARNING" }), "bad");
+  assert.equal(signalTone({ polarity: "negative", severity: "NOTICE" }), "warning");
+  assert.equal(signalTone({ polarity: "positive", severity: "INFO" }), "good");
+  assert.equal(signalTone({ polarity: "neutral", severity: "INFO" }), "neutral");
+});
+
+test("PA3 / §27 §48. priority is explained, never a bare number", () => {
+  const t = priorityExplain({ score: 76, level: "MEDIUM", signal_points: 28, scale_points: 17, business_vnd: 55_000_000, confidence: "HIGH" });
+  assert.match(t, /76 điểm = 28 điểm tín hiệu bất lợi × \(1 \+ 17\/10 quy mô\) × 1/);
+  assert.equal(PRIORITY_TEXT.HIGH, "Ưu tiên cao");
+});
+
+test("PA3 / §18. every threshold the SQL engine requires is in config.ts (one place)", () => {
+  const sql = readFileSync(path.join(SRC, "..", "supabase/migrations/00071_product_intelligence.sql"), "utf8");
+  const required = [...sql.match(/k_required constant text\[\] := ARRAY\[([^\]]+)\]/)![1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]);
+  assert.ok(required.length >= 20);
+  const cfg = intelligenceConfigJson();
+  for (const k of [...required, "backfill_days", "sales_stale_minutes", "ads_stale_minutes"]) assert.equal(typeof cfg[k], "number", `config key ${k}`);
+  // the engine SQL has no movement threshold of its own (they all come through p_cfg)
+  const engine = sql.slice(sql.indexOf("CREATE FUNCTION public.pa_intelligence_eval"), sql.indexOf("-- C. per-shop context"));
+  assert.ok(!/\b(15|20|30|50|500000|100000)\b/.test(engine.replace(/--.*$/gm, "")), "no magic threshold inside pa_intelligence_eval");
 });
 
 test("PA2 / §39 §40. data quality: stale → DATA_STALE; partial today without same-time → no comparison signals; warnings explicit", () => {
   const s = summary({ gmv: D(1_000_000, 5_000_000) });
   const stale = buildProductDataQuality({ now: NOW, freshness: { ...FRESH, sales_last_success_at: "2026-10-29T00:00:00Z" }, summary: s, partialToday: false, hourCutoff: null });
   assert.equal(stale.sales_freshness.stale, true);
-  assert.ok(buildProductSignals(s, stale).some((x) => x.type === "DATA_STALE"));
   const partial = buildProductDataQuality({ now: NOW, freshness: FRESH, summary: s, partialToday: true, hourCutoff: null });
   assert.equal(partial.same_time_comparison.sales_available, false);
-  assert.equal(buildProductSignals(s, partial).filter((x) => x.type === "SALES_DOWN").length, 0);
   const today = buildProductDataQuality({ now: NOW, freshness: FRESH, summary: summary({ prevRows: 0 }), partialToday: true, hourCutoff: 15 });
   assert.equal(today.same_time_comparison.applied, true);
   assert.equal(today.same_time_comparison.ads_available, false, "no hourly Ads rows of yesterday → Ads same-time unavailable");
@@ -216,38 +247,40 @@ test("PA2P / §34. missing data is not zero: coverage per period; no sales % / s
   assert.deepEqual([salesExact(c30), salesComparable(c30)], [true, false], "30d previous period is older than the backfill");
   assert.match(salesCoverageNote(c30)!, /không tính % thay đổi/);
   assert.equal(salesCoverageNote(c7), null);
-
-  // signals: an almost-empty previous period must not produce SALES_UP
-  const s = summary({ gmv: D(5_000_000, 600_000), orders: D(20, 5) });
-  const covered = buildProductDataQuality({ now: NOW, freshness: FRESH, summary: s, partialToday: false, hourCutoff: null, period: p7 });
-  assert.ok(buildProductSignals(s, covered).some((x) => x.type === "SALES_UP"));
   for (const period of [p30, p7]) {
     const fresh = period === p30 ? FRESH : { ...FRESH, sales_backfill_done_at: null };
-    const q = buildProductDataQuality({ now: NOW, freshness: fresh, summary: s, partialToday: false, hourCutoff: null, period });
-    assert.equal(buildProductSignals(s, q).filter((x) => /^(SALES|ORDERS|UNITS)_/.test(x.type)).length, 0);
+    const q = buildProductDataQuality({ now: NOW, freshness: fresh, summary: summary({ gmv: D(5_000_000, 600_000) }), partialToday: false, hourCutoff: null, period });
     assert.ok(q.semantic_warnings.length > 0 && q.sales_coverage.previous_complete === false);
   }
-
-  // list: Δ sales cleared (so it also sorts last), Ads deltas untouched
-  const rows = applySalesCoverage([row({ id: "a", shop_id: "s1", gmv_pct: 400, spend_pct: 10 }), row({ id: "b", shop_id: "s2", gmv_pct: -5 })], (shop) => (shop === "s1" ? manual : c7));
-  assert.deepEqual(rows.map((r) => [r.id, r.gmv_pct, r.spend_pct]), [["a", null, 10], ["b", -5, null]]);
+  // (signal suppression without coverage + SQL Δ clearing: product-intelligence.integration.test.ts)
 });
 
-// ------------------------------------------------------------------ list / search / resolution
+// ------------------------------------------------------------------ display rules (PA-3)
 
-function row(over: Partial<ProductListRow>): ProductListRow {
-  return { id: "x", shop_id: "s", item_id: "1", name: null, sku: null, image_url: null, status: "NORMAL", campaigns: 0, shared_campaigns: 0, gmv: 0, orders: 0, units: 0, prev_gmv: 0, prev_orders: 0, gmv_pct: null, spend: 0, clicks: 0, impressions: 0, broad_gmv: 0, broad_order: 0, broad_roas: null, prev_spend: 0, spend_pct: null, roas_pct: null, ...over };
-}
+test("PA3 / §34. display: no data → '—', not covered → '≥ x', exact otherwise; never a fabricated 0", () => {
+  const f = (n: number | null) => (n === null ? "—" : String(n));
+  assert.equal(formatSalesValue(1_000, "no_data", f), "—");
+  assert.equal(formatSalesValue(null, "complete", f), "—");
+  assert.equal(formatSalesValue(1_000, "lower_bound", f), "≥ 1000");
+  assert.equal(formatSalesValue(0, "lower_bound", f), "—", "a lower bound of 0 says nothing");
+  assert.equal(formatSalesValue(0, "complete", f), "0", "covered + no orders = a real 0");
+  assert.equal(salesAvailability({ sales_state: "no_data", sales_exact: false }), "no_data");
+  assert.equal(salesAvailability({ sales_state: "not_backfilled", sales_exact: false }), "lower_bound");
+  assert.equal(salesAvailability({ sales_state: "covered", sales_exact: true }), "complete");
+  assert.equal(formatPct(-21.04), "−21%");
+  assert.equal(formatPct(12.5), "+12,5%");
+  assert.equal(formatAge(12), "12 phút trước");
+  assert.equal(formatAge(null), "chưa có");
+});
 
-test("PA2 / §46 §47 §48. search is accent-insensitive over name / SKU / item id; Ads filter keeps non-Ads products", () => {
-  const rows = [row({ id: "a", name: "Thảm lông xù cao cấp", sku: "TLX-01", item_id: "111", gmv: 5, campaigns: 1 }), row({ id: "b", name: "Chăn hè Đũi", sku: "CH-9", item_id: "222", gmv: 9 }), row({ id: "c", name: null, item_id: "333444", gmv: 1 })];
-  assert.deepEqual(filterProductList(rows, { q: "tham long xu" }).map((r) => r.id), ["a"]);
-  assert.deepEqual(filterProductList(rows, { q: "dui" }).map((r) => r.id), ["b"]);
-  assert.deepEqual(filterProductList(rows, { q: "ch-9" }).map((r) => r.id), ["b"]);
-  assert.deepEqual(filterProductList(rows, { q: "3334" }).map((r) => r.id), ["c"]);
-  assert.deepEqual(filterProductList(rows, { ads: "without" }).map((r) => r.id), ["b", "c"], "products without Ads are listed");
-  assert.deepEqual(filterProductList(rows, {}).map((r) => r.id), ["b", "a", "c"], "default: GMV desc");
-  assert.deepEqual(filterProductList([row({ id: "n", gmv_pct: null }), row({ id: "m", gmv_pct: -5 })], { sort: "gmv_pct", dir: "asc" }).map((r) => r.id), ["m", "n"], "nulls last");
+test("PA3 / §10 §77. attribution indicator: exact label + tooltip; never 'contribution' / 'sales share' / 'organic remainder'", () => {
+  assert.equal(ATTRIBUTION_INDICATOR_LABEL, "Ads attribution / total sales indicator");
+  assert.match(ATTRIBUTION_INDICATOR_TOOLTIP, /This compares Shopee Ads attribution GMV against product sales facts\. It is NOT a sales-share percentage and may exceed 100%\./);
+  const files = [...walk(path.join(SRC, "lib/product-analytics")), ...walk(path.join(SRC, "components/product-analytics")), ...walk(path.join(SRC, "app/(authenticated)/shopee/product-analytics"))];
+  for (const f of files) {
+    const code = readFileSync(f, "utf8").replace(/\/\/.*$/gm, "");
+    assert.ok(!/Ads contribution|Ads sales share|organic remainder|doanh số tự nhiên\s*=|Ads tạo ra \d|Ads generated/i.test(code), `${f}: forbidden attribution wording`);
+  }
 });
 
 test("PA2 / §51. Zalo product phrase → canonical product of THAT shop only; ambiguous → null", () => {
@@ -265,13 +298,18 @@ test("PA2 / §51. Zalo product phrase → canonical product of THAT shop only; a
   assert.equal(resolveProductPhrase("chăn", c), null, "unknown");
 });
 
-test("PA2. URL state: defaults, sanitising", () => {
-  const s = parseProductAnalyticsQuery({ shop: "not-a-uuid", ads: "maybe", sort: "drop table", page: "-3" }, NOW);
+test("PA2 / PA3 §34 §35 §36. URL state: defaults (priority sort, 50 rows), sanitising, health / signal filters", () => {
+  const s = parseProductAnalyticsQuery({ shop: "not-a-uuid", ads: "maybe", sort: "drop table", page: "-3", health: "BAD", signal: "x;--", size: "1000" }, NOW);
   assert.equal(s.shop, "all");
   assert.equal(s.list.ads, "all");
-  assert.equal(s.list.sort, "gmv");
-  assert.equal(s.page, 1);
+  assert.equal(s.list.sort, "priority");
+  assert.equal(s.list.page, 1);
+  assert.equal(s.list.pageSize, 50);
+  assert.equal(s.list.health, "all");
+  assert.equal(s.list.signal, "all");
   assert.equal(s.period.preset, "7d");
+  const ok = parseProductAnalyticsQuery({ health: "ATTENTION", signal: "ADS_ROAS_DOWN", sort: "roas_pct", dir: "asc", page: "3", size: "25" }, NOW);
+  assert.deepEqual([ok.list.health, ok.list.signal, ok.list.sort, ok.list.dir, ok.list.page, ok.list.pageSize], ["ATTENTION", "ADS_ROAS_DOWN", "roas_pct", "asc", 3, 25]);
 });
 
 // ------------------------------------------------------------------ read-only + scheduling
@@ -349,7 +387,13 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 test("PA2 / §32 §69. ATTRIBUTION GUARD: nothing computes organic = total − broad Ads (code + SQL)", () => {
-  const files = [...walk(path.join(SRC, "lib/product-analytics")), ...walk(path.join(SRC, "app/(authenticated)/shopee/product-analytics")), path.join(SRC, "..", "supabase/migrations/00070_shopee_product_analytics.sql")];
+  const files = [
+    ...walk(path.join(SRC, "lib/product-analytics")),
+    ...walk(path.join(SRC, "components/product-analytics")),
+    ...walk(path.join(SRC, "app/(authenticated)/shopee/product-analytics")),
+    path.join(SRC, "..", "supabase/migrations/00070_shopee_product_analytics.sql"),
+    path.join(SRC, "..", "supabase/migrations/00071_product_intelligence.sql"),
+  ];
   for (const f of files) {
     const code = readFileSync(f, "utf8").replace(/\/\/.*$/gm, "").replace(/--.*$/gm, "");
     assert.ok(!/organic\w*\s*[:=]/i.test(code), `${f}: organic metric defined`);

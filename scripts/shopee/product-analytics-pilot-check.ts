@@ -16,8 +16,10 @@ import {
   get_product_baseline,
   get_product_overview,
   get_product_sales_summary,
+  get_product_signals,
   ProductToolAccessError,
 } from "../../src/lib/product-analytics/agent-tools.ts";
+import { loadIntelligenceDetail, loadIntelligenceList } from "../../src/lib/product-analytics/intelligence.ts";
 import { resolveProductPeriod } from "../../src/lib/product-analytics/periods.ts";
 import { loadProductDetail, loadProductList } from "../../src/lib/product-analytics/read-model.ts";
 
@@ -99,6 +101,7 @@ async function agentTools() {
     get_product_sales_summary: () => get_product_sales_summary(db, scope, { period: { preset: "30d" } }),
     get_product_ads_performance: () => get_product_ads_performance(db, scope, { period: { preset: "7d" } }),
     get_product_baseline: () => get_product_baseline(db, scope, { days: 30 }),
+    get_product_signals: () => get_product_signals(db, scope, { period: { preset: "7d" } }),
   };
   for (const [name, fn] of Object.entries(tools)) {
     const t = performance.now();
@@ -109,7 +112,7 @@ async function agentTools() {
     console.log(JSON.stringify({
       tool: name,
       bytes: Buffer.byteLength(json),
-      under_6kb: Buffer.byteLength(json) < 6144,
+      under_8kb: Buffer.byteLength(json) < 8192,
       ms: Math.round(performance.now() - t),
       has_data_quality: keys.has("data_quality"),
       has_metric_meta: keys.has("metric_meta") || keys.has("source") || keys.has("semantic_confidence"),
@@ -139,7 +142,58 @@ async function agentTools() {
   }
 }
 
+/**
+ * PA-3: product intelligence on real data — per-shop health distribution, signal
+ * counts, attention, plus latency / payload of the paginated list (page 1 with
+ * summary, page 2, filter, search) and of the detail RPC. READ ONLY.
+ */
+async function intel() {
+  // local: the "[replica]" copies of the production shops; cloud: the real shops
+  const every = await shops();
+  const replica = every.filter((s) => s.shop_name.startsWith("[replica]"));
+  const all = replica.length ? replica : every;
+  const live = (await db.from("shops").select("id").eq("channel", "shopee").eq("data_source", "live").eq("is_active", true)).data?.map((s) => s.id) ?? [];
+  const scope = all.filter((s) => live.includes(s.id));
+  const p7 = resolveProductPeriod({ preset: "7d" });
+  for (const s of [...scope, { id: "all", shop_name: "ALL" }]) {
+    const ids = s.id === "all" ? scope.map((x) => x.id) : [s.id];
+    const r = await loadIntelligenceList(db, ids, p7, { pageSize: 50 });
+    const types: Record<string, number> = {};
+    const full = await loadIntelligenceList(db, ids, p7, { pageSize: 100 }, { withSummary: false });
+    let rows = full.rows;
+    for (let page = 2; page <= Math.ceil(full.filtered / 100); page++) rows = rows.concat((await loadIntelligenceList(db, ids, p7, { pageSize: 100, page }, { withSummary: false })).rows);
+    for (const x of rows) for (const t of x.signal_types) types[t] = (types[t] ?? 0) + 1;
+    const sm = r.summary!;
+    console.log(JSON.stringify({
+      shop: s.shop_name,
+      products: r.total,
+      health: sm.health_counts,
+      needs_attention: sm.needs_attention,
+      sales_declining: sm.sales_declining,
+      ads_efficiency_declining: sm.ads_efficiency_declining,
+      top_attention: sm.top_attention.slice(0, 3).map((x) => ({ item: x.item_id, health: x.health.label, score: x.priority.score, signals: x.top_signals.map((t) => `${t.type} ${t.change_pct}%`) })),
+      signal_counts: types,
+      hero: { gmv: sm.hero.gmv, orders: sm.hero.orders, availability: sm.hero.sales_availability, comparable: sm.hero.sales_comparable },
+      page1_bytes: Buffer.byteLength(JSON.stringify(r)),
+      rows_returned: r.rows.length,
+    }));
+  }
+  const ids = scope.map((x) => x.id);
+  await measure("intel list p1 + summary [all shops, 7d]", () => loadIntelligenceList(db, ids, p7));
+  await measure("intel list p2 (no summary) [all shops, 7d]", () => loadIntelligenceList(db, ids, p7, { page: 2 }, { withSummary: false }));
+  await measure("intel list health=WATCH [all shops, 7d]", () => loadIntelligenceList(db, ids, p7, { health: "WATCH" }));
+  await measure("intel list search 'tham' [all shops, 7d]", () => loadIntelligenceList(db, ids, p7, { q: "tham" }));
+  const top = (await loadIntelligenceList(db, ids, p7, { pageSize: 1 }, { withSummary: false })).rows[0];
+  if (top) {
+    await measure(`intel detail RPC [${top.item_id}]`, () => loadIntelligenceDetail(db, { shopId: top.shop_id, itemId: top.item_id }, p7));
+    await measure(`page detail reads (summary+daily+freshness+intel) [${top.item_id}]`, () => loadProductDetail(db, { productId: top.id, shopId: top.shop_id, itemId: top.item_id }, p7));
+  }
+  const old = await loadProductList(db, ids, resolveProductPeriod({ preset: "30d" }));
+  console.log(JSON.stringify({ pa2_full_list_rows: old.length, pa2_full_list_bytes: Buffer.byteLength(JSON.stringify(old)) }));
+}
+
 const [cmd, arg] = process.argv.slice(2);
 if (cmd === "latency") await latency(arg ?? "CTV");
 else if (cmd === "agent-tools") await agentTools();
-else console.log("usage: latency <shopName> | agent-tools");
+else if (cmd === "intel") await intel();
+else console.log("usage: latency <shopName> | agent-tools | intel");
