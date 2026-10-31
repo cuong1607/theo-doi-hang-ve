@@ -2,7 +2,7 @@
 // PRODUCT-ANALYTICS-2P — UI review on the local replica (load --facts=cloud):
 // production facts as they are (no shop backfilled). Throw-away admin, removed after.
 //
-//   node --env-file=.env.local scripts/e2e/product-analytics-2p-ui.ts http://localhost:3100 <outDir>
+//   node --env-file=.env.local scripts/e2e/product-analytics-2p-ui.ts http://localhost:3100 <outDir> [covered]
 //
 // Checks: missing ≠ zero (no exact sales / Δ for non-backfilled shops), callouts,
 // mobile horizontal overflow, dark mode, payload / timing; screenshots of
@@ -15,6 +15,8 @@ import { chromium, type Browser, type BrowserContext, type Page } from "playwrig
 
 const BASE = process.argv[2] ?? "http://localhost:3100";
 const OUT = process.argv[3] ?? ".";
+// "covered" (2P-FINAL): every shop backfilled → assert exact values instead of lower bounds.
+const COVERED = process.argv[4] === "covered";
 const admin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, { auth: { autoRefreshToken: false, persistSession: false } });
 const TAG = `pa2pui${Date.now()}`;
 const EMAIL = `${TAG}@example.test`;
@@ -74,7 +76,50 @@ async function main() {
     const page = await desktop.newPage();
     await login(page);
 
-    await step("list (all shops, 7d): non-backfilled shops show lower bound / '—', never an exact sales Δ", async () => {
+    if (COVERED) {
+      await step("list (all shops, 7d, backfilled): exact sales, Δ % shown, no coverage callout", async () => {
+        await page.goto(`${BASE}/shopee/product-analytics?period=7d`, { timeout: 180_000 });
+        await settle(page);
+        facts.list_text_head = (await page.locator("main").last().innerText()).slice(0, 900);
+        expect(await page.getByText("Doanh số chưa đầy đủ").count() === 0, "no 'Doanh số chưa đầy đủ' callout");
+        expect(await page.getByText("Kỳ so sánh chưa có dữ liệu").count() === 0, "no previous-period callout for 7d");
+        const rows = page.locator("table").first().locator("tbody tr");
+        const n = Math.min(await rows.count(), 50);
+        expect(n > 0, "rows");
+        let lowerBound = 0;
+        let withDelta = 0;
+        for (let i = 0; i < n; i++) {
+          const cells = rows.nth(i).locator("td");
+          if ((await cells.nth(1).innerText()).trim().startsWith("≥")) lowerBound++;
+          if (/%/.test((await cells.nth(4).innerText()).trim())) withDelta++;
+        }
+        facts.covered_7d = { rows: n, lowerBound, withDelta };
+        expect(lowerBound === 0, `no lower-bound cells (got ${lowerBound})`);
+        expect(withDelta > 0, "some sales Δ % shown");
+        await shot(page, "11-list-covered-7d");
+      });
+      await step("list (all shops, 30d preset): previous period not covered → callout, no sales Δ %", async () => {
+        await page.goto(`${BASE}/shopee/product-analytics?period=30d`, { timeout: 180_000 });
+        await settle(page);
+        expect(await page.getByText("Kỳ so sánh chưa có dữ liệu").count() > 0, "callout 'Kỳ so sánh chưa có dữ liệu'");
+        expect(await page.getByText("Doanh số chưa đầy đủ").count() === 0, "current 30d is exact");
+        const rows = page.locator("table").first().locator("tbody tr");
+        const n = Math.min(await rows.count(), 50);
+        let withDelta = 0;
+        let lowerBound = 0;
+        for (let i = 0; i < n; i++) {
+          const cells = rows.nth(i).locator("td");
+          if ((await cells.nth(1).innerText()).trim().startsWith("≥")) lowerBound++;
+          if (/%/.test((await cells.nth(4).innerText()).trim())) withDelta++;
+        }
+        facts.covered_30d = { rows: n, lowerBound, withDelta };
+        expect(lowerBound === 0, `no lower-bound cells (got ${lowerBound})`);
+        expect(withDelta === 0, `no sales Δ % (got ${withDelta})`);
+        await shot(page, "12-list-covered-30d");
+      });
+    }
+
+    if (!COVERED) await step("list (all shops, 7d): non-backfilled shops show lower bound / '—', never an exact sales Δ", async () => {
       await page.goto(`${BASE}/shopee/product-analytics?period=7d`, { timeout: 180_000 });
       await page.goto(`${BASE}/shopee/product-analytics?period=7d`); // warm
       const t = Date.now();
@@ -129,6 +174,20 @@ async function main() {
         : await admin.from("shopee_products").select("id").eq("shop_id", s.id).limit(1).single();
       if (!p) continue;
       i++;
+      if (COVERED) {
+        await step(`detail ${s.shop_name} (backfilled, 7d): no coverage callout, no chart gap note`, async () => {
+          const t = Date.now();
+          await page.goto(`${BASE}/shopee/product-analytics/${p.id}?period=7d`, { timeout: 180_000 });
+          facts[`detail_${i}_ms`] = Date.now() - t;
+          await settle(page);
+          if (i === 1) facts.detail_text_head = (await page.locator("main").last().innerText()).slice(0, 1500);
+          expect(await page.getByText("Doanh số chưa đầy đủ").count() === 0, "no callout");
+          expect(await page.getByText("Chưa có ngày nào đủ dữ liệu đơn hàng", { exact: false }).count() === 0, "no chart gap note");
+          expect(await page.getByText("≥", { exact: false }).count() === 0, "no lower-bound tile");
+          if (i === 1) await shot(page, "13-detail-covered-7d");
+        });
+        continue;
+      }
       await step(`detail ${s.shop_name}: coverage callout, sales tiles not exact, chart note`, async () => {
         const t = Date.now();
         await page.goto(`${BASE}/shopee/product-analytics/${p.id}?period=7d`, { timeout: 180_000 });
