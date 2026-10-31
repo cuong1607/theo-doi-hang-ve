@@ -13,9 +13,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { CONVERSATION_ALLOWED_ROLES } from "../conversation/service.ts";
 
-import { PRODUCT_METRIC_META } from "./data-quality.ts";
+import { buildProductDataQuality, PRODUCT_METRIC_META } from "./data-quality.ts";
 import { resolveProductPeriod, type ProductPeriod, type ProductPeriodPreset } from "./periods.ts";
-import { loadProductDetail, ProductAnalyticsReadError, type ProductDetail, type ProductRef } from "./read-model.ts";
+import { loadProductDetail, loadShopFreshness, ProductAnalyticsReadError, type ProductDetail, type ProductRef } from "./read-model.ts";
 import type { PaDelta } from "./types.ts";
 import { addDays, vnToday } from "../analytics/periods.ts";
 
@@ -134,6 +134,7 @@ export async function compare_product_periods(db: SupabaseClient, scope: Product
     },
     signals: d.signals.map((x) => ({ type: x.type, metric: x.metric, current: x.current, previous: x.previous, pct: x.pct })),
     data_quality: qualityOut(d),
+    metric_meta: meta("sales_gmv", "orders", "units", "ads_spend", "ads_broad_gmv"),
   };
 }
 
@@ -191,7 +192,26 @@ export async function get_product_baseline(db: SupabaseClient, scope: ProductToo
   const days = Math.min(90, Math.max(7, Math.round(input?.days ?? 28)));
   const to = addDays(vnToday(now), -1);
   const from = addDays(to, -(days - 1));
-  const { data, error } = await db.rpc("product_analytics_baseline", { p_shop_id: ref.shopId, p_item_id: ref.itemId, p_from: from, p_to: to });
+  const [{ data, error }, freshness] = await Promise.all([
+    db.rpc("product_analytics_baseline", { p_shop_id: ref.shopId, p_item_id: ref.itemId, p_from: from, p_to: to }),
+    loadShopFreshness(db, [ref.shopId]),
+  ]);
   if (error) throw new ProductAnalyticsReadError("baseline", error.message);
-  return { tool: "get_product_baseline" as const, product_id: ref.productId, item_id: ref.itemId, completed_days_only: true, baseline: data as Record<string, unknown> };
+  const q = buildProductDataQuality({ now, freshness: freshness.get(ref.shopId) ?? null, summary: null, partialToday: false, hourCutoff: null });
+  return {
+    tool: "get_product_baseline" as const,
+    product_id: ref.productId,
+    item_id: ref.itemId,
+    completed_days_only: true,
+    baseline: data as Record<string, unknown>,
+    // a baseline over days the sales backfill has not covered yet would read as zero sales
+    data_quality: {
+      sales_freshness_minutes: q.sales_freshness.age_minutes,
+      ads_freshness_minutes: q.ads_freshness.age_minutes,
+      sales_backfill_done: q.sales_freshness.backfill_done,
+      missing_sources: q.missing_sources.filter((s) => s !== "extra_info"),
+      semantic_warnings: q.semantic_warnings,
+    },
+    metric_meta: meta("sales_gmv", "orders", "units", "ads_spend", "ads_broad_gmv"),
+  };
 }

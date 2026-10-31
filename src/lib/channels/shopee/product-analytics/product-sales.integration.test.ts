@@ -312,6 +312,8 @@ test("PA2 / §52 §53 §58 §70. agent tools: backend authorization, compact pay
     assert.ok(text.length < 6000, `${o.tool}: compact (${text.length} bytes)`);
     assert.ok(!/provider_order_id|line_item_id|0901234567|recipient|buyer|message_to_seller/.test(text), `${o.tool}: no raw order rows / PII`);
     assert.ok(!/\bselect\b.*\bfrom\b|insert into|execute_sql/i.test(text), `${o.tool}: no SQL text`);
+    // 2P: every tool carries freshness / backfill state and source + confidence per metric
+    assert.ok("data_quality" in o && "metric_meta" in o, `${o.tool}: data_quality + metric_meta present`);
   }
   assert.equal(outs[3].tool, "get_product_ads_performance");
   assert.match((outs[3] as Awaited<ReturnType<typeof get_product_ads_performance>>).attribution_warning, /NOT organic/);

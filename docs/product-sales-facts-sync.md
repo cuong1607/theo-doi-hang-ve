@@ -66,6 +66,31 @@ Opening `/shopee/product-analytics` or a product detail page makes **0 Shopee ca
 5. Observe: `channel_sync_jobs` metadata (`apiCalls`, `rateLimitHits`, `durationMs`), table sizes, query latency on cloud.
 6. Optionally `PRODUCT_EXTRA_INFO_SYNC_ENABLED=true` (twice a day) to start the 90-day snapshot history for a future semantics study.
 
+### 5.1 Pilot log (PRODUCT-ANALYTICS-2P, started 2026-10-31)
+
+State on 2026-10-31 08:30 VN:
+- commit `336c55b` deployed;
+- 00070 on cloud;
+- `PRODUCT_SALES_SYNC_ENABLED=true`;
+- **no shop switch on yet**, so no backfill / hot / cold job has been planned (only 4 admin "Làm mới đơn" jobs ran).
+
+Checks are reproducible, read only: `scripts/shopee/product-analytics-pilot-check.ts` (latency, agent tools) and the SQL listed in the 2P report.
+
+| Check (3 shops, 2 299 lines from the manual 48 h reads) | Result |
+|---|---|
+| Duplicate `(order, line_item_id)` | 0. A second HOMIES read of the same window: 1 549 / 1 551 lines `skipped_stale`, 0 new rows. |
+| Cancelled lines counted in sales | 0 (148 cancelled lines stored, `is_valid_for_sales=false`). |
+| `valid_amount = unit_discounted_price × (qty − cancelled)` | 0 mismatches. |
+| Σ facts = Σ `shopee_product_daily_metrics` (GMV, units) | equal to the đồng, all 3 shops. |
+| `report_date` = Asia/Bangkok date of `create_time` | 0 mismatches. 308 lines have a different UTC date; 426 lines fall between 22:00 and 02:00 VN. |
+| Cross-check vs frozen legacy orders (CTV + carpet, 275 overlapping orders) | 275 / 275 same line count, quantity and item value. 268 changed status since the freeze (restatement source). 245 have `total_amount ≠ Σ items`, which confirms no per-item allocation. |
+| Multi-item orders | 142. Each line keeps its own `unit × qty`; nothing is allocated. |
+| Identity | 0 fact lines without `shopee_products`; 0 item ids shared across shops. |
+| Broad Ads GMV ÷ product sales GMV (29–30/10, 86 products) | median 1.00, p90 2.00, p95 2.75, max 5.15; 36 products > 100 %. Not a share. |
+| Provider (4 manual jobs) | 33 list + 65 detail calls, 0 rate limits, 0 retries. list p50 ≈ 1.7 s / max 2.8 s, detail p50 ≈ 2.4 s / max 3.8 s, from iad1. |
+| Agent tools on prod DB (HOMIES grant) | 5 / 5 OK, 0.7–2.8 KB, no forbidden key. Denials: unknown user, other shop, other shop's product, non-uuid. |
+| Read latency (from a VN client, network included) | list 30d of one shop p50 0.3–0.46 s; all 5 shops p50 0.73–1.12 s; detail p50 0.3 s; baseline p50 0.24–0.28 s. Server-side list RPC for all shops ≈ 250 ms warm (1.3 s cold). |
+
 ## 6. Retention
 
 - Sales facts: long term.
