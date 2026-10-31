@@ -82,3 +82,27 @@ export function isProductAnalyticsReadRequest(method: string, path: string): boo
 export function assertProductAnalyticsReadRequest(method: string, path: string): void {
   if (!isProductAnalyticsReadRequest(method, path)) throw new ProductAnalyticsWriteForbiddenError(`từ chối ${method} ${path}`);
 }
+
+/**
+ * PRODUCT-ANALYTICS-2: what the isolated sync jobs (product_sales_facts_read /
+ * product_extra_info_read) may call. Not guessed: the two order reads ran in
+ * production from SHOPEE-3 until the legacy retirement (7 492 stored detail
+ * payloads, 2026-10-14 → 10-28); extra info verified in Phase 1P. GET only.
+ * The legacy order module itself stays retired — only these exact paths are reused.
+ */
+export const PRODUCT_SALES_READ_ENDPOINTS = {
+  order_list: "/api/v2/order/get_order_list",
+  order_detail: "/api/v2/order/get_order_detail",
+  item_extra_info: "/api/v2/product/get_item_extra_info",
+} as const;
+const PRODUCT_SALES_PATHS = new Set<string>(Object.values(PRODUCT_SALES_READ_ENDPOINTS));
+
+export function isProductSalesReadRequest(method: string, path: string): boolean {
+  if (method !== "GET" || !PRODUCT_SALES_PATHS.has(path)) return false;
+  const name = path.split("/").pop()!;
+  return name.startsWith("get_") && name.split("_").every((t) => !ADS_MUTATION_TOKENS.includes(t));
+}
+
+export function assertProductSalesReadRequest(method: string, path: string): void {
+  if (!isProductSalesReadRequest(method, path)) throw new ProductAnalyticsWriteForbiddenError(`từ chối ${method} ${path}`);
+}

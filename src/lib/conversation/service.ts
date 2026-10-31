@@ -56,6 +56,8 @@ export interface ConversationRecord {
   id: string;
   internalUserId: string | null;
   currentShopId: string | null;
+  /** PRODUCT-ANALYTICS-2: canonical product (shopee_products.id) resolved inside currentShopId. */
+  currentProductId?: string | null;
   lastIntent: ConversationIntent | null;
   context: ConversationContextData;
 }
@@ -63,6 +65,14 @@ export interface ConversationRecord {
 export interface ShopRef {
   id: string;
   name: string;
+}
+
+/** PRODUCT-ANALYTICS-2: canonical product candidate of ONE shop (shopee_products). */
+export interface ProductCandidate {
+  id: string;
+  itemId: string;
+  name: string | null;
+  sku: string | null;
 }
 
 export type InboundStatus = "pending" | "replied" | "ignored" | "failed";
@@ -75,7 +85,9 @@ export interface ConversationStore {
   insertInboundMessage(input: { conversationId: string; channel: ConversationChannel; providerMessageId: string; text: string; intent: StoredIntent | null }): Promise<{ inserted: true; id: string } | { inserted: false }>;
   setInboundStatus(messageId: string, status: InboundStatus, errorCode?: string | null): Promise<void>;
   insertOutboundMessage(input: { conversationId: string; channel: ConversationChannel; text: string; status: "sent" | "failed"; providerMessageId: string | null; errorCode: string | null }): Promise<void>;
-  updateConversation(id: string, patch: { currentShopId?: string | null; lastIntent?: ConversationIntent | null; context?: ConversationContextData; internalUserId?: string | null }): Promise<void>;
+  updateConversation(id: string, patch: { currentShopId?: string | null; currentProductId?: string | null; lastIntent?: ConversationIntent | null; context?: ConversationContextData; internalUserId?: string | null }): Promise<void>;
+  /** PRODUCT-ANALYTICS-2: canonical products of ONE (already authorized) shop, for phrase resolution. */
+  findProducts(shopId: string): Promise<ProductCandidate[]>;
   /** Shops the user may ask about (explicit grants only). */
   allowedShops(internalUserId: string): Promise<ShopRef[]>;
   /** Every shop name, only to DETECT a mention (and deny it when not granted). */
@@ -139,7 +151,7 @@ export const MESSAGES = {
   unknown: "Mình chưa hiểu câu hỏi. Gõ \"hướng dẫn\" để xem các câu hỏi được hỗ trợ.",
   unlinked: "Tài khoản Zalo này chưa được liên kết với hệ thống. Nếu bạn là quản trị viên, hãy tạo mã liên kết trong ứng dụng rồi gửi: LINK <mã>.",
   notAllowed: "Tài khoản liên kết hiện không có quyền dùng trợ lý phân tích.",
-  linked: "Đã liên kết tài khoản Zalo với hệ thống.",
+  linked: "Hệ thống đã kết nối thành công. Tài khoản Zalo này đã được liên kết.",
   linkFailed: "Mã liên kết không hợp lệ hoặc đã hết hạn.",
   linkLocked: "Bạn đã nhập sai mã quá nhiều lần hôm nay. Thử lại vào ngày mai.",
   shopDenied: "Bạn không có quyền xem shop này.",
@@ -243,16 +255,20 @@ export async function processAcceptedMessage(deps: ConversationDeps, accepted: A
     shopId = allowed[0].id;
   }
   if (!shopId) {
-    await store.updateConversation(conversation.id, { currentShopId: null, lastIntent: routed.intent, context: { ...conversation.context, productQuery: routed.productQuery, period: routed.period } });
+    await store.updateConversation(conversation.id, { currentShopId: null, currentProductId: null, lastIntent: routed.intent, context: { ...conversation.context, productQuery: routed.productQuery, period: routed.period } });
     await reply(MESSAGES.shopRequired(allowed.map((s) => s.name)));
     return "shop_required";
   }
+
+  // 5. product: resolved against the canonical identity of THIS shop only (the same item id in
+  //    another shop is another product); unknown / ambiguous phrase → null, never a guess
+  const productId = routed.productQuery ? resolveProductPhrase(routed.productQuery, await store.findProducts(shopId)) : null;
 
   const request: ProductAnalystRequest = {
     conversationId: conversation.id,
     internalUserId: link.internalUserId,
     shopId,
-    productId: null,
+    productId,
     productQuery: routed.productQuery,
     intent: routed.intent,
     period: routed.period,
@@ -262,12 +278,36 @@ export async function processAcceptedMessage(deps: ConversationDeps, accepted: A
     await reply(MESSAGES.shopDenied);
     return "shop_denied";
   }
-  await store.updateConversation(conversation.id, { currentShopId: shopId, lastIntent: routed.intent, context: { ...conversation.context, productQuery: routed.productQuery, period: routed.period } });
+  await store.updateConversation(conversation.id, { currentShopId: shopId, currentProductId: productId, lastIntent: routed.intent, context: { ...conversation.context, productQuery: routed.productQuery, period: routed.period } });
 
   const result = await deps.analyst.analyze(request);
   const shopName = allowed.find((s) => s.id === shopId)?.name ?? "";
   await reply(formatAnalystReply(result.kind === "placeholder" ? result.text : result.output.summary, request, shopName));
   return "analysis_placeholder";
+}
+
+/**
+ * Deterministic product resolution (no LLM): exact item id, then exact SKU,
+ * then names containing every word of the phrase (accent-insensitive).
+ * Exactly one match → its id; zero or several → null.
+ */
+export function resolveProductPhrase(phrase: string, candidates: readonly ProductCandidate[]): string | null {
+  const q = foldVietnamese(phrase);
+  if (!q) return null;
+  const digits = q.replace(/\s+/g, "");
+  if (/^[0-9]{5,20}$/.test(digits)) {
+    const byId = candidates.filter((c) => c.itemId === digits);
+    return byId.length === 1 ? byId[0].id : null;
+  }
+  const bySku = candidates.filter((c) => c.sku && foldVietnamese(c.sku) === q);
+  if (bySku.length) return bySku.length === 1 ? bySku[0].id : null;
+  const terms = q.split(" ").filter((t) => t.length >= 2);
+  if (!terms.length) return null;
+  const byName = candidates.filter((c) => {
+    const hay = foldVietnamese(`${c.name ?? ""} ${c.sku ?? ""}`);
+    return terms.every((t) => hay.includes(t));
+  });
+  return byName.length === 1 ? byName[0].id : null;
 }
 
 /** What was understood + the analyst's text. Generic plain text; the transport decides nothing. */

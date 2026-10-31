@@ -66,7 +66,33 @@ Linking steps for an admin:
 ## 4. Security of the webhook
 
 - **Signature:** header `X-ZEvent-Signature: mac=<sha256_hex(app_id + raw_body + timestamp + OA_SECRET_KEY)>`, where `timestamp` is the body field. The comparison is timing-safe. `app_id` must equal `ZALO_APP_ID`, and the timestamp must be within ±15 min.
-- **⚠ Formula source:** Zalo developer-community threads and third-party write-ups. The official spec page could not be fetched from this environment. **Before enabling, send one real message and confirm it is accepted.** A rejection logs `{"event":"rejected","reason":"bad_signature"}` without leaking anything. Community reports mention a millisecond mismatch between the header timestamp and the body timestamp; the code signs with the body timestamp.
+- **⚠ Formula source:** Zalo developer-community threads and third-party write-ups. The official spec page could not be fetched from this environment. **Before enabling, send one real message and confirm it is accepted.** Community reports mention a millisecond mismatch between the header timestamp and the body timestamp; the code signs with the body timestamp.
+- **Raw bytes:** the route reads `request.text()` once and verifies those exact bytes. Nothing is parsed or re-serialized before the mac is computed.
+- **Evidence logging (Phase 1P), never secrets:**
+  - accepted → `{"event":"signature_ok","skewSec":…,"timestampDigits":13}`;
+  - rejected → `{"event":"rejected","reason":"bad_signature","skewSec":…,"diagnostics":{"reserializedBodyMatches":bool,"bodyIsCompact":bool}}`.
+
+  `reserializedBodyMatches = true` would mean Zalo signs canonical JSON, not the raw bytes. That is **diagnostics only**: such a request is still rejected until the code is corrected from that evidence. Verification is never weakened to make a test pass.
+
+### 4.1 Real-event verification record (Phase 1P)
+
+First real event: **2026-10-30 08:04:11 UTC**, production deploy of `d7f3065`, flag on, `ZALO_OA_SECRET_KEY` set. Evidence was read from cloud with SELECT only; no message text or user id was printed.
+
+| Item | Verified value |
+|---|---|
+| Header format | `X-ZEvent-Signature: mac=<64 hex>`: accepted by the strict `^mac=[0-9a-f]{64}$` parser |
+| Timestamp source | body `timestamp` field. Digit count not logged (the diagnostics log is not deployed yet). |
+| Body bytes used | exact raw request body (`request.text()`), no re-serialization |
+| Hash input | `sha256_hex(app_id + raw_body + timestamp + OA_SECRET_KEY)`: **VERIFIED**. A real Zalo event passed the timing-safe comparison, and an unsigned `POST {}` gets 401 `invalid_signature`. |
+| Result | accepted. 1 inbound row (`provider_message_id` 20 chars, sender id numeric), status `replied`. |
+| Skew vs ±15 min | within the window (otherwise it would have been rejected). Exact skew not logged in this deploy. |
+| Unlinked sender handling | text stored as `[người dùng chưa liên kết]`; one notice sent, and `context.unlinkedNoticeAt` set (24 h throttle) |
+| Outbound reply | **VERIFIED**: outbound row `sent` with a 20-char provider message id, delivered via `/v3.0/oa/message/cs`, 2.7 s after the inbound |
+| LINK flow (15:08 VN) | **VERIFIED.** 1 code issued and consumed once. Stored as a 64-hex sha256 only (0 non-hash rows). TTL exactly 600 s, used before expiry. The inbound text is stored as `[mã liên kết]`. The linked profile is `admin`, active. Reply `sent`. |
+| Allowed shop (15:11:14) | **VERIFIED.** Granted shop only (HOMIES). A shop question routed `SHOP_ANALYSIS`, period `yesterday`, got the controlled placeholder ("… đang được chuẩn bị."). No analyst / Anthropic call. |
+| Other shop (15:11:31) | **VERIFIED.** "Bạn không có quyền xem shop này." The remembered shop stayed the granted one: context did not grant or switch to the denied shop. |
+| Replay of the same event | No redelivery happened in production (8 rows, 0 duplicate inbound ids, every inbound processed exactly once). Duplicate handling is proven by the unique index + local integration / E2E tests (`duplicate`, 1 row, 1 reply). A forced replay needs the real signed body, which is deliberately never stored or logged. |
+| Outbound overall | 4 / 4 replies `sent`, each with a 20-char provider message id, 2–3 s after the inbound |
 - **Fail closed:** with the flag on and `ZALO_OA_SECRET_KEY` missing the webhook answers 503; with a bad signature it answers 401.
 - **Never logged:** the OA access token, the secret, the signature header, the raw body. Logs carry only event / reason / outcome codes.
 - Body limit 64 KB. Only `user_send_text` is processed; other events are acknowledged and ignored. Events addressed to another OA are ignored.

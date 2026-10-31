@@ -26,7 +26,9 @@ import { hasDueSyncJobs, runShopeeSchedulerTick } from "@/lib/channels/shopee/sy
 import { runReturnNotificationTickSafe } from "@/lib/return-operations/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getShopeeFlags } from "@/lib/feature-flags";
-import { activeAdsSyncTypes, activeSyncTypes, retiredSyncTypes } from "@/lib/channels/core/sync-domains";
+import { activeAdsSyncTypes, activeProductAnalyticsSyncTypes, activeSyncTypes, retiredSyncTypes } from "@/lib/channels/core/sync-domains";
+import { getProductAnalyticsSyncConfig } from "@/lib/product-analytics/config";
+import { runProductAnalyticsSchedulerTick, type ProductAnalyticsTickResult } from "@/lib/channels/shopee/product-analytics/sales-schedule";
 import { runAdsSchedulerTick, type AdsSchedulerTickResult } from "@/lib/channels/shopee/ads/schedule";
 import { getAdsSyncConfig } from "@/lib/channels/shopee/ads/sync";
 import { getShopee } from "@/lib/channels/shopee/server";
@@ -72,6 +74,11 @@ async function handle(request: Request) {
     const ads = adsTypes.length > 0 ? await runAdsTick(db) : null;
     // jobs due within the stagger jitter count: the burst waits for them (SyncWorker idleWaitMs)
     if (adsTypes.length > 0 && !tick.workDue) tick.workDue = await hasDueSyncJobs(db, new Date(Date.now() + (getAdsSyncConfig().jitterSeconds + 2) * 1000), adsTypes).catch(() => false);
+    // PRODUCT-ANALYTICS-2: isolated product sales / extra-info reads (own flags; legacy order sync stays retired)
+    const paConfig = getProductAnalyticsSyncConfig();
+    const paTypes = activeProductAnalyticsSyncTypes(paConfig);
+    const productAnalytics = paTypes.length > 0 ? await runProductAnalyticsTick(db, paConfig) : null;
+    if (paTypes.length > 0 && !tick.workDue) tick.workDue = await hasDueSyncJobs(db, new Date(Date.now() + 22_000), paTypes).catch(() => false);
     // SHOPEE-6B: scheduled "hàng hoàn đã giao" notifications (pre-sync + generate); never throws
     const notifications = flags.legacyModulesEnabled ? await runReturnNotificationTickSafe(db) : null;
     // keep shop tokens alive while nothing else calls Shopee (live mode only; never throws)
@@ -92,7 +99,7 @@ async function handle(request: Request) {
         after(() => runShopeeWorkerBursts({ bursts: config.schedulerWorkerTriggers, timeBudgetMs, source: "scheduler" }).then(() => undefined));
       }
     }
-    return NextResponse.json({ ok: true, ...tick, workerTriggered, ads, returnNotifications: notifications, tokenKeepalive: keepalive, flags, pending: pending.map(({ jobId, syncType, status, reason, detail }) => ({ jobId, syncType, status, reason, detail })), configWarnings: config.warnings });
+    return NextResponse.json({ ok: true, ...tick, workerTriggered, ads, productAnalytics, returnNotifications: notifications, tokenKeepalive: keepalive, flags, pending: pending.map(({ jobId, syncType, status, reason, detail }) => ({ jobId, syncType, status, reason, detail })), configWarnings: config.warnings });
   } catch (err) {
     console.error(JSON.stringify({ source: "sync-scheduler", event: "SYNC_SCHEDULER_FAILED", message: err instanceof Error ? err.message.slice(0, 300) : String(err) }));
     return NextResponse.json({ ok: false, error: "scheduler_failed" }, { status: 500 });
@@ -120,6 +127,20 @@ async function runAdsTick(db: ReturnType<typeof createAdminClient>): Promise<Ads
   } catch (err) {
     const message = err instanceof Error ? err.message.slice(0, 200) : String(err);
     console.error(JSON.stringify({ source: "sync-scheduler", event: "ads_scheduler_failed", message }));
+    return { error: message };
+  }
+}
+
+async function runProductAnalyticsTick(db: ReturnType<typeof createAdminClient>, config: ReturnType<typeof getProductAnalyticsSyncConfig>): Promise<ProductAnalyticsTickResult | { error: string }> {
+  try {
+    const r = await runProductAnalyticsSchedulerTick(db, { config });
+    if (r.enqueued.length > 0 || r.errors.length > 0) {
+      console.info(JSON.stringify({ source: "sync-scheduler", event: "product_analytics_tick", shops: r.shops, enqueued: r.enqueued.map((e) => `${e.kind}${e.created ? "" : "(queued)"}`), skippedShops: r.skippedShops, errors: r.errors, durationMs: r.durationMs }));
+    }
+    return r;
+  } catch (err) {
+    const message = err instanceof Error ? err.message.slice(0, 200) : String(err);
+    console.error(JSON.stringify({ source: "sync-scheduler", event: "product_analytics_tick_failed", message }));
     return { error: message };
   }
 }

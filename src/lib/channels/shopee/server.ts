@@ -41,6 +41,10 @@ import { JobRefusedError } from "./sync-errors.ts";
 import { FixtureShopeeAdsProvider, loadAdsFixtures, MeteredShopeeAdsProvider, RealShopeeAdsProvider, type AdsFixtureData, type ShopeeAdsProvider } from "./ads/provider.ts";
 import { isAdsSyncType } from "./ads/read-only-policy.ts";
 import { createAdsRunner, getAdsSyncConfig } from "./ads/sync.ts";
+import { activeProductAnalyticsSyncTypes } from "../core/sync-domains.ts";
+import { getProductAnalyticsSyncConfig } from "../../product-analytics/config.ts";
+import { MeteredProductSalesReader, RealProductSalesReader } from "./product-analytics/sales-reader.ts";
+import { createProductAnalyticsRunner, isProductAnalyticsSyncType } from "./product-analytics/sales-sync.ts";
 
 let cached: { config: ShopeeConfig; client: ShopeeClient; service: ShopeeConnectionService } | null = null;
 
@@ -101,6 +105,17 @@ function adsRunnerHandle(job: SyncJobRow, budget: ExecutionBudget, db: SupabaseC
 }
 
 /**
+ * PRODUCT-ANALYTICS-2: runner for an isolated product analytics READ job
+ * (live provider only — there is no fixture fallback in production).
+ */
+function productAnalyticsRunnerHandle(job: SyncJobRow, budget: ExecutionBudget, db: SupabaseClient): RunnerHandle {
+  const meter = new ApiCallMeter(budget);
+  const { config: shopeeConfig, service } = getShopee();
+  const reader = new MeteredProductSalesReader(new RealProductSalesReader({ client: getWorkerClient(shopeeConfig), connections: new JobTokenCache(service) }), meter);
+  return { meter, runner: createProductAnalyticsRunner(job, { db, reader, config: getProductAnalyticsSyncConfig() }) };
+}
+
+/**
  * SHOPEE-ADS-2: Ads API concurrency = running Ads jobs, capped globally by
  * ADS_GLOBAL_API_CONCURRENCY (1 right after a rate limit). When no legacy
  * domain is active the Ads cap may exceed SHOPEE_SYNC_GLOBAL_WORKERS.
@@ -157,10 +172,16 @@ export function getShopeeSyncWorker(limits: { maxRunningAds: number | null; glob
     db,
     config,
     workerId: `${region}-${randomUUID().slice(0, 8)}`,
-    createRunner: (job, budget) => (isAdsSyncType(job.sync_type) ? adsRunnerHandle(job, budget, db) : legacyFactory(job, budget)),
+    createRunner: (job, budget) =>
+      isAdsSyncType(job.sync_type)
+        ? adsRunnerHandle(job, budget, db)
+        : isProductAnalyticsSyncType(job.sync_type)
+          ? productAnalyticsRunnerHandle(job, budget, db)
+          : legacyFactory(job, budget),
     // SHOPEE-ADS-0: only job types of active domains are claimed (legacy retired = none);
     // SHOPEE-ADS-1B: + the Ads READ jobs, only when SHOPEE_ADS_DATA_SOURCE=real
-    syncTypes: [...activeSyncTypes(flags), ...activeAdsSyncTypes(flags)],
+    // PRODUCT-ANALYTICS-2: + the isolated product analytics reads, only while their own flag is on
+    syncTypes: [...activeSyncTypes(flags), ...activeAdsSyncTypes(flags), ...activeProductAnalyticsSyncTypes(getProductAnalyticsSyncConfig())],
     classifyError: toJobFailure,
     region,
     maxRunningAds: limits.maxRunningAds,

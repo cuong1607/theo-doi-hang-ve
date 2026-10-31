@@ -55,8 +55,14 @@ export interface AnalystToolDefinition {
   returns: string;
 }
 
-/** Interfaces only — none is implemented or exposed to a model in this phase. */
+/**
+ * PRODUCT-ANALYTICS-2: get_product_overview, compare_product_periods,
+ * get_product_sales_summary, get_product_ads_performance and
+ * get_product_baseline have READ-ONLY backend implementations in
+ * src/lib/product-analytics/agent-tools.ts. NONE is exposed to a model yet.
+ */
 export const ANALYST_TOOL_DEFINITIONS: readonly AnalystToolDefinition[] = [
+  { name: "get_product_sales_summary", description: "Sales GMV / orders / units (order facts) of one product, current vs previous period", params: ["period"], returns: "sales deltas + semantics + DataQuality" },
   { name: "get_product_overview", description: "Sales, traffic counters, stock and Ads summary of one product for a period", params: ["period"], returns: "ProductMetricSet + DataQuality" },
   { name: "compare_product_periods", description: "Same metrics for two periods with absolute / % deltas", params: ["period", "compare_to"], returns: "PeriodComparison[] + DataQuality" },
   { name: "get_product_sales_funnel", description: "Funnel stages that are API-verified (see capability matrix)", params: ["period"], returns: "funnel stages + DataQuality" },

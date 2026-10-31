@@ -19,6 +19,7 @@ import {
   type ConversationDeps,
   type ConversationRecord,
   type ConversationStore,
+  type ProductCandidate,
   type ShopRef,
   type UserLink,
 } from "./service.ts";
@@ -67,9 +68,14 @@ class MemoryStore implements ConversationStore {
   async insertOutboundMessage(i: { conversationId: string; text: string; status: "sent" | "failed"; providerMessageId: string | null }) {
     this.messages.push({ id: `msg-${++this.seq}`, conversationId: i.conversationId, direction: "outbound", providerMessageId: i.providerMessageId, text: i.text, status: i.status });
   }
-  async updateConversation(id: string, patch: { currentShopId?: string | null; lastIntent?: ConversationRecord["lastIntent"]; context?: ConversationContextData; internalUserId?: string | null }) {
+  products = new Map<string, ProductCandidate[]>();
+  async findProducts(shopId: string) {
+    return this.products.get(shopId) ?? [];
+  }
+  async updateConversation(id: string, patch: { currentShopId?: string | null; currentProductId?: string | null; lastIntent?: ConversationRecord["lastIntent"]; context?: ConversationContextData; internalUserId?: string | null }) {
     const c = [...this.conversations.values()].find((x) => x.id === id)!;
     if (patch.currentShopId !== undefined) c.currentShopId = patch.currentShopId;
+    if (patch.currentProductId !== undefined) c.currentProductId = patch.currentProductId;
     if (patch.lastIntent !== undefined) c.lastIntent = patch.lastIntent;
     if (patch.context !== undefined) c.context = { ...patch.context };
     if (patch.internalUserId !== undefined) c.internalUserId = patch.internalUserId;
@@ -144,13 +150,33 @@ const textEvent = (over: Record<string, unknown> = {}) => ({
 
 test("PA-1 / 61: webhook signature — valid, invalid, missing, stale, wrong app, not configured", () => {
   const { raw, header } = signed(textEvent());
-  assert.deepEqual(verifyZaloWebhookSignature({ rawBody: raw, signatureHeader: header, appId: APP, oaSecretKey: SECRET, now: NOW }), { ok: true });
+  assert.deepEqual(verifyZaloWebhookSignature({ rawBody: raw, signatureHeader: header, appId: APP, oaSecretKey: SECRET, now: NOW }), { ok: true, skewMs: 0, timestampDigits: 13 });
   assert.equal(verifyZaloWebhookSignature({ rawBody: raw, signatureHeader: header.replace(/.$/, (c) => (c === "0" ? "1" : "0")), appId: APP, oaSecretKey: SECRET, now: NOW }).ok, false);
-  assert.deepEqual(verifyZaloWebhookSignature({ rawBody: raw.replace("hướng dẫn", "x"), signatureHeader: header, appId: APP, oaSecretKey: SECRET, now: NOW }), { ok: false, reason: "bad_signature" }, "tampered body");
+  assert.deepEqual(
+    verifyZaloWebhookSignature({ rawBody: raw.replace("hướng dẫn", "x"), signatureHeader: header, appId: APP, oaSecretKey: SECRET, now: NOW }),
+    { ok: false, reason: "bad_signature", skewMs: 0, diagnostics: { reserializedBodyMatches: false, bodyIsCompact: true } },
+    "tampered body",
+  );
   assert.deepEqual(verifyZaloWebhookSignature({ rawBody: raw, signatureHeader: null, appId: APP, oaSecretKey: SECRET, now: NOW }), { ok: false, reason: "missing_signature" });
   assert.deepEqual(verifyZaloWebhookSignature({ rawBody: raw, signatureHeader: header, appId: APP, oaSecretKey: undefined, now: NOW }), { ok: false, reason: "not_configured" });
   assert.deepEqual(verifyZaloWebhookSignature({ rawBody: raw, signatureHeader: header, appId: "999", oaSecretKey: SECRET, now: NOW }), { ok: false, reason: "app_mismatch" });
-  assert.deepEqual(verifyZaloWebhookSignature({ rawBody: raw, signatureHeader: header, appId: APP, oaSecretKey: SECRET, now: new Date(NOW.getTime() + 16 * 60_000) }), { ok: false, reason: "stale_timestamp" });
+  assert.deepEqual(verifyZaloWebhookSignature({ rawBody: raw, signatureHeader: header, appId: APP, oaSecretKey: SECRET, now: new Date(NOW.getTime() + 16 * 60_000) }), { ok: false, reason: "stale_timestamp", skewMs: 16 * 60_000 });
+});
+
+test("PA-1P / 16-17: raw bytes are what is verified; the re-serialized variant is diagnostics only, never accepted", () => {
+  const event = textEvent();
+  const pretty = JSON.stringify(event, null, 2); // raw body with whitespace, as a sender might format it
+  const compactMac = `mac=${zaloWebhookMac(APP, JSON.stringify(event), event.timestamp, SECRET)}`;
+  const r = verifyZaloWebhookSignature({ rawBody: pretty, signatureHeader: compactMac, appId: APP, oaSecretKey: SECRET, now: NOW });
+  assert.equal(r.ok, false, "a mac over a different byte layout is rejected");
+  assert.deepEqual(r, { ok: false, reason: "bad_signature", skewMs: 0, diagnostics: { reserializedBodyMatches: true, bodyIsCompact: false } });
+  const prettyMac = `mac=${zaloWebhookMac(APP, pretty, event.timestamp, SECRET)}`;
+  assert.equal(verifyZaloWebhookSignature({ rawBody: pretty, signatureHeader: prettyMac, appId: APP, oaSecretKey: SECRET, now: NOW }).ok, true, "mac over the exact raw bytes passes");
+  // a seconds timestamp is accepted within the window and reported as 10 digits
+  const secEvent = textEvent({ timestamp: String(Math.floor(NOW.getTime() / 1000)) });
+  const secRaw = JSON.stringify(secEvent);
+  const sec = verifyZaloWebhookSignature({ rawBody: secRaw, signatureHeader: `mac=${zaloWebhookMac(APP, secRaw, secEvent.timestamp, SECRET)}`, appId: APP, oaSecretKey: SECRET, now: NOW });
+  assert.equal(sec.ok && sec.timestampDigits, 10);
 });
 
 test("PA-1 / 61: webhook handler — disabled, invalid signature, unsupported event, other OA, text accepted, duplicate", async () => {

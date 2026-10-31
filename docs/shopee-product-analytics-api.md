@@ -1,4 +1,4 @@
-# Shopee Product Analytics API — discovery (SHOPEE-PRODUCT-ANALYTICS-1)
+# Shopee Product Analytics API — discovery (SHOPEE-PRODUCT-ANALYTICS-1 / 1P)
 
 Status 2026-10-30. **READ ONLY.** No canonical schema yet. No product, price, stock, listing or Ads write exists or is reachable (`src/lib/channels/shopee/product-analytics/read-only-policy.ts`, guarded by `product-analytics-discovery.test.ts`).
 
@@ -7,8 +7,8 @@ Status 2026-10-30. **READ ONLY.** No canonical schema yet. No product, price, st
 | Question | Answer (evidence level) |
 |---|---|
 | Is there a Shopee Open Platform v2 API for the product **traffic / funnel** of Seller Centre "Business Insights" (visitors, product impressions, add-to-cart, conversion, traffic source)? | **No evidence of one.** Not in our code, not in any Shopee module index we could reach, not in secondary references. Classified `SELLER_CENTRE_ONLY`. Absence is not proven: the official doc site could not be fetched from this environment. |
-| Which product performance read **does** exist? | `GET /api/v2/product/get_item_extra_info`. **Route and shape verified** on the real Shopee gateway (sandbox, 2026-10-30): HTTP 200, `item_id`, `sale`, `views`, `likes`, `rating_star`, `comment_count`. **Production values not yet read** (see §6). |
-| Sales (GMV / orders / units) per item per day? | `DERIVABLE` from internal orders (`channel_orders` / `channel_order_items`, synced from `get_order_list` + `get_order_detail`). Subject to order-sync coverage (§7). |
+| Which product performance read **does** exist? | `GET /api/v2/product/get_item_extra_info`. **Route and shape verified** on the real Shopee gateway (sandbox, 2026-10-30): HTTP 200, `item_id`, `sale`, `views`, `likes`, `rating_star`, `comment_count`. **Production values pending the T0 / T1 probe** (§6, §9). |
+| Sales (GMV / orders / units) per item per day? | `DERIVABLE` from internal orders (`channel_orders` / `channel_order_items`, synced from `get_order_list` + `get_order_detail`). **Historical only**: the legacy order sync is retired and the data stops on 2026-10-28 (§11). |
 | Join key Product ↔ Ads | Shopee `item_id`. Internal orders `channel_order_items.external_item_id`, Ads `shopee_ads_campaign_products.provider_item_id` and `shopee_ads_products.provider_item_id` are all the same decimal text of `item_id`. **Verified on production** (§7): 180 / 217 ordered items match an Ads item exactly as text, within the same shop. The probe also checks it per item. |
 
 ## 2. Endpoint evidence policy
@@ -81,37 +81,47 @@ The definitions come from the analytics read model (`00059`), not from new code:
 
 **Attribution rule (permanent):** never compute organic GMV = total GMV − Ads GMV, nor organic orders = total − Ads orders. Ads direct / broad attribution overlaps with every other source.
 
-## 6. Production probe (pending one admin run)
+## 6. Production probe (Phase 1P: T0 / T1)
 
-The production partner key lives only on Vercel. A pulled env file has it masked, so the local tool cannot sign production calls. The probe therefore runs **inside the app**:
+The production partner key lives only on Vercel. A pulled env file has it masked, so the local tool cannot sign production calls. The probe therefore runs **inside the app** (deployed with `d7f3065`):
 
-1. Deploy, then open `/shopee/product-analytics/probe` (admin, `channel:manage`, not in the navigation).
-2. For each shop, paste the sample item ids and type `READ-ONLY`. Each run makes 2 GET calls (control + one `get_item_extra_info`).
-3. The page shows provider counters next to internal sales (lifetime-in-DB + last 7 completed days) and Ads 7-day impressions / clicks for the **same items**, plus the per-item Ads join check. It stores one `channel_api_snapshots` row (`entity_type = 'product_analytics_probe'`).
-4. Locally: `node --env-file=.env.local scripts/shopee/product-analytics-discovery.ts import-cloud` (SELECT only) writes sanitized fixtures `item-extra-info-*-prod-N.json` and `comparison-prod-N.json`.
+1. Open `/shopee/product-analytics/probe` (admin, `channel:manage`, not in the navigation).
+2. For each shop, paste that shop's ids from the table below and type `READ-ONLY`. Each run makes 2 GET calls (control + one `get_item_extra_info`) and stores one `channel_api_snapshots` row (`entity_type = 'product_analytics_probe'`).
+3. **T0** = the first round (all 5 shops). **T1** = the same ids, same shops, after at least one VN calendar-day boundary (ideally ~24 h later). Optional T2…T6 = the multi-day follow-up (§10).
+4. Locally, SELECT only:
+   - `node --env-file=.env.cloud.local scripts/shopee/product-analytics-discovery.ts import-cloud` → sanitized `item-extra-info-*-prod-N.json` / `comparison-prod-N.json`.
+   - `node --env-file=.env.cloud.local scripts/shopee/product-analytics-discovery.ts semantics <scratchpad-dir> --save` → raw T0/T1 report (real ids) in the scratchpad, sanitized `counter-semantics-prod.json` in the fixtures.
 
-Recommended sample: 8 items, 4 shops, chosen from the last 7 completed days (23–29/10) of internal sales and Ads spend.
+Deterministic sample (Phase 1P, 31 items, ≤ 10 per shop). Ads units = `direct_item_sold`, last 7 completed days 23–29/10, single-item campaigns only.
 
-| Shop | Item | Why |
+| Shop | Paste these ids | Why |
 |---|---|---|
-| congtrang carpet | 24740290518 | #1 sales, heavy Ads |
-| congtrang carpet | 41630539392 | sells, no Ads |
-| congtrang carpet | 57166544274 | Ads spend, 1 sale |
-| CTV Bedding & decor Store | 26579209054 | high sales, Ads |
-| CTV Bedding & decor Store | 29081317054 | sells, no Ads |
-| RUGLUX | 41273005603 | high sales, Ads |
-| RUGLUX | 28843986313 | sells, no Ads |
-| HOMIES Bedding & Décor Store | 18517610369 | Ads clicks + 5 broad orders, no internal orders (shop not order-synced) |
+| congtrang carpet | `24740290518, 41630539392, 57166544274, 42561665440, 26712881612, 25236431835, 19683010672` | 3 documented + 2 steady Ads sellers (89 / 64 units) + UNLIST + SELLER_DELETE |
+| congtrangbedding | `836784995, 17299424702, 29404533381, 1929607586, 1044744057, 1029794465` | top 4 Ads sellers (404 / 188 / 95 / 87 units, no internal orders) + UNLIST + SELLER_DELETE |
+| CTV Bedding & decor Store | `26579209054, 29081317054, 43354039352, 28537487950, 25593260335, 26928860868` | 2 documented + 2 Ads sellers + UNLIST + SELLER_DELETE |
+| HOMIES Bedding & Décor Store | `18517610369, 10096389022, 25892862147, 26177218303, 19206953794, 14579028831` | 1 documented + 3 top Ads sellers (542 / 136 / 132) + UNLIST + SELLER_DELETE |
+| RUGLUX | `41273005603, 28843986313, 41715153913, 45859329555, 40430027131, 25497238258` | 2 documented + 2 Ads sellers + UNLIST + SELLER_DELETE |
 
-What the run decides:
-- `sale` ≥ internal units since the first synced order means cumulative (lifetime).
-- `views` ≫ Ads clicks means page views across all traffic.
-- A second run a day later shows whether the counters are monotonic. If they are, daily deltas become `DERIVABLE`.
+Every NORMAL item above is the **only** item of its Ads campaign(s), so its hourly Ads `direct_item_sold` is a lower bound on its real units. UNLIST / SELLER_DELETE status comes from the Ads enrichment (`shopee_ads_products.provider_status`, ADS-3A.2).
+
+What the comparison decides (`counter-semantics.ts`, pure, tested):
+
+| Observation | Meaning |
+|---|---|
+| `sale` decreased between T0 and T1 | not a lifetime counter → `LIKELY_ROLLING` |
+| `sale` below units already recorded in our orders for the item | not a lifetime counter → `LIKELY_ROLLING` |
+| Δ`sale` < Ads `direct_item_sold` over the VN hours wholly inside [T0, T1] | lagging or differently defined → `LIKELY_OTHER` |
+| Δ`sale` ≥ that lower bound, > 0, for ≥ 3 items, no contradiction | `LIKELY_CUMULATIVE` (LOW confidence with one interval) |
+| no known sale in the interval | `INSUFFICIENT_EVIDENCE` |
+| `views`: increase / flat / decrease / reset (≥ 100 → ≤ 10 %) | `MONOTONIC_SO_FAR` or `NON_MONOTONIC`; never "lifetime" from one interval |
+| Item `returned` false at T0 / T1 | recorded as is (UNLIST / SELLER_DELETE behaviour). Omission never deletes anything. |
+
+`sale` is never called daily units sold, and organic is never `sale − Ads`.
 
 ## 7. Data quality found during discovery (production, read-only)
 
-- **Order sync coverage:** only 3 of the 5 live shops have orders (congtrang carpet since 2026-10-16, CTV since 2026-10-01, RUGLUX since 2026-10-16). congtrangbedding and HOMIES have **0 orders** but active Ads (HOMIES: 5 broad orders in 7 days), so their sales are not derivable today.
-- **Core sync stopped:** every non-Ads sync job (order, escrow, return, product …) was last created at **2026-10-28 04:10 UTC**. The scheduler answers `"autoSyncDisabled": true`, which means `SHOPEE_AUTO_SYNC_ENABLED=false` on Vercel. Ads sync is unaffected. Until it is re-enabled, internal sales for 28/10 onward are incomplete. Not changed in this phase.
+- **Order data is a frozen history, not current truth (§11).** Only 3 of 5 shops ever had orders, and the last order sync ran 2026-10-28 ~04:10 UTC.
+- **The stop is intentional (correction of the Phase 1 report).** `SHOPEE_AUTO_SYNC_ENABLED` only lets the scheduler enqueue the eight legacy job types (`order, product, escrow, return, return_logistics, failed_delivery, income, payout`, `sync-service.ts` `SCHEDULED_TYPES`). With `SHOPEE_LEGACY_MODULES_ENABLED=false` (the SHOPEE-ADS-0 retirement) `activeSyncTypes()` is empty anyway. Turning both on would resurrect orders, escrow, returns, payout and legacy products. **Keep both OFF.** Product Analytics needs its own minimal sales facts (§11), not the legacy sync.
 - **Join key (2026-10-30, SELECT only):** distinct ordered items vs Ads items per shop.
   - congtrang carpet: 75 / 85.
   - CTV: 54 / 66.
@@ -122,26 +132,69 @@ What the run decides:
 
 ## 8. Capability matrix
 
+Structure and semantics are separate states and are never collapsed: **STRUCTURE VERIFIED** (field exists, type known), **SEMANTICS VERIFIED** (meaning proven over the multi-day follow-up), **SEMANTICS UNKNOWN**.
+
 | Metric | API field / source | Grain | Status | Notes |
 |---|---|---|---|---|
-| Sales value | `channel_order_items` (`get_order_detail`) | order line → item / model / VN day | DERIVABLE | Coverage §7 |
-| GMV (order) | `channel_orders.channel_total_amount` | order / day | DERIVABLE | Order-level only |
-| Orders | internal orders | item / day | DERIVABLE | Paid / confirmed statuses (§4) |
-| Units | internal orders | item / model / day | DERIVABLE | |
-| Lifetime sold counter | `get_item_extra_info.sale` | item, snapshot | VERIFIED_API (shape) | Semantics pending §6 |
+| Sales value | internal orders (`get_order_detail`) | order line → item / model / VN day | DERIVABLE **historically only** | No current source: legacy order sync retired (§11) |
+| GMV (order) | `channel_orders.channel_total_amount` | order / day | DERIVABLE historically only | Order-level only |
+| Orders | internal orders | item / day | DERIVABLE historically only | Paid / confirmed statuses (§4) |
+| Units | internal orders | item / model / day | DERIVABLE historically only | |
+| `sale` counter | `get_item_extra_info.sale` | item, snapshot | STRUCTURE VERIFIED (sandbox; production after T0) · **SEMANTICS UNKNOWN** | §6 / §9 |
+| `views` counter | `get_item_extra_info.views` | item, snapshot | STRUCTURE VERIFIED (sandbox; production after T0) · **SEMANTICS UNKNOWN** | Daily values only by differencing, if proven monotonic |
 | Buyers | — | — | NOT AVAILABLE | No buyer identity stored (PII) |
-| Views | `get_item_extra_info.views` | item, snapshot | VERIFIED_API (shape) | Daily only by differencing, if monotonic |
 | Visitors | — | — | SELLER_CENTRE_ONLY | |
 | Impressions (all) | — | — | SELLER_CENTRE_ONLY | |
 | Impressions (Ads) | Ads daily / hourly | campaign × day / hour | VERIFIED_API | |
 | Clicks (Ads) | Ads daily / hourly | campaign × day / hour | VERIFIED_API | |
+| Ads units / orders | Ads `direct_item_sold` / `direct_order` | campaign × day / hour | VERIFIED_API | Attributed only: a lower bound, never total |
 | Add to cart | — | — | SELLER_CENTRE_ONLY | |
 | Conversion (product) | — | — | SELLER_CENTRE_ONLY | Ads-only ratio derivable, not product CVR |
 | Traffic source | — | — | SELLER_CENTRE_ONLY | No "organic" derivation |
-| Likes / rating / reviews | `get_item_extra_info` | item, snapshot | VERIFIED_API (shape) | |
+| Likes / rating / reviews | `get_item_extra_info` | item, snapshot | STRUCTURE VERIFIED | |
 | Product status | `get_item_base_info.item_status` | item | VERIFIED_API | NORMAL / UNLIST / SELLER_DELETE seen |
 | Category | — | — | UNKNOWN | Not in the current base-info payload |
-| Model-level sales | `channel_order_items.external_model_id` | model / day | DERIVABLE | |
-| Hourly sales | `created_at_channel` | order / hour | DERIVABLE | Timestamp precision; same coverage caveats |
+| Model-level sales | `channel_order_items.external_model_id` | model / day | DERIVABLE historically only | |
+| Hourly sales | `created_at_channel` | order / hour | DERIVABLE historically only | |
 
-Period support (1 / 3 / 7 / 30 days / custom): any window is computable for DERIVABLE metrics (VN days). `get_item_extra_info` has no window, so periods require stored daily snapshots.
+Period support (1 / 3 / 7 / 30 days / custom): any window is computable for DERIVABLE metrics (VN days) where data exists. `get_item_extra_info` has no window, so periods require stored daily snapshots.
+
+## 9. T0 / T1 evidence (production)
+
+_Pending: no production probe run yet (cloud `channel_api_snapshots` has 0 `product_analytics_probe` rows on 2026-10-30)._ This section is filled from `counter-semantics-prod.json` once T0 and T1 exist: per item `sale` / `views` / `likes` / `rating_star` / `comment_count` at T0 and T1, deltas, the Ads lower bound, the UNLIST / SELLER_DELETE behaviour, and the shop-wide verdict with its confidence.
+
+## 10. Multi-day follow-up (design, if one interval is not enough)
+
+- Same 31 ids, same admin page, **one round per day at roughly the same time, for 3–7 days** (5 × 2 GET calls per round).
+- Same `semantics` command: it pairs consecutive runs per shop automatically. A verdict reaches MEDIUM confidence from 3 intervals.
+- `SEMANTICS VERIFIED` only when every interval agrees, with ≥ 3 items per interval whose growth covered their Ads units (cumulative), or a consistent drop-off pattern (rolling window).
+- Storage stays `channel_api_snapshots` (one row per run) plus fixtures: no canonical table and no scheduler. If PA-2 adopts the counters, a proper snapshot table is designed there.
+
+## 11. Order data gap and `product_sales_facts_read` (concept only)
+
+| Shop | Orders in DB | First order | Last order placed | Last order sync | Status |
+|---|---|---|---|---|---|
+| congtrang carpet | 843 | 2026-10-16 | 2026-10-28 04:06 UTC | 2026-10-28 04:10 UTC | **stale** (frozen history, 12 days) |
+| CTV Bedding & decor Store | 953 | 2026-10-01 | 2026-10-28 03:36 UTC | 2026-10-28 04:09 UTC | **stale** (frozen history, 27 days) |
+| RUGLUX | 327 | 2026-10-16 | 2026-10-28 04:00 UTC | 2026-10-28 04:08 UTC | **stale** (frozen history, 12 days) |
+| congtrangbedding | 0 | — | — | never | **no data** |
+| HOMIES Bedding & Décor Store | 0 | — | — | never | **no data** |
+
+No shop has current-enough order data. Historical intervals stay usable as historical facts (e.g. "`sale` below units we already recorded"), never as current truth.
+
+**Do not reactivate the legacy order sync** (§7). Future concept for PA-2, not implemented:
+
+`product_sales_facts_read`: the minimal read-only product-level sales facts Product Analytics needs.
+- Grain: shop × `item_id` × `model_id` × VN day (optionally hour). Columns: orders, units, item sales value, status bucket (paid / cancelled). No buyer identity, no address, no escrow / fee / payout, no returns.
+- Source: a new, narrow sync job (its own type, not one of the eight legacy types) reading `get_order_list` (by `create_time` / `update_time` window) + `get_order_detail` (item lines only), through the read-only allowlist. No Orders UI, no escrow, no returns, no payout.
+- Restatement: re-read the trailing N days (status changes, cancellations).
+
+Source options for PA-2:
+
+| Option | For | Against |
+|---|---|---|
+| **A.** Minimal read-only order API sync | Exact per-item / per-day / per-hour units, orders, value; proven endpoints (used before); covers all 5 shops | New job + table; PII must be dropped at mapping time; ~2 calls per order page |
+| **B.** `get_item_extra_info` counters only | Cheap (⌈items / 50⌉ calls per day), no PII | Semantics unknown; no value / orders; snapshot only (no hour, no model); can't backfill |
+| **C.** A + B | A is the truth for sales; B adds views / likes / rating where the semantics are proven | Two sources to keep consistent |
+
+**Recommendation from current evidence: A (with B added later only if §9 / §10 prove its semantics → C).** The `sale` counter can at best yield daily units by differencing, with no value and no backfill, so it cannot replace order facts. `views` is the only traffic signal outside Seller Centre, which is why B is worth keeping if it proves monotonic.

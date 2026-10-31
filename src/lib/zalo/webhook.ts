@@ -17,7 +17,21 @@ import { createHash, timingSafeEqual } from "node:crypto";
 /** Accept events whose timestamp is within this window (replay protection; idempotency covers redelivery). */
 export const ZALO_WEBHOOK_MAX_SKEW_MS = 15 * 60 * 1000;
 
-export type ZaloWebhookVerifyResult = { ok: true } | { ok: false; reason: "not_configured" | "missing_signature" | "malformed_body" | "app_mismatch" | "stale_timestamp" | "bad_signature" };
+export type ZaloWebhookVerifyResult =
+  | { ok: true; skewMs: number; timestampDigits: number }
+  | { ok: false; reason: "not_configured" | "missing_signature" | "malformed_body" | "app_mismatch" | "stale_timestamp" | "bad_signature"; skewMs?: number; diagnostics?: ZaloSignatureDiagnostics };
+
+/**
+ * Evidence for the FIRST real event (docs/zalo-ai-agent-architecture.md §4):
+ * booleans saying whether a variant of the input layout would have matched.
+ * Logged only, never used to accept — verification is not weakened.
+ */
+export interface ZaloSignatureDiagnostics {
+  /** mac over JSON.stringify(JSON.parse(body)) instead of the raw bytes. */
+  reserializedBodyMatches: boolean;
+  /** the raw body is already compact JSON → raw and re-serialized coincide. */
+  bodyIsCompact: boolean;
+}
 
 export function zaloWebhookMac(appId: string, rawBody: string, timestamp: string, oaSecretKey: string): string {
   return createHash("sha256").update(`${appId}${rawBody}${timestamp}${oaSecretKey}`, "utf8").digest("hex");
@@ -46,11 +60,16 @@ export function verifyZaloWebhookSignature(input: {
   const ts = String(body.timestamp ?? "");
   if (!/^\d{10,16}$/.test(ts)) return { ok: false, reason: "malformed_body" };
   const tsMs = ts.length <= 10 ? Number(ts) * 1000 : Number(ts);
-  if (Math.abs(input.now.getTime() - tsMs) > (input.maxSkewMs ?? ZALO_WEBHOOK_MAX_SKEW_MS)) return { ok: false, reason: "stale_timestamp" };
+  const skewMs = input.now.getTime() - tsMs;
+  if (Math.abs(skewMs) > (input.maxSkewMs ?? ZALO_WEBHOOK_MAX_SKEW_MS)) return { ok: false, reason: "stale_timestamp", skewMs };
   const expected = Buffer.from(zaloWebhookMac(input.appId, input.rawBody, ts, input.oaSecretKey), "hex");
   const given = Buffer.from(m[1].toLowerCase(), "hex");
-  if (expected.length !== given.length || !timingSafeEqual(expected, given)) return { ok: false, reason: "bad_signature" };
-  return { ok: true };
+  if (expected.length !== given.length || !timingSafeEqual(expected, given)) {
+    const reserialized = JSON.stringify(body);
+    const alt = Buffer.from(zaloWebhookMac(input.appId, reserialized, ts, input.oaSecretKey), "hex");
+    return { ok: false, reason: "bad_signature", skewMs, diagnostics: { reserializedBodyMatches: timingSafeEqual(alt, given), bodyIsCompact: reserialized === input.rawBody } };
+  }
+  return { ok: true, skewMs, timestampDigits: ts.length };
 }
 
 export type ZaloWebhookEvent =

@@ -135,7 +135,9 @@ test("PA-1 / 60: static guard — product-analytics code references no write end
   for (const f of files) {
     const src = readFileSync(path.join(DIR, f), "utf8");
     const paths = src.match(/\/api\/v2\/[a-z_]+\/[a-z_]+/g) ?? [];
-    for (const p of paths) assert.ok(p === "/api/v2/product/get_item_extra_info" || p === PRODUCT_ANALYTICS_CONTROL_PATH, `${f}: ${p}`);
+    // PA-2: + exactly the two verified order READS of the isolated product sales reader (PRODUCT_SALES_READ_ENDPOINTS)
+    const allowed = new Set(["/api/v2/product/get_item_extra_info", PRODUCT_ANALYTICS_CONTROL_PATH, "/api/v2/order/get_order_list", "/api/v2/order/get_order_detail"]);
+    for (const p of paths) assert.ok(allowed.has(p), `${f}: ${p}`);
     assert.doesNotMatch(src, /method:\s*"POST"/, `${f} never POSTs`);
   }
 });

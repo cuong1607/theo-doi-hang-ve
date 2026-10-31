@@ -36,6 +36,18 @@ export function activeAdsSyncTypes(flags: ShopeeFlags): AdsSyncType[] {
   return flags.adsEnabled && flags.adsDataSource === "real" ? [...ADS_SYNC_TYPES] : [];
 }
 
+/**
+ * PRODUCT-ANALYTICS-2: the isolated product analytics READ jobs (NOT legacy
+ * 'order' / 'product' — those stay retired). Claimable only while their own
+ * flag is on (PRODUCT_SALES_SYNC_ENABLED / PRODUCT_EXTRA_INFO_SYNC_ENABLED).
+ */
+export const PRODUCT_ANALYTICS_JOB_TYPES = ["product_sales_facts_read", "product_extra_info_read"] as const;
+export type ProductAnalyticsJobType = (typeof PRODUCT_ANALYTICS_JOB_TYPES)[number];
+
+export function activeProductAnalyticsSyncTypes(config: { salesSyncEnabled: boolean; extraInfoSyncEnabled: boolean }): ProductAnalyticsJobType[] {
+  return [...(config.salesSyncEnabled ? (["product_sales_facts_read"] as const) : []), ...(config.extraInfoSyncEnabled ? (["product_extra_info_read"] as const) : [])];
+}
+
 /** Job types that exist in the queue but are retired (pending / retry ones are cancelled by the scheduler). */
 export function retiredSyncTypes(flags: ShopeeFlags): RunnableSyncType[] {
   return flags.legacyModulesEnabled ? [] : [...LEGACY_SYNC_TYPES];

@@ -62,9 +62,11 @@ export async function handleZaloWebhookRequest(
   const verified = verifyZaloWebhookSignature({ rawBody: input.rawBody, signatureHeader: input.signatureHeader, appId: config.appId, oaSecretKey: config.oaSecretKey, now: input.now });
   if (!verified.ok) {
     // metadata only: never the header, the body or the secret
-    console.warn(JSON.stringify({ source: "zalo-webhook", event: "rejected", reason: verified.reason }));
+    // + skew in seconds and diagnostic booleans (evidence for the first real event; nothing secret)
+    console.warn(JSON.stringify({ source: "zalo-webhook", event: "rejected", reason: verified.reason, skewSec: verified.skewMs === undefined ? undefined : Math.round(verified.skewMs / 1000), diagnostics: verified.diagnostics }));
     return verified.reason === "not_configured" ? { status: 503, body: { ok: false, error: "not_configured" } } : { status: 401, body: { ok: false, error: "invalid_signature" } };
   }
+  console.info(JSON.stringify({ source: "zalo-webhook", event: "signature_ok", skewSec: Math.round(verified.skewMs / 1000), timestampDigits: verified.timestampDigits }));
   const event = parseZaloWebhookEvent(input.rawBody);
   if (event.kind !== "text") return { status: 200, body: { ok: true, ignored: "unsupported_event" } };
   if (config.oaId && event.recipientId && event.recipientId !== config.oaId) return { status: 200, body: { ok: true, ignored: "other_oa" } };

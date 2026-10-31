@@ -6,7 +6,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { ConversationIntent } from "./router.ts";
-import type { ConversationChannel, ConversationContextData, ConversationRecord, ConversationStore, ShopRef, UserLink } from "./service.ts";
+import type { ConversationChannel, ConversationContextData, ConversationRecord, ConversationStore, ProductCandidate, ShopRef, UserLink } from "./service.ts";
 
 type ConversationRow = { id: string; internal_user_id: string | null; current_shop_id: string | null; last_intent: string | null; context: ConversationContextData | null };
 
@@ -93,9 +93,10 @@ export class SupabaseConversationStore implements ConversationStore {
     check(error, "insertOutbound");
   }
 
-  async updateConversation(id: string, patch: { currentShopId?: string | null; lastIntent?: ConversationIntent | null; context?: ConversationContextData; internalUserId?: string | null }): Promise<void> {
+  async updateConversation(id: string, patch: { currentShopId?: string | null; currentProductId?: string | null; lastIntent?: ConversationIntent | null; context?: ConversationContextData; internalUserId?: string | null }): Promise<void> {
     const row: Record<string, unknown> = {};
     if (patch.currentShopId !== undefined) row.current_shop_id = patch.currentShopId;
+    if (patch.currentProductId !== undefined) row.current_product_id = patch.currentProductId;
     if (patch.lastIntent !== undefined) row.last_intent = patch.lastIntent;
     if (patch.context !== undefined) row.context = patch.context;
     if (patch.internalUserId !== undefined) row.internal_user_id = patch.internalUserId;
@@ -111,6 +112,19 @@ export class SupabaseConversationStore implements ConversationStore {
       .map((r) => ({ id: r.shop_id as string, s: r.shops as unknown as { shop_name: string; is_active: boolean } }))
       .filter((r) => r.s?.is_active)
       .map((r) => ({ id: r.id, name: r.s.shop_name }));
+  }
+
+  async findProducts(shopId: string): Promise<ProductCandidate[]> {
+    const out: ProductCandidate[] = [];
+    // ≤ 1000 rows per response (PostgREST cap) → paged
+    for (let page = 0; page < 10; page++) {
+      const { data, error } = await this.db.from("shopee_products").select("id, provider_item_id, name, sku").eq("shop_id", shopId).order("provider_item_id").range(page * 1000, page * 1000 + 999);
+      check(error, "findProducts");
+      const rows = (data ?? []) as Array<{ id: string; provider_item_id: string; name: string | null; sku: string | null }>;
+      out.push(...rows.map((r) => ({ id: r.id, itemId: r.provider_item_id, name: r.name, sku: r.sku })));
+      if (rows.length < 1000) break;
+    }
+    return out;
   }
 
   async allShops(): Promise<ShopRef[]> {

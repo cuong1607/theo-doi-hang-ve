@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Megaphone, PackagePlus, History, FileText, PackageSearch, Box, Truck, Users, Wallet, Receipt, Bell, Store, Calculator } from "lucide-react";
+import { LayoutDashboard, Megaphone, PackagePlus, History, FileText, PackageSearch, Box, Truck, Users, Wallet, Receipt, Bell, Store, Calculator, ChartColumn } from "lucide-react";
 
 import {
   Sidebar,
@@ -115,6 +115,14 @@ const navGroups: { label?: string; items: NavItem[] }[] = [
         title: "Quảng cáo Shopee",
         href: "/shopee/ads",
         icon: Megaphone,
+        permission: "channel:view",
+        flag: "shopeeAds",
+      },
+      {
+        // PRODUCT-ANALYTICS-2: order facts + Ads per product (DB only, read-only sync)
+        title: "Phân tích sản phẩm",
+        href: "/shopee/product-analytics",
+        icon: ChartColumn,
         permission: "channel:view",
         flag: "shopeeAds",
       },
