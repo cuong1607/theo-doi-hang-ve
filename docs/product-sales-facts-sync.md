@@ -91,6 +91,35 @@ Checks are reproducible, read only: `scripts/shopee/product-analytics-pilot-chec
 | Agent tools on prod DB (HOMIES grant) | 5 / 5 OK, 0.7–2.8 KB, no forbidden key. Denials: unknown user, other shop, other shop's product, non-uuid. |
 | Read latency (from a VN client, network included) | list 30d of one shop p50 0.3–0.46 s; all 5 shops p50 0.73–1.12 s; detail p50 0.3 s; baseline p50 0.24–0.28 s. Server-side list RPC for all shops ≈ 250 ms warm (1.3 s cold). |
 
+### 5.2 2P-FINAL check (2026-10-31 ~09:15–10:30 VN)
+
+**State found:** `product_analytics_shop_settings` has **0 rows**. No shop's "Bật đơn hàng" switch was ever saved; only "Làm mới đơn" was used.
+
+The 6 jobs are all `mode=manual` 48 h reads:
+- CTV, carpet, congtrangbedding, RUGLUX: 1 each;
+- HOMIES: 2.
+
+So no backfill, HOT or COLD job ever ran: the scheduler only plans for shops with `sales_sync_enabled=true`.
+
+**Integrity (all 5 shops, 4 226 lines):**
+- duplicates 0;
+- negative or inconsistent quantities 0;
+- cancelled lines stored and excluded (279 lines);
+- Σ facts = Σ view exactly;
+- timezone mismatches 0;
+- 0 order ids and 0 item ids shared across shops;
+- 0 lines without identity;
+- 1 multi-product campaign excluded (1 927 / 1 928 single-item).
+
+**Defect found and fixed:** missing data was shown as data.
+- **Problem:** the list showed facts of non-backfilled shops as complete sales, with Δ % against an almost empty previous period. Signals and agent tools did the same: SALES_UP from missing data, and a 0 baseline.
+- **The 30-day case:** the "30 ngày" preset always compares with days older than the 30-day backfill, so it would have stayed wrong after the backfill too.
+- **Fix:** `src/lib/product-analytics/coverage.ts`. A period is `covered` only from `backfill day − 30`. Otherwise:
+  - the UI shows "≥ x" or "—" with a callout and no Δ;
+  - the chart leaves a gap;
+  - signals are suppressed;
+  - tools return `availability: lower_bound | no_data` with previous / pct null and `sales_baseline_complete=false`.
+
 ## 6. Retention
 
 - Sales facts: long term.

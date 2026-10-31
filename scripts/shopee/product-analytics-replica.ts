@@ -2,7 +2,11 @@
 // DEV TOOL — PRODUCT-ANALYTICS-2 local replica + real-payload validation.
 //
 //   node --env-file=.env.local scripts/shopee/product-analytics-replica.ts load <outDir>
+//   node --env-file=.env.local scripts/shopee/product-analytics-replica.ts load <outDir> --facts=cloud
 //   node --env-file=.env.local scripts/shopee/product-analytics-replica.ts drop
+//
+// --facts=cloud (2P): copy the facts / identities / product job history already on
+// cloud instead of re-mapping legacy snapshots — the UI then shows what production shows.
 //
 // CLOUD: SELECT only (cloudDb). LOCAL: writes (guarded: the target must be localhost).
 //   1. copies the 5 production shops (same ids, name prefixed "[replica]"), their Ads
@@ -76,6 +80,32 @@ async function load(outDir: string) {
   await insertChunks(local, "shopee_ads_campaign_hourly_performance", hourly as Record<string, unknown>[]);
   const adsProducts = await all((a, b) => cloud.from("shopee_ads_products").select("*").in("shop_id", ids).order("id").range(a, b));
   await insertChunks(local, "shopee_ads_products", adsProducts as Record<string, unknown>[]);
+
+  if (process.argv.includes("--facts=cloud")) {
+    // 2P: mirror exactly what production shows — the facts / identities / job history already on cloud
+    const products = await all((a, b) => cloud.from("shopee_products").select("*").in("shop_id", ids).order("id").range(a, b));
+    for (let i = 0; i < products.length; i += 500) {
+      const { error: pErr } = await local.from("shopee_products").upsert(products.slice(i, i + 500) as Record<string, unknown>[], { onConflict: "shop_id,provider_item_id", ignoreDuplicates: true });
+      if (pErr) fail(`shopee_products: ${pErr.message}`);
+    }
+    const facts = await all((a, b) => cloud.from("shopee_product_sales_facts").select("*").in("shop_id", ids).order("id").range(a, b));
+    await insertChunks(local, "shopee_product_sales_facts", facts as Record<string, unknown>[]);
+    const jobs = await all((a, b) => cloud.from("channel_sync_jobs").select("id, shop_id, sync_type, mode, status, priority, started_at, finished_at, created_at, metadata").in("shop_id", ids).eq("sync_type", "product_sales_facts_read").order("id").range(a, b));
+    await insertChunks(local, "channel_sync_jobs", jobs.map((j) => ({ ...(j as Record<string, unknown>), metadata: { ...((j as { metadata: Record<string, unknown> }).metadata ?? {}), replica: true } })));
+    // freshness (last success) is read from channel_sync_states
+    const states = await all((a, b) => cloud.from("channel_sync_states").select("shop_id, sync_type, last_success_at").in("shop_id", ids).like("sync_type", "product_%").order("shop_id").range(a, b));
+    if (states.length) {
+      const { error: sErr } = await local.from("channel_sync_states").upsert(states as Record<string, unknown>[], { onConflict: "shop_id,sync_type" });
+      if (sErr) fail(`channel_sync_states: ${sErr.message}`);
+    }
+    const settings = await all((a, b) => cloud.from("product_analytics_shop_settings").select("*").in("shop_id", ids).order("shop_id").range(a, b));
+    if (settings.length) await insertChunks(local, "product_analytics_shop_settings", settings.map((s) => ({ ...(s as Record<string, unknown>), updated_by: null })));
+    const report = { mode: "facts=cloud", products: products.length, facts: facts.length, jobs: jobs.length, settings: settings.length, durationMs: Date.now() - started };
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(path.join(outDir, "pa2p-replica-report.json"), JSON.stringify(report, null, 2));
+    console.log(JSON.stringify(report));
+    return;
+  }
 
   // ---- real order payloads → NEW mapper → facts
   type Snap = { shop_id: string; entity_external_id: string; synced_at: string; payload: unknown };

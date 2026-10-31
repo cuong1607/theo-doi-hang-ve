@@ -19,12 +19,15 @@ const MODES: Array<{ value: Mode; label: string }> = [
   { value: "roas", label: "ROAS Broad" },
 ];
 
+/** Sales of a day the facts do not fully cover are null (a gap), never 0. */
+type ChartRow = Omit<ProductDailyRow, "gmv" | "orders" | "units"> & { gmv: number | null; orders: number | null; units: number | null };
+
 interface Series {
   key: string;
   label: string;
   color: string;
   dashed?: boolean;
-  value: (r: ProductDailyRow) => number | null;
+  value: (r: ChartRow) => number | null;
   fmt: (v: number | null) => string;
 }
 
@@ -44,7 +47,9 @@ const W = 760;
 const H = 240;
 const PAD = { l: 56, r: 12, t: 12, b: 28 };
 
-export function ProductTrendChart({ rows }: { rows: ProductDailyRow[] }) {
+export function ProductTrendChart({ rows: daily, salesCoveredFrom }: { rows: ProductDailyRow[]; salesCoveredFrom: string | null }) {
+  const rows: ChartRow[] = daily.map((r) => (salesCoveredFrom !== null && r.report_date >= salesCoveredFrom ? r : { ...r, gmv: null, orders: null, units: null }));
+  const uncovered = rows.filter((r) => r.gmv === null).length;
   const [mode, setMode] = useState<Mode>("money");
   const [hover, setHover] = useState<number | null>(null);
   const [table, setTable] = useState(false);
@@ -135,6 +140,11 @@ export function ProductTrendChart({ rows }: { rows: ProductDailyRow[] }) {
             </tbody>
           </table>
         </div>
+      )}
+      {uncovered > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {uncovered === rows.length ? "Chưa có ngày nào đủ dữ liệu đơn hàng (chưa backfill) — chỉ hiển thị số liệu Ads." : `${uncovered} ngày đầu chưa đủ dữ liệu đơn hàng — doanh số để trống (—), không phải 0.`}
+        </p>
       )}
       <p className="text-xs text-muted-foreground">Các đường được đặt cạnh nhau để quan sát — biểu đồ không thể hiện quan hệ nhân quả giữa quảng cáo và doanh số.</p>
     </div>

@@ -7,7 +7,8 @@ import { formatInt, formatRoas, formatVndCompact } from "@/lib/channels/shopee/a
 import { getShopeeFlags } from "@/lib/feature-flags";
 import { getProductAnalyticsSyncConfig } from "@/lib/product-analytics/config";
 import { PRODUCT_PERIOD_LABELS, PRODUCT_PERIOD_PRESETS } from "@/lib/product-analytics/periods";
-import { filterProductList, loadProductList, loadShopFreshness, timedRead } from "@/lib/product-analytics/read-model";
+import { salesComparable, salesCoverage, salesExact } from "@/lib/product-analytics/coverage";
+import { applySalesCoverage, filterProductList, loadProductList, loadShopFreshness, timedRead } from "@/lib/product-analytics/read-model";
 import { parseProductAnalyticsQuery, PRODUCT_LIST_PAGE_SIZE, productAnalyticsHref } from "@/lib/product-analytics/url-state";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatDateTime } from "@/lib/ui/format";
@@ -46,7 +47,9 @@ export default async function ProductAnalyticsPage({ searchParams }: { searchPar
     value: [rows, freshness],
     ms: queryMs,
   } = await timedRead(() => Promise.all([loadProductList(db, selected, state.period), loadShopFreshness(db, shops.map((s) => s.id))]));
-  const filtered = filterProductList(rows, state.list);
+  const coverage = new Map(shops.map((s) => [s.id, salesCoverage(freshness.get(s.id), state.period)]));
+  const coverageOf = (shopId: string) => coverage.get(shopId) ?? salesCoverage(null, state.period);
+  const filtered = filterProductList(applySalesCoverage(rows, coverageOf), state.list);
   const pages = Math.max(1, Math.ceil(filtered.length / PRODUCT_LIST_PAGE_SIZE));
   const page = Math.min(state.page, pages);
   const visible = filtered.slice((page - 1) * PRODUCT_LIST_PAGE_SIZE, page * PRODUCT_LIST_PAGE_SIZE);
@@ -54,7 +57,16 @@ export default async function ProductAnalyticsPage({ searchParams }: { searchPar
   const statuses = [...new Set(rows.map((r) => r.status ?? "UNKNOWN"))].sort();
   const p = state.period;
   const sortHref = (key: string) => productAnalyticsHref(PATH, current, { sort: key, dir: state.list.sort === key && state.list.dir === "desc" ? "asc" : "desc", page: undefined });
-  const salesMissing = selected.filter((id) => !freshness.get(id)?.sales_last_success_at);
+  const salesMissing = selected.filter((id) => coverageOf(id).state === "no_data");
+  const notBackfilled = selected.filter((id) => coverageOf(id).state === "not_backfilled");
+  const prevUncovered = selected.filter((id) => coverageOf(id).state === "covered" && !salesComparable(coverageOf(id)));
+  // missing data is never shown as 0: no data → "—", not covered → lower bound "≥ x"
+  const salesCell = (v: number, shopId: string, fmt: (n: number) => string) => {
+    const c = coverageOf(shopId);
+    if (c.state === "no_data") return <span className="text-muted-foreground" title="Chưa có dữ liệu đơn hàng">—</span>;
+    if (!salesExact(c)) return <span className="text-muted-foreground" title="Chưa đủ dữ liệu: mức tối thiểu">{v > 0 ? `≥ ${fmt(v)}` : "—"}</span>;
+    return fmt(v);
+  };
 
   return (
     <PageContainer>
@@ -121,7 +133,18 @@ export default async function ProductAnalyticsPage({ searchParams }: { searchPar
       )}
       {salesMissing.length > 0 && (
         <Callout tone="warning" title="Một số shop chưa có dữ liệu bán hàng">
-          {salesMissing.map((id) => shopName.get(id)).join(", ")}: chưa đồng bộ đơn hàng (product_sales_facts_read). Sản phẩm có Ads vẫn hiển thị nhưng doanh số là 0 / chưa có.
+          {salesMissing.map((id) => shopName.get(id)).join(", ")}: chưa đồng bộ đơn hàng. Sản phẩm có Ads vẫn hiển thị; doanh số hiện &quot;—&quot; (chưa có, không phải 0).
+        </Callout>
+      )}
+      {notBackfilled.length > 0 && (
+        <Callout tone="warning" title="Doanh số chưa đầy đủ">
+          {notBackfilled.map((id) => shopName.get(id)).join(", ")}: chưa backfill 30 ngày. Doanh số chỉ gồm các đơn của lần đọc gần nhất nên hiển thị là mức tối thiểu (≥) và không tính % thay đổi.
+          {canManage ? " Bật \"Đơn hàng\" cho shop ở mục Đồng bộ bên dưới để chạy backfill." : ""}
+        </Callout>
+      )}
+      {prevUncovered.length > 0 && (
+        <Callout tone="info" title="Kỳ so sánh chưa có dữ liệu">
+          {prevUncovered.map((id) => `${shopName.get(id)} (đủ từ ${coverageOf(id).covered_from})`).join(", ")}: kỳ trước bắt đầu sớm hơn ngày có dữ liệu đầy đủ — không tính Δ doanh số. Chọn kỳ ngắn hơn (vd 7 ngày) để so sánh.
         </Callout>
       )}
 
@@ -149,7 +172,7 @@ export default async function ProductAnalyticsPage({ searchParams }: { searchPar
               </TableHeader>
               <TableBody>
                 {visible.map((r) => {
-                  const f = freshness.get(r.shop_id);
+                  const c = coverageOf(r.shop_id);
                   return (
                     <TableRow key={r.id}>
                       <TableCell className="min-w-64">
@@ -164,9 +187,9 @@ export default async function ProductAnalyticsPage({ searchParams }: { searchPar
                           </span>
                         </Link>
                       </TableCell>
-                      <TableCell className="text-right tabular-nums">{formatVndCompact(r.gmv)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatInt(r.orders)}</TableCell>
-                      <TableCell className="text-right tabular-nums">{formatInt(r.units)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{salesCell(r.gmv, r.shop_id, formatVndCompact)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{salesCell(r.orders, r.shop_id, formatInt)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{salesCell(r.units, r.shop_id, formatInt)}</TableCell>
                       <TableCell className="text-right"><DeltaText pct={r.gmv_pct} /></TableCell>
                       <TableCell className="text-right tabular-nums">{r.campaigns > 0 ? formatVndCompact(r.spend) : "—"}</TableCell>
                       <TableCell className="text-right"><DeltaText pct={r.campaigns > 0 ? r.spend_pct : null} neutral /></TableCell>
@@ -176,7 +199,13 @@ export default async function ProductAnalyticsPage({ searchParams }: { searchPar
                       <TableCell className="text-right tabular-nums">{r.campaigns > 0 ? formatInt(r.clicks) : "—"}</TableCell>
                       <TableCell>
                         <div className="flex flex-col gap-1">
-                          {!f?.sales_last_success_at ? <StatusBadge tone="warning">Chưa có doanh số</StatusBadge> : r.orders === 0 && r.campaigns > 0 ? <StatusBadge tone="neutral">Ads, 0 đơn</StatusBadge> : null}
+                          {c.state === "no_data" ? (
+                            <StatusBadge tone="warning">Chưa có doanh số</StatusBadge>
+                          ) : !salesExact(c) ? (
+                            <StatusBadge tone="info">Chưa đủ dữ liệu</StatusBadge>
+                          ) : r.orders === 0 && r.campaigns > 0 ? (
+                            <StatusBadge tone="neutral">Ads, 0 đơn</StatusBadge>
+                          ) : null}
                           {r.campaigns === 0 && <StatusBadge tone="neutral" icon={false}>Không Ads</StatusBadge>}
                           {r.shared_campaigns > 0 && <StatusBadge tone="info" icon={false}>{r.shared_campaigns} campaign chung</StatusBadge>}
                           {r.status && r.status !== "NORMAL" && <StatusBadge tone="danger" icon={false}>{r.status}</StatusBadge>}
@@ -263,7 +292,9 @@ export default async function ProductAnalyticsPage({ searchParams }: { searchPar
             </Table>
           </CardContent>
         </Card>
-        <p className="text-xs text-muted-foreground">&quot;Làm mới&quot; chỉ xếp hàng một job đọc; worker chạy job khi cờ môi trường tương ứng đang bật. Trình duyệt không gọi Shopee.</p>
+        <p className="text-xs text-muted-foreground">
+          &quot;Bật đơn hàng&quot; mới bật đồng bộ định kỳ cho shop (backfill 30 ngày, rồi đọc mỗi 30 phút) — cột &quot;Đơn hàng&quot; phải chuyển sang &quot;Bật&quot;. &quot;Làm mới đơn&quot; chỉ xếp hàng MỘT lần đọc đơn của 48 giờ gần nhất, không bật đồng bộ và không chạy backfill. Trình duyệt không gọi Shopee.
+        </p>
       </section>
     </PageContainer>
   );

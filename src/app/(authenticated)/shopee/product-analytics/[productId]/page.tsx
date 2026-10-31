@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { requirePermission } from "@/lib/auth/session";
 import { formatAdsPercent, formatInt, formatRoas, formatVndFull } from "@/lib/channels/shopee/ads/metrics";
 import { getShopeeFlags } from "@/lib/feature-flags";
+import { salesComparable, salesCoverageNote, salesExact, type SalesCoverage } from "@/lib/product-analytics/coverage";
 import { PRODUCT_METRIC_META } from "@/lib/product-analytics/data-quality";
 import { PRODUCT_PERIOD_LABELS, PRODUCT_PERIOD_PRESETS } from "@/lib/product-analytics/periods";
 import { loadProductDetail, resolveProductById, timedRead } from "@/lib/product-analytics/read-model";
@@ -23,14 +24,26 @@ export const dynamic = "force-dynamic";
 
 const PATH = "/shopee/product-analytics";
 
-function MetricTile({ label, delta, fmt, neutral = false, hint }: { label: string; delta: PaDelta; fmt: (v: number | null) => string; neutral?: boolean; hint?: string }) {
+function MetricTile({ label, delta, fmt, neutral = false, hint, coverage }: { label: string; delta: PaDelta; fmt: (v: number | null) => string; neutral?: boolean; hint?: string; coverage?: SalesCoverage }) {
+  // sales tiles: missing data is never shown as 0 — "—" / lower bound "≥", no % without both periods
+  const noData = coverage?.state === "no_data";
+  const lowerBound = coverage !== undefined && !noData && !salesExact(coverage);
+  const comparable = coverage === undefined || salesComparable(coverage);
   return (
     <div className="rounded-lg border bg-card p-3" title={hint}>
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 text-lg font-semibold tabular-nums">{fmt(delta.current)}</div>
+      <div className={`mt-1 text-lg font-semibold tabular-nums ${noData || lowerBound ? "text-muted-foreground" : ""}`}>
+        {noData ? "—" : lowerBound ? `≥ ${fmt(delta.current)}` : fmt(delta.current)}
+      </div>
       <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-        <DeltaText pct={delta.pct} neutral={neutral} />
-        <span>kỳ trước {fmt(delta.previous)}</span>
+        {comparable ? (
+          <>
+            <DeltaText pct={delta.pct} neutral={neutral} />
+            <span>kỳ trước {fmt(delta.previous)}</span>
+          </>
+        ) : (
+          <span>{noData ? "chưa có dữ liệu" : lowerBound ? "chưa đủ dữ liệu" : "kỳ trước chưa có dữ liệu"}</span>
+        )}
       </div>
     </div>
   );
@@ -54,6 +67,8 @@ export default async function ProductAnalyticsDetailPage({ params, searchParams 
   const { data: shop } = await db.from("shops").select("shop_name").eq("id", ref.shopId).maybeSingle<{ shop_name: string }>();
   const p = state.period;
   const hasAds = s.ads.single_item_campaigns > 0;
+  const cov = q.sales_coverage;
+  const coverageNote = salesCoverageNote(cov);
   const vnd = (v: number | null) => formatVndFull(v);
   const int = (v: number | null) => formatInt(v);
   const pct = (v: number | null) => formatAdsPercent(v);
@@ -93,6 +108,12 @@ export default async function ProductAnalyticsDetailPage({ params, searchParams 
         </Callout>
       )}
 
+      {coverageNote && (
+        <Callout tone="warning" title={cov.state === "covered" ? "Kỳ so sánh chưa có dữ liệu" : "Doanh số chưa đầy đủ"}>
+          {coverageNote}
+        </Callout>
+      )}
+
       {signals.length > 0 && (
         <section className="space-y-2">
           <SectionHeader title="Tín hiệu (sự kiện, không phải nguyên nhân)" />
@@ -109,10 +130,10 @@ export default async function ProductAnalyticsDetailPage({ params, searchParams 
       <section className="space-y-3">
         <SectionHeader title="A. Doanh số (đơn hàng)" description={PRODUCT_METRIC_META.sales_gmv.note} />
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricTile label="Doanh số" delta={s.sales.gmv} fmt={vnd} />
-          <MetricTile label="Đơn hàng" delta={s.sales.orders} fmt={int} />
-          <MetricTile label="Số lượng bán" delta={s.sales.units} fmt={int} />
-          <MetricTile label="Đơn đã hủy (không tính)" delta={s.sales.cancelled_orders} fmt={int} neutral />
+          <MetricTile label="Doanh số" delta={s.sales.gmv} fmt={vnd} coverage={cov} />
+          <MetricTile label="Đơn hàng" delta={s.sales.orders} fmt={int} coverage={cov} />
+          <MetricTile label="Số lượng bán" delta={s.sales.units} fmt={int} coverage={cov} />
+          <MetricTile label="Đơn đã hủy (không tính)" delta={s.sales.cancelled_orders} fmt={int} neutral coverage={cov} />
         </div>
       </section>
 
@@ -135,7 +156,15 @@ export default async function ProductAnalyticsDetailPage({ params, searchParams 
               <MetricTile label="Đơn Broad" delta={s.ads.broad_order} fmt={int} />
               <MetricTile label="Đơn Direct" delta={s.ads.direct_order} fmt={int} />
               <MetricTile label="CVR Broad" delta={s.ads.broad_cvr} fmt={pct} />
-              <MetricTile label="Ads attribution / tổng doanh số" delta={s.ads.broad_gmv_to_sales_indicator} fmt={pct} neutral hint={PRODUCT_METRIC_META.broad_gmv_to_sales_indicator.note} />
+              <MetricTile
+                label="Ads attribution / tổng doanh số"
+                delta={s.ads.broad_gmv_to_sales_indicator}
+                fmt={pct}
+                neutral
+                hint={PRODUCT_METRIC_META.broad_gmv_to_sales_indicator.note}
+                // the denominator is sales: a lower bound would inflate the indicator
+                coverage={salesExact(cov) ? cov : { ...cov, state: "no_data" }}
+              />
             </div>
             <p className="text-xs text-muted-foreground">
               &quot;Ads attribution / tổng doanh số&quot; chỉ là chỉ báo: Broad GMV dùng cửa sổ quy đổi của Shopee Ads, doanh số dùng ngày tạo đơn — đây KHÔNG phải tỷ trọng doanh số do quảng cáo tạo ra, và doanh số
@@ -172,7 +201,7 @@ export default async function ProductAnalyticsDetailPage({ params, searchParams 
         <SectionHeader title="D. Xu hướng theo ngày" />
         <Card>
           <CardContent className="p-4">
-            <ProductTrendChart rows={daily} />
+            <ProductTrendChart rows={daily} salesCoveredFrom={cov.covered_from} />
           </CardContent>
         </Card>
       </section>

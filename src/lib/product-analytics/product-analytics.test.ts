@@ -17,7 +17,8 @@ import { mapOrderToSalesFacts, productSalesReportDate, PRODUCT_SALES_FACT_KEYS, 
 import { resolveProductPeriod } from "./periods.ts";
 import { buildProductSignals } from "./signals.ts";
 import { buildProductDataQuality } from "./data-quality.ts";
-import { filterProductList } from "./read-model.ts";
+import { applySalesCoverage, filterProductList } from "./read-model.ts";
+import { salesComparable, salesCoverage, salesCoverageNote, salesExact } from "./coverage.ts";
 import { getProductAnalyticsSyncConfig, PRODUCT_ANALYTICS_PRIORITY } from "./config.ts";
 import { parseProductAnalyticsQuery } from "./url-state.ts";
 import type { PaDelta, ProductListRow, ProductSummary, ShopFreshnessRow } from "./types.ts";
@@ -197,6 +198,39 @@ test("PA2 / §39 §40. data quality: stale → DATA_STALE; partial today without
   const none = buildProductDataQuality({ now: NOW, freshness: null, summary: s, partialToday: false, hourCutoff: null });
   assert.ok(none.missing_sources.includes("sales"));
   assert.ok(none.semantic_warnings.some((w) => /attribution/i.test(w)));
+});
+
+test("PA2P / §34. missing data is not zero: coverage per period; no sales % / signal without both periods covered", () => {
+  const p7 = resolveProductPeriod({ preset: "7d" }, NOW); // 10-23..10-29, prev from 10-16
+  const p30 = resolveProductPeriod({ preset: "30d" }, NOW); // 09-30..10-29, prev from 08-31
+  // never read
+  assert.deepEqual(salesCoverage(null, p7), { state: "no_data", covered_from: null, current_complete: false, previous_complete: false });
+  // only manual 48 h reads, no backfill (production state on 2026-10-31)
+  const manual = salesCoverage({ sales_last_success_at: "2026-10-31T01:20:00Z", sales_backfill_done_at: null }, p7);
+  assert.equal(manual.state, "not_backfilled");
+  assert.equal(salesExact(manual) || salesComparable(manual), false);
+  // backfill finished 2026-10-29 07:00 VN → covered from 2026-09-29
+  const c7 = salesCoverage(FRESH, p7);
+  assert.deepEqual([c7.covered_from, salesExact(c7), salesComparable(c7)], ["2026-09-29", true, true]);
+  const c30 = salesCoverage(FRESH, p30);
+  assert.deepEqual([salesExact(c30), salesComparable(c30)], [true, false], "30d previous period is older than the backfill");
+  assert.match(salesCoverageNote(c30)!, /không tính % thay đổi/);
+  assert.equal(salesCoverageNote(c7), null);
+
+  // signals: an almost-empty previous period must not produce SALES_UP
+  const s = summary({ gmv: D(5_000_000, 600_000), orders: D(20, 5) });
+  const covered = buildProductDataQuality({ now: NOW, freshness: FRESH, summary: s, partialToday: false, hourCutoff: null, period: p7 });
+  assert.ok(buildProductSignals(s, covered).some((x) => x.type === "SALES_UP"));
+  for (const period of [p30, p7]) {
+    const fresh = period === p30 ? FRESH : { ...FRESH, sales_backfill_done_at: null };
+    const q = buildProductDataQuality({ now: NOW, freshness: fresh, summary: s, partialToday: false, hourCutoff: null, period });
+    assert.equal(buildProductSignals(s, q).filter((x) => /^(SALES|ORDERS|UNITS)_/.test(x.type)).length, 0);
+    assert.ok(q.semantic_warnings.length > 0 && q.sales_coverage.previous_complete === false);
+  }
+
+  // list: Δ sales cleared (so it also sorts last), Ads deltas untouched
+  const rows = applySalesCoverage([row({ id: "a", shop_id: "s1", gmv_pct: 400, spend_pct: 10 }), row({ id: "b", shop_id: "s2", gmv_pct: -5 })], (shop) => (shop === "s1" ? manual : c7));
+  assert.deepEqual(rows.map((r) => [r.id, r.gmv_pct, r.spend_pct]), [["a", null, 10], ["b", -5, null]]);
 });
 
 // ------------------------------------------------------------------ list / search / resolution

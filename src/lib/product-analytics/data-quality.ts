@@ -3,6 +3,7 @@
 // metric the UI / a future agent sees (spec §28, §39–41). Pure.
 // ============================================================
 import { PRODUCT_SIGNAL_THRESHOLDS, type ProductSignalThresholds } from "./config.ts";
+import { salesCoverage, salesCoverageNote, type SalesCoverage } from "./coverage.ts";
 import type { MetricMeta, ProductSummary, ShopFreshnessRow } from "./types.ts";
 
 /** Per metric: where it comes from and how sure we are of what it MEANS. */
@@ -30,6 +31,8 @@ export interface ProductDataQuality {
   /** Comparison of a partial today is cut at the same completed hour on both days. */
   same_time_comparison: { applied: boolean; hour_cutoff: number | null; sales_available: boolean; ads_available: boolean };
   semantic_warnings: string[];
+  /** Whether the period's sales are complete — missing data is never shown as 0. */
+  sales_coverage: SalesCoverage;
 }
 
 const ageMinutes = (iso: string | null, now: Date) => (iso ? Math.max(0, Math.round((now.getTime() - Date.parse(iso)) / 60_000)) : null);
@@ -40,10 +43,13 @@ export function buildProductDataQuality(input: {
   summary: ProductSummary | null;
   partialToday: boolean;
   hourCutoff: number | null;
+  /** Period being read (coverage); omitted = treated as the most recent day only. */
+  period?: { from: string; prevFrom: string };
   thresholds?: ProductSignalThresholds;
 }): ProductDataQuality {
   const t = input.thresholds ?? PRODUCT_SIGNAL_THRESHOLDS;
   const f = input.freshness;
+  const coverage = salesCoverage(f, input.period ?? { from: "9999-12-31", prevFrom: "9999-12-31" });
   const salesAge = ageMinutes(f?.sales_last_success_at ?? null, input.now);
   const adsAge = ageMinutes(f?.ads_campaign_today_at ?? null, input.now);
   const extraAge = ageMinutes(f?.extra_info_last_captured_at ?? null, input.now);
@@ -55,7 +61,8 @@ export function buildProductDataQuality(input: {
   if (!s?.snapshot) missing.push("extra_info");
 
   const warnings: string[] = [];
-  if (f && !f.sales_backfill_done_at) warnings.push("Chưa hoàn tất backfill 30 ngày dữ liệu bán hàng — số liệu kỳ trước có thể thiếu.");
+  const coverageNote = salesCoverageNote(coverage);
+  if (coverageNote) warnings.push(coverageNote);
   if ((s?.ads.shared_campaigns_excluded ?? 0) > 0) warnings.push(`${s!.ads.shared_campaigns_excluded} campaign quảng cáo nhiều sản phẩm không được tính vào Ads của sản phẩm này.`);
   warnings.push("Doanh số = tạm tính theo giá sản phẩm, trước voucher/phí ship; hoàn trả chưa được trừ.");
   warnings.push("Broad GMV là attribution của Shopee Ads, không phải phần doanh số do Ads tạo ra.");
@@ -76,5 +83,6 @@ export function buildProductDataQuality(input: {
     partial_today: input.partialToday,
     same_time_comparison: { applied, hour_cutoff: applied ? input.hourCutoff : null, sales_available: salesAvailable, ads_available: adsAvailable },
     semantic_warnings: warnings,
+    sales_coverage: coverage,
   };
 }

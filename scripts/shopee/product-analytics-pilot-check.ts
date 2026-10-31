@@ -116,6 +116,10 @@ async function agentTools() {
       forbidden_keys: forbidden,
     }));
   }
+  // §34: what the analyst would actually receive for sales
+  const cmp = await compare_product_periods(db, scope, { period: { preset: "7d" } });
+  const base = await get_product_baseline(db, scope, { days: 30 });
+  console.log(JSON.stringify({ sales_gmv: cmp.comparisons.sales_gmv, orders: cmp.comparisons.orders, sales_signals: cmp.signals.filter((s) => /^(SALES|ORDERS|UNITS)_/.test(s.type)), coverage: cmp.data_quality.sales_coverage, baseline_sales_complete: base.data_quality.sales_baseline_complete }));
   // denial paths
   const other = all.find((s) => !granted.has(s.id));
   const otherProduct = other ? (await db.from("shopee_products").select("id").eq("shop_id", other.id).limit(1).maybeSingle()).data : null;

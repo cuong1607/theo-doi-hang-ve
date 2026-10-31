@@ -44,7 +44,8 @@ export function buildProductSignals(summary: ProductSummary, quality: ProductDat
   const out: ProductSignal[] = [];
   const push = (type: ProductSignalType, metric: string, d: PaDelta) => out.push({ type, metric, current: d.current, previous: d.previous, pct: d.pct });
   const t = thresholds;
-  const salesComparable = quality.same_time_comparison.sales_available;
+  // an incomplete (not backfilled) period would produce SALES_UP +500 % from missing data
+  const salesComparable = quality.same_time_comparison.sales_available && quality.sales_coverage.current_complete && quality.sales_coverage.previous_complete;
   const adsComparable = quality.same_time_comparison.ads_available;
 
   if (salesComparable) {

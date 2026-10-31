@@ -13,6 +13,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { CONVERSATION_ALLOWED_ROLES } from "../conversation/service.ts";
 
+import { salesComparable, type SalesCoverage } from "./coverage.ts";
 import { buildProductDataQuality, PRODUCT_METRIC_META } from "./data-quality.ts";
 import { resolveProductPeriod, type ProductPeriod, type ProductPeriodPreset } from "./periods.ts";
 import { loadProductDetail, loadShopFreshness, ProductAnalyticsReadError, type ProductDetail, type ProductRef } from "./read-model.ts";
@@ -64,6 +65,24 @@ function period(input: ProductToolPeriodInput | undefined, now: Date): ProductPe
 
 const pick = (d: PaDelta) => ({ current: d.current, previous: d.previous, abs: d.abs, pct: d.pct });
 
+/**
+ * Sales-based value: missing data is never handed over as 0. No data at all →
+ * null; not covered → current is a lower bound; previous / change only when
+ * both periods are covered.
+ */
+function salesPick(d: PaDelta, c: SalesCoverage) {
+  const comparable = salesComparable(c);
+  return {
+    current: c.state === "no_data" ? null : d.current,
+    previous: c.previous_complete ? d.previous : null,
+    abs: comparable ? d.abs : null,
+    pct: comparable ? d.pct : null,
+    availability: c.state === "no_data" ? ("no_data" as const) : c.current_complete ? ("complete" as const) : ("lower_bound" as const),
+  };
+}
+
+const salesValue = (v: number | null, c: SalesCoverage) => (c.state === "no_data" ? null : v);
+
 function periodOut(p: ProductPeriod) {
   return { from: p.from, to: p.to, previous_from: p.prevFrom, previous_to: p.prevTo, partial_today: p.partialToday, hour_cutoff: p.hourCutoff };
 }
@@ -81,6 +100,7 @@ function qualityOut(d: ProductDetail) {
     extra_info_freshness_hours: q.extra_info_freshness.age_hours,
     stale: q.sales_freshness.stale || q.ads_freshness.stale,
     sales_backfill_done: q.sales_freshness.backfill_done,
+    sales_coverage: q.sales_coverage,
     missing_sources: q.missing_sources,
     partial_today: q.partial_today,
     same_time_comparison: q.same_time_comparison,
@@ -105,7 +125,12 @@ export async function get_product_overview(db: SupabaseClient, scope: ProductToo
     tool: "get_product_overview" as const,
     product: productOut(d),
     period: periodOut(p),
-    sales: { gmv: s.sales.gmv.current, orders: s.sales.orders.current, units: s.sales.units.current },
+    sales: {
+      gmv: salesValue(s.sales.gmv.current, d.quality.sales_coverage),
+      orders: salesValue(s.sales.orders.current, d.quality.sales_coverage),
+      units: salesValue(s.sales.units.current, d.quality.sales_coverage),
+      availability: salesPick(s.sales.gmv, d.quality.sales_coverage).availability,
+    },
     ads: { campaigns: s.ads.single_item_campaigns, spend: s.ads.spend.current, broad_gmv: s.ads.broad_gmv.current, broad_roas: s.ads.broad_roas.current, clicks: s.ads.clicks.current },
     // current provider snapshot — no period delta (semantics unverified)
     provider_snapshot: s.snapshot ? { captured_at: s.snapshot.captured_at, views: s.snapshot.views, sale: s.snapshot.sale, likes: s.snapshot.likes, rating_star: s.snapshot.rating_star, comment_count: s.snapshot.comment_count } : null,
@@ -123,9 +148,9 @@ export async function compare_product_periods(db: SupabaseClient, scope: Product
     product: productOut(d),
     period: periodOut(p),
     comparisons: {
-      sales_gmv: pick(s.sales.gmv),
-      orders: pick(s.sales.orders),
-      units: pick(s.sales.units),
+      sales_gmv: salesPick(s.sales.gmv, d.quality.sales_coverage),
+      orders: salesPick(s.sales.orders, d.quality.sales_coverage),
+      units: salesPick(s.sales.units, d.quality.sales_coverage),
       ads_spend: pick(s.ads.spend),
       ads_clicks: pick(s.ads.clicks),
       ads_impressions: pick(s.ads.impressions),
@@ -145,7 +170,12 @@ export async function get_product_sales_summary(db: SupabaseClient, scope: Produ
     tool: "get_product_sales_summary" as const,
     product: productOut(d),
     period: periodOut(p),
-    sales: { gmv: pick(s.gmv), orders: pick(s.orders), units: pick(s.units), cancelled_orders: pick(s.cancelled_orders) },
+    sales: {
+      gmv: salesPick(s.gmv, d.quality.sales_coverage),
+      orders: salesPick(s.orders, d.quality.sales_coverage),
+      units: salesPick(s.units, d.quality.sales_coverage),
+      cancelled_orders: salesPick(s.cancelled_orders, d.quality.sales_coverage),
+    },
     semantics: {
       gmv: "item subtotal at discounted unit price × (quantity − cancelled), before vouchers / shipping, returns not netted",
       counted_statuses: ["READY_TO_SHIP", "PROCESSED", "RETRY_SHIP", "SHIPPED", "TO_CONFIRM_RECEIVE", "COMPLETED", "TO_RETURN"],
@@ -179,7 +209,8 @@ export async function get_product_ads_performance(db: SupabaseClient, scope: Pro
       broad_roas: pick(a.broad_roas),
       direct_cvr: pick(a.direct_cvr),
       broad_cvr: pick(a.broad_cvr),
-      ads_attribution_to_total_sales_indicator: pick(a.broad_gmv_to_sales_indicator),
+      // its denominator is sales: same coverage rule
+      ads_attribution_to_total_sales_indicator: salesPick(a.broad_gmv_to_sales_indicator, d.quality.sales_coverage.current_complete ? d.quality.sales_coverage : { ...d.quality.sales_coverage, state: "no_data" }),
     },
     attribution_warning: "Broad / direct GMV are Shopee Ads attribution metrics. They are NOT the part of sales caused by Ads; total − Ads is NOT organic sales.",
     data_quality: qualityOut(d),
@@ -197,7 +228,7 @@ export async function get_product_baseline(db: SupabaseClient, scope: ProductToo
     loadShopFreshness(db, [ref.shopId]),
   ]);
   if (error) throw new ProductAnalyticsReadError("baseline", error.message);
-  const q = buildProductDataQuality({ now, freshness: freshness.get(ref.shopId) ?? null, summary: null, partialToday: false, hourCutoff: null });
+  const q = buildProductDataQuality({ now, freshness: freshness.get(ref.shopId) ?? null, summary: null, partialToday: false, hourCutoff: null, period: { from, prevFrom: from } });
   return {
     tool: "get_product_baseline" as const,
     product_id: ref.productId,
@@ -209,6 +240,9 @@ export async function get_product_baseline(db: SupabaseClient, scope: ProductToo
       sales_freshness_minutes: q.sales_freshness.age_minutes,
       ads_freshness_minutes: q.ads_freshness.age_minutes,
       sales_backfill_done: q.sales_freshness.backfill_done,
+      // false → the sales part of the baseline counts uncovered days as 0: do not use it
+      sales_baseline_complete: q.sales_coverage.current_complete,
+      sales_coverage: q.sales_coverage,
       missing_sources: q.missing_sources.filter((s) => s !== "extra_info"),
       semantic_warnings: q.semantic_warnings,
     },

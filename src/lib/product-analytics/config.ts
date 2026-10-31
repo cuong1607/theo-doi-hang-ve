@@ -51,6 +51,9 @@ export const PRODUCT_ANALYTICS_LANES = {
   extraInfo: "pa_extra",
 } as const;
 
+/** Days of orders the first sync reads; also defines what "covered" means (coverage.ts). */
+export const PRODUCT_ANALYTICS_BACKFILL_DAYS = 30;
+
 export function getProductAnalyticsSyncConfig(env: Env = process.env): ProductAnalyticsSyncConfig {
   return {
     salesSyncEnabled: bool(env.PRODUCT_SALES_SYNC_ENABLED, false),
@@ -60,7 +63,7 @@ export function getProductAnalyticsSyncConfig(env: Env = process.env): ProductAn
     hotLookbackHours: 48,
     coldTimes: ["04:00", "16:00"],
     coldLookbackDays: 8,
-    backfillDays: 30,
+    backfillDays: PRODUCT_ANALYTICS_BACKFILL_DAYS,
     backfillRetryMinutes: 60,
     extraInfoTimes: ["06:00", "18:00"],
     callsPerSlice: 20,

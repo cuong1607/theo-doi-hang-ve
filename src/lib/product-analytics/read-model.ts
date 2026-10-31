@@ -10,6 +10,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { foldVietnamese } from "../conversation/router.ts";
 
+import { salesComparable, type SalesCoverage } from "./coverage.ts";
 import { buildProductDataQuality, type ProductDataQuality } from "./data-quality.ts";
 import type { ProductPeriod } from "./periods.ts";
 import { buildProductSignals, type ProductSignal } from "./signals.ts";
@@ -131,6 +132,11 @@ export function filterProductList(rows: readonly ProductListRow[], query: Produc
   });
 }
 
+/** Sales % change only where both periods are covered (missing data is not a −100 % / +500 %). */
+export function applySalesCoverage(rows: readonly ProductListRow[], coverageOf: (shopId: string) => SalesCoverage): ProductListRow[] {
+  return rows.map((r) => (salesComparable(coverageOf(r.shop_id)) ? r : { ...r, gmv_pct: null }));
+}
+
 // ------------------------------------------------------------------ detail
 
 export interface ProductDetail {
@@ -147,6 +153,6 @@ export async function loadProductDetail(db: SupabaseClient, ref: ProductRef, per
     loadShopFreshness(db, [ref.shopId]),
   ]);
   if (!summary) return null;
-  const quality = buildProductDataQuality({ now, freshness: freshness.get(ref.shopId) ?? null, summary, partialToday: period.partialToday, hourCutoff: period.hourCutoff });
+  const quality = buildProductDataQuality({ now, freshness: freshness.get(ref.shopId) ?? null, summary, partialToday: period.partialToday, hourCutoff: period.hourCutoff, period });
   return { summary, daily, quality, signals: buildProductSignals(summary, quality) };
 }
