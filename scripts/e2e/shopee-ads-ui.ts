@@ -87,9 +87,10 @@ async function main() {
     });
 
     await check("navigation still Ads-only (no legacy Shopee items)", async () => {
-      const nav = await page.locator('[data-sidebar="sidebar"], aside, nav').first().innerText();
-      expect(nav.includes("Quảng cáo Shopee"), "Ads item");
-      for (const legacy of ["Đơn hàng Shopee", "Hàng hoàn", "Giải ngân", "Phân tích", "Đồng bộ Shopee"]) expect(!nav.includes(legacy), `legacy item ${legacy}`);
+      // APP-SHELL-1: Ads lives in the "Phân tích Shopee" app shell — its item is "Quảng cáo" ("Phân tích" is now that app's group label)
+      const nav = await page.locator('[data-sidebar="sidebar"] nav').first().innerText();
+      expect(nav.includes("Quảng cáo"), "Ads item");
+      for (const legacy of ["Đơn hàng Shopee", "Hàng hoàn", "Giải ngân", "Đối soát", "Dòng tiền", "Đồng bộ Shopee", "Giá vốn"]) expect(!nav.includes(legacy), `legacy item ${legacy}`);
     });
 
     await check("KPI cards: hero ROAS + 8 distinct metric cards, formatted vi-VN", async () => {

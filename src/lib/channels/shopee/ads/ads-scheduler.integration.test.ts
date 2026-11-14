@@ -449,7 +449,7 @@ test("page load: RealAdsDashboardSource reads the DB only — zero jobs created,
   assert.equal((await jobs(A.id)).length, jobsBefore);
   assert.equal(fixtureProvider.calls.length, 0);
   const read = (p: string) => readFileSync(path.join(process.cwd(), p), "utf8");
-  for (const f of ["src/lib/channels/shopee/ads/real-source.ts", "src/app/(authenticated)/shopee/ads/page.tsx", "src/components/ads/ads-refresh.tsx"]) {
+  for (const f of ["src/lib/channels/shopee/ads/real-source.ts", "src/app/(authenticated)/(shopee)/shopee/ads/page.tsx", "src/components/ads/ads-refresh.tsx"]) {
     const src = read(f).replace(/^\s*\/\/.*$/gm, "");
     for (const banned of ["enqueueAdsJob", "requestAdsRefresh", "runAdsSchedulerTick", "kickShopeeSyncWorker", "ShopeeAdsProvider", "createAdsRunner"]) {
       assert.ok(!src.includes(banned), `${f} must not reference ${banned}`);

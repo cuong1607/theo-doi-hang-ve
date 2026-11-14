@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 
 import type { AdsShopSyncOverview } from "@/lib/channels/shopee/ads/schedule";
 import type { AdsHourlyReconciliationStatus } from "@/lib/channels/shopee/ads/view-models";
-import { refreshAdsProductInfoAction, toggleAdsAutoSyncAction, toggleAdsHourlySyncAction, toggleAdsProductEnrichmentAction } from "@/app/(authenticated)/shopee/ads/actions";
+import { refreshAdsProductInfoAction, toggleAdsAutoSyncAction, toggleAdsHourlySyncAction, toggleAdsProductEnrichmentAction } from "@/app/(authenticated)/(shopee)/shopee/ads/actions";
 import { toast } from "@/components/patterns/toast";
 import { Button } from "@/components/ui/button";
 

@@ -5,16 +5,21 @@ import assert from "node:assert/strict";
 import { PERMISSIONS, hasPermission, isRole, type Permission, type Role } from "./permissions.ts";
 import { safeNextPath } from "./redirect.ts";
 
+// APP-SHELL-1: entering an app (navigation only); the system app stays admin-only.
+const APP_ENTRY: Permission[] = ["app:accounting", "app:shopee", "app:purchasing", "app:creative", "app:marketing"];
+
 const EXPECTED: Record<Role, Permission[]> = {
   admin: Object.keys(PERMISSIONS) as Permission[],
   staff: [
     "dashboard:view", "receipt:view", "invoice:view", "outstanding:view", "debt:view", "payment:view",
     "product:view", "supplier:view", "channel:view", "cost:view", "receipt:create", "receipt:edit", "invoice:create", "invoice:edit",
     "payment:create", "channel:map", "channel:sync", "return:receive",
+    ...APP_ENTRY,
   ],
   viewer: [
     "dashboard:view", "receipt:view", "invoice:view", "outstanding:view", "debt:view", "payment:view",
     "product:view", "supplier:view", "channel:view", "cost:view",
+    ...APP_ENTRY,
   ],
 };
 
@@ -27,7 +32,8 @@ test("role matrix: each role has exactly the expected permissions", () => {
 
 test("viewer is read-only: no create/edit/manage permission at all", () => {
   for (const p of Object.keys(PERMISSIONS) as Permission[]) {
-    if (!p.endsWith(":view")) assert.equal(hasPermission("viewer", p), false, p);
+    // app:* = may open an app shell (navigation), never a write
+    if (!p.endsWith(":view") && !p.startsWith("app:")) assert.equal(hasPermission("viewer", p), false, p);
   }
 });
 
@@ -46,10 +52,10 @@ test("no role / unknown role => nothing", () => {
 
 test("safeNextPath: only same-origin paths, never auth pages or open redirects", () => {
   assert.equal(safeNextPath("/receipts?from=2026-09-01"), "/receipts?from=2026-09-01");
-  assert.equal(safeNextPath(undefined), "/dashboard");
-  assert.equal(safeNextPath("https://evil.example"), "/dashboard");
-  assert.equal(safeNextPath("//evil.example"), "/dashboard");
-  assert.equal(safeNextPath("/\\evil.example"), "/dashboard");
-  assert.equal(safeNextPath("/login"), "/dashboard");
-  assert.equal(safeNextPath("/account-disabled"), "/dashboard");
+  assert.equal(safeNextPath(undefined), "/apps");
+  assert.equal(safeNextPath("https://evil.example"), "/apps");
+  assert.equal(safeNextPath("//evil.example"), "/apps");
+  assert.equal(safeNextPath("/\\evil.example"), "/apps");
+  assert.equal(safeNextPath("/login"), "/apps");
+  assert.equal(safeNextPath("/account-disabled"), "/apps");
 });

@@ -24,7 +24,7 @@ const PUBLIC_PREFIXES = [
   "/api/health", // technical health check
 ];
 // "/" stays public on purpose: it's a plain HTML page (see app/page.tsx,
-// Zalo site-verification meta tag) that client-redirects to /dashboard,
+// Zalo site-verification meta tag) that client-redirects to /apps,
 // which is protected.
 const ROOT_PATH = "/";
 
@@ -100,7 +100,7 @@ export async function proxy(request: NextRequest) {
         .select("is_active")
         .eq("id", user.id)
         .maybeSingle();
-      if (profile?.is_active) return redirectTo("/dashboard");
+      if (profile?.is_active) return redirectTo("/apps");
     }
     return supabaseResponse;
   }

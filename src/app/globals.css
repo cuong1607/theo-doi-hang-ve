@@ -76,6 +76,12 @@
   --color-metric-cr: var(--metric-cr);
   --color-metric-cr-text: var(--metric-cr-text);
   --ease-ads: cubic-bezier(0.22, 1, 0.36, 1);
+  /* APP-SHELL-1 per-app accent (set by [data-app], see below) */
+  --color-app-accent: var(--app-accent);
+  --color-app-accent-2: var(--app-accent-2);
+  --color-app-accent-text: var(--app-accent-text);
+  --color-app-accent-soft: var(--app-accent-soft);
+  --color-app-accent-border: var(--app-accent-border);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -263,6 +269,66 @@
   --sidebar-accent-foreground: oklch(0.86 0.08 355);
   --sidebar-border: oklch(1 0 0 / 12%);
   --sidebar-ring: oklch(0.72 0.15 355);
+}
+
+/* ------------------------------------------------------------------
+   APP-SHELL-1 app identity. ONE token formula for every app; an app only
+   picks its two hues (+ chroma). Light / dark lightness comes from the
+   shared formula, so no app has its own palette. [data-app] sits on the
+   shell root, on each hub card and inside the mobile sidebar sheet.
+   ------------------------------------------------------------------ */
+[data-app] {
+  --app-c: 0.16;
+  --app-accent: oklch(0.55 var(--app-c) var(--app-h1));
+  --app-accent-2: oklch(0.6 var(--app-c) var(--app-h2));
+  --app-accent-text: oklch(0.45 calc(var(--app-c) * 0.85) var(--app-h1));
+  --app-accent-soft: oklch(0.965 calc(var(--app-c) * 0.16) var(--app-h1));
+  --app-accent-border: oklch(0.88 calc(var(--app-c) * 0.3) var(--app-h1));
+  /* active sidebar item follows the app */
+  --sidebar-accent: var(--app-accent-soft);
+  --sidebar-accent-foreground: var(--app-accent-text);
+  --sidebar-ring: var(--app-accent);
+}
+.dark [data-app] {
+  --app-accent: oklch(0.74 calc(var(--app-c) * 0.85) var(--app-h1));
+  --app-accent-2: oklch(0.74 calc(var(--app-c) * 0.85) var(--app-h2));
+  --app-accent-text: oklch(0.85 calc(var(--app-c) * 0.6) var(--app-h1));
+  --app-accent-soft: oklch(0.29 calc(var(--app-c) * 0.35) var(--app-h1));
+  --app-accent-border: oklch(0.42 calc(var(--app-c) * 0.45) var(--app-h1));
+}
+[data-app="hub"] { --app-h1: 355; --app-h2: 320; }
+[data-app="accounting"] { --app-h1: 258; --app-h2: 162; --app-c: 0.13; } /* navy / emerald */
+[data-app="shopee"] { --app-h1: 37; --app-h2: 295; --app-c: 0.18; } /* orange / violet (= Ads) */
+[data-app="purchasing"] { --app-h1: 250; --app-h2: 222; }
+[data-app="creative"] { --app-h1: 300; --app-h2: 350; }
+[data-app="marketing"] { --app-h1: 48; --app-h2: 78; }
+[data-app="system"] { --app-h1: 265; --app-h2: 230; --app-c: 0.06; }
+
+/* Two-hue gradient (icon tiles, small accents). */
+@utility app-gradient {
+  background: linear-gradient(135deg, var(--app-accent), var(--app-accent-2));
+}
+
+/* Soft tinted wash (hero / card backgrounds), never saturated. */
+@utility app-wash {
+  background:
+    radial-gradient(70% 120% at 0% 0%, color-mix(in oklch, var(--app-accent) 12%, transparent), transparent 70%),
+    radial-gradient(60% 120% at 100% 0%, color-mix(in oklch, var(--app-accent-2) 10%, transparent), transparent 70%),
+    var(--card);
+}
+
+/* Launcher card: lift + tinted border on hover / keyboard focus. */
+@utility app-card {
+  transition:
+    transform var(--ads-dur-normal) var(--ads-ease),
+    box-shadow var(--ads-dur-normal) var(--ads-ease),
+    border-color var(--ads-dur-normal) var(--ads-ease);
+  &:hover,
+  &:focus-visible {
+    transform: translateY(-3px);
+    box-shadow: 0 14px 30px -18px color-mix(in oklch, var(--app-accent) 55%, transparent);
+    border-color: color-mix(in oklch, var(--app-accent) 40%, var(--border));
+  }
 }
 
 @layer base {
@@ -500,7 +566,9 @@
   [data-ads-root] * {
     animation-delay: 0ms !important;
   }
-  .ads-card:hover {
+  .ads-card:hover,
+  .app-card:hover,
+  .app-card:focus-visible {
     transform: none;
   }
 }

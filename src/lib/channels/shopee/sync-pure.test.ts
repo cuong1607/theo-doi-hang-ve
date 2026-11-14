@@ -298,15 +298,19 @@ function filesUnder(dir: URL, filter: (p: string) => boolean): string[] {
   return out;
 }
 
+// APP-SHELL-1: Shopee routes live in two route groups (Shopee app + accounting's retired modules).
+const SHOPEE_ROUTE_DIRS = ["src/app/(authenticated)/(shopee)/shopee/", "src/app/(authenticated)/(accounting)/shopee/"];
+const shopeeRouteFiles = (filter: (p: string) => boolean) => SHOPEE_ROUTE_DIRS.flatMap((d) => filesUnder(new URL(d, ROOT), filter));
+
 test("28. Shopee pages never import the provider, token or sync services (UI reads the database only)", () => {
-  const pages = filesUnder(new URL("src/app/(authenticated)/shopee/", ROOT), (p) => /page\.tsx$/.test(p));
+  const pages = shopeeRouteFiles((p) => /page\.tsx$/.test(p));
   assert.ok(pages.length >= 4, "found the Shopee pages");
   const forbidden = /channels\/shopee\/(server|client|token|order-provider|product-provider|order-sync|product-sync|sync-service)["']/;
   for (const page of pages) assert.doesNotMatch(readFileSync(page, "utf8"), forbidden, page);
 });
 
 test("27. UI sync actions only enqueue (no sync service / provider call in any Shopee action file)", () => {
-  const actions = filesUnder(new URL("src/app/(authenticated)/shopee/", ROOT), (p) => /actions\.ts$/.test(p));
+  const actions = shopeeRouteFiles((p) => /actions\.ts$/.test(p));
   for (const file of actions) {
     const src = readFileSync(file, "utf8");
     assert.doesNotMatch(src, /\.sync\(|\.backfill\(|getShopee(Order|Product)Sync|ShopeeOrderSyncService|ShopeeProductSyncService/, file);
@@ -315,7 +319,7 @@ test("27. UI sync actions only enqueue (no sync service / provider call in any S
 
 test("auto-map is database-only: the action and the mapping module never import a Shopee provider / client / token / sync service", () => {
   const forbidden = /channels\/shopee\/(server|client|token|order-provider|product-provider|order-sync|product-sync|sync-service|signing)(\.ts)?["']|ShopeeClient|getModelList|getItemBaseInfo|listItems\(/;
-  for (const rel of ["src/app/(authenticated)/shopee/products/actions.ts", "src/lib/channels/core/sku-mapping.ts"]) {
+  for (const rel of ["src/app/(authenticated)/(accounting)/shopee/products/actions.ts", "src/lib/channels/core/sku-mapping.ts"]) {
     const src = readFileSync(new URL(rel, ROOT), "utf8");
     assert.doesNotMatch(src, forbidden, rel);
   }

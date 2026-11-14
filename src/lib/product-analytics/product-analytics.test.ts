@@ -276,7 +276,7 @@ test("PA3 / §34. display: no data → '—', not covered → '≥ x', exact oth
 test("PA3 / §10 §77. attribution indicator: exact label + tooltip; never 'contribution' / 'sales share' / 'organic remainder'", () => {
   assert.equal(ATTRIBUTION_INDICATOR_LABEL, "Ads attribution / total sales indicator");
   assert.match(ATTRIBUTION_INDICATOR_TOOLTIP, /This compares Shopee Ads attribution GMV against product sales facts\. It is NOT a sales-share percentage and may exceed 100%\./);
-  const files = [...walk(path.join(SRC, "lib/product-analytics")), ...walk(path.join(SRC, "components/product-analytics")), ...walk(path.join(SRC, "app/(authenticated)/shopee/product-analytics"))];
+  const files = [...walk(path.join(SRC, "lib/product-analytics")), ...walk(path.join(SRC, "components/product-analytics")), ...walk(path.join(SRC, "app/(authenticated)/(shopee)/shopee/product-analytics"))];
   for (const f of files) {
     const code = readFileSync(f, "utf8").replace(/\/\/.*$/gm, "");
     assert.ok(!/Ads contribution|Ads sales share|organic remainder|doanh số tự nhiên\s*=|Ads tạo ra \d|Ads generated/i.test(code), `${f}: forbidden attribution wording`);
@@ -390,7 +390,7 @@ test("PA2 / §32 §69. ATTRIBUTION GUARD: nothing computes organic = total − b
   const files = [
     ...walk(path.join(SRC, "lib/product-analytics")),
     ...walk(path.join(SRC, "components/product-analytics")),
-    ...walk(path.join(SRC, "app/(authenticated)/shopee/product-analytics")),
+    ...walk(path.join(SRC, "app/(authenticated)/(shopee)/shopee/product-analytics")),
     path.join(SRC, "..", "supabase/migrations/00070_shopee_product_analytics.sql"),
     path.join(SRC, "..", "supabase/migrations/00071_product_intelligence.sql"),
   ];

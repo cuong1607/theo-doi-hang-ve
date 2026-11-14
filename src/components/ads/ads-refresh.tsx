@@ -17,7 +17,7 @@ import { AlertTriangle, Check, CircleDashed, Clock, Database, RefreshCw } from "
 import { cn } from "cn";
 
 import type { AdsSyncStatus as AdsSyncStatusVM } from "@/lib/channels/shopee/ads/view-models";
-import { adsFreshnessAction, adsRefreshStatusAction, refreshAdsDataAction } from "@/app/(authenticated)/shopee/ads/actions";
+import { adsFreshnessAction, adsRefreshStatusAction, refreshAdsDataAction } from "@/app/(authenticated)/(shopee)/shopee/ads/actions";
 import { toast } from "@/components/patterns/toast";
 import { Button } from "@/components/ui/button";
 

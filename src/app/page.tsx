@@ -10,13 +10,13 @@ import { useRouter } from "next/navigation";
 // (see layout.tsx's zalo-platform-site-verification) would never be seen.
 // Rendering real HTML here and redirecting via a client-side effect means
 // GET / always returns a normal 200 page with the full <head> — real
-// browsers still bounce to /dashboard almost instantly, and non-JS crawlers
+// browsers still bounce to /apps (the App Hub) almost instantly, and non-JS crawlers
 // just see the homepage as-is.
 export default function HomePage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/dashboard");
+    router.replace("/apps");
   }, [router]);
 
   return null;

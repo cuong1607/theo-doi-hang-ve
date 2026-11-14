@@ -281,7 +281,8 @@ test("UIUX-1 page loading: every priority data route has a loading.tsx (never a 
     "invoices",
     "payments",
   ];
-  for (const r of routes) assert.ok(existsSync(rootPath(`src/app/(authenticated)/${r}/loading.tsx`)), `${r}/loading.tsx`);
+  // APP-SHELL-1: these routes live in the accounting app's route group (URLs unchanged)
+  for (const r of routes) assert.ok(existsSync(rootPath(`src/app/(authenticated)/(accounting)/${r}/loading.tsx`)), `${r}/loading.tsx`);
   assert.ok(existsSync(rootPath("src/app/(authenticated)/loading.tsx")), "group fallback skeleton");
   assert.ok(existsSync(rootPath("src/app/(authenticated)/error.tsx")), "group error boundary");
 });

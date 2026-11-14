@@ -271,7 +271,7 @@ test("64. the dashboard never calls Shopee: no client / fetch / endpoint in the 
   const files = [
     ...filesUnder("src/lib/channels/shopee/ads", (p) => /\.tsx?$/.test(p) && !p.endsWith(".test.ts") && !shopeeSide(p)),
     ...filesUnder("src/components/ads", (p) => /\.tsx?$/.test(p)),
-    ...filesUnder("src/app/(authenticated)/shopee/ads", (p) => /\.tsx?$/.test(p) && !shopeeSide(p)),
+    ...filesUnder("src/app/(authenticated)/(shopee)/shopee/ads", (p) => /\.tsx?$/.test(p) && !shopeeSide(p)),
   ];
   assert.ok(files.length >= 15, `${files.length} files`);
   for (const f of files) {

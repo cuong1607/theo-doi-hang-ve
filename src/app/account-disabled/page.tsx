@@ -15,7 +15,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 export default async function AccountDisabledPage() {
   const ctx = await getAuthContext();
   if (ctx.status === "unauthenticated") redirect("/login");
-  if (ctx.status === "active") redirect("/dashboard");
+  if (ctx.status === "active") redirect("/apps");
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-accent/60 to-background p-4">

@@ -29,6 +29,11 @@ export const PAGE_TITLES: Record<string, string> = {
   "/users": "Người dùng",
   "/settings/notifications": "Cài đặt thông báo",
   "/settings/shopee": "Tích hợp Shopee",
+  // APP-SHELL-1 (the shell header falls back to the app's nav item, then the app name)
+  "/shopee/product-analytics": "Phân tích sản phẩm",
+  "/settings/zalo-agent": "Trợ lý Zalo (thử nghiệm)",
+  "/products/combos": "Combo sản phẩm",
+  "/apps/shopee": "Tổng quan",
 };
 
 export function pageTitleFor(pathname: string, fallback: string): string {

@@ -55,6 +55,16 @@ export const PERMISSIONS = {
   "cost:manage": ADMIN, // rebuild cost ledger, backfill order COGS
   "return:disposition": ADMIN, // SHOPEE-6: return disposition (restock moves stock + reverses COGS → profit)
   "payout:reconcile": ADMIN, // SHOPEE-7: payout reconciliation notes / mismatch resolution (never changes amounts)
+
+  // APP-SHELL-1: app-level access (which workspaces a role may enter). Navigation
+  // only — every page inside still checks its own feature permission, and shop
+  // scope is unchanged. Mapped so no existing role loses a screen it had.
+  "app:accounting": ALL,
+  "app:shopee": ALL, // = channel:view
+  "app:purchasing": ALL,
+  "app:creative": ALL,
+  "app:marketing": ALL,
+  "app:system": ADMIN, // users + notification settings were admin-only already
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

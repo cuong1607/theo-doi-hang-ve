@@ -45,7 +45,7 @@ const isSource = (p: string) => /\.(ts|tsx)$/.test(p) && !/\.test\.ts$/.test(p);
 const ADS_FILES = [
   ...filesUnder("src/lib/channels/shopee/ads", isSource),
   ...filesUnder("src/components/ads", isSource),
-  ...filesUnder("src/app/(authenticated)/shopee/ads", isSource),
+  ...filesUnder("src/app/(authenticated)/(shopee)/shopee/ads", isSource),
   "scripts/shopee/ads-discovery.ts",
 ];
 const UI_FILES = ADS_FILES.filter((f) => f.endsWith(".tsx"));
