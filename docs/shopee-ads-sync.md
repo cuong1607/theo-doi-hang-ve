@@ -34,6 +34,7 @@ Opening the dashboard never calls Shopee and never enqueues anything.
 | `ADS_HOT_RECENT_STATUS_HOURS` | `36` | Campaigns whose status changed / ended within this stay HOT candidates. |
 | `ADS_HOURLY_SYNC_ENABLED` | `false` | ADS-3A.1 hourly TODAY reads (scheduler + manual). Also requires the shop's `ads_hourly_enabled` (admin panel "Bật theo giờ"). |
 | `ADS_HOURLY_RETENTION_DAYS` | `14` | Hourly rows older than this are pruned (min 2: today / yesterday are never pruned). |
+| `ADS_SNAPSHOT_RETENTION_DAYS` | `7` | Raw Ads responses (`channel_api_snapshots`, entity `ads`) older than this are pruned, the latest row of a key included. Performance keys carry their report date, so the generic "keep the latest" rule kept them forever. |
 | `ADS_HOURLY_FRESH_TARGET_MINUTES` | `25` | "Cập nhật theo giờ" target. |
 | `ADS_HOURLY_STALE_MINUTES` | `35` | Hourly shown as not fresh after this. |
 | `ADS_HOURLY_FINALIZE_TIME` | `02:30` | Shop-local time after which yesterday's hourly rows are re-read once (all campaigns) and reconciled. |

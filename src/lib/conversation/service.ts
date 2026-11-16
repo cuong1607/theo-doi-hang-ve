@@ -18,10 +18,11 @@
 // ============================================================
 import { createHash, randomInt } from "node:crypto";
 
-import type { ProductAnalystProvider, ProductAnalystRequest } from "../product-analyst/contracts.ts";
+import type { AnalystHistoryTurn, AnalystOutput, ProductAnalyst, ProductAnalystRequest } from "../product-analyst/contracts.ts";
+import { formatForZalo } from "../product-analyst/formatter.ts";
 import { foldVietnamese, PERIOD_LABELS, routeMessage, type ConversationIntent, type ConversationPeriod } from "./router.ts";
 
-export type ConversationChannel = "zalo";
+export type ConversationChannel = "zalo" | "web";
 
 /** Early rollout (spec §35): only owner / admin accounts may use the conversation agent. */
 export const CONVERSATION_ALLOWED_ROLES: readonly string[] = ["admin"];
@@ -29,6 +30,10 @@ export const LINK_CODE_TTL_MINUTES = 10;
 export const LINK_CODE_MAX_FAILURES_PER_DAY = 5;
 /** An unlinked follower gets the "how to link" notice at most this often. */
 export const UNLINKED_NOTICE_INTERVAL_MS = 24 * 60 * 60 * 1000;
+/** PA-4: a remembered product is reused by follow-ups for this long (spec §48). */
+export const PRODUCT_CONTEXT_TTL_MS = 2 * 60 * 60 * 1000;
+/** Max candidates listed when a product phrase is ambiguous. */
+export const PRODUCT_CHOICES_SHOWN = 5;
 
 export interface IncomingMessage {
   channel: ConversationChannel;
@@ -50,6 +55,8 @@ export interface ConversationContextData {
   period?: ConversationPeriod | null;
   unlinkedNoticeAt?: string | null;
   linkFailures?: { day: string; count: number } | null;
+  /** PA-4: when currentProductId was last set (context expiry) */
+  productAt?: string | null;
 }
 
 export interface ConversationRecord {
@@ -84,7 +91,7 @@ export interface ConversationStore {
   /** Insert-if-absent on (channel, provider_message_id): false = already received. */
   insertInboundMessage(input: { conversationId: string; channel: ConversationChannel; providerMessageId: string; text: string; intent: StoredIntent | null }): Promise<{ inserted: true; id: string } | { inserted: false }>;
   setInboundStatus(messageId: string, status: InboundStatus, errorCode?: string | null): Promise<void>;
-  insertOutboundMessage(input: { conversationId: string; channel: ConversationChannel; text: string; status: "sent" | "failed"; providerMessageId: string | null; errorCode: string | null }): Promise<void>;
+  insertOutboundMessage(input: { conversationId: string; channel: ConversationChannel; text: string; status: "sent" | "failed"; providerMessageId: string | null; errorCode: string | null; analysis?: AnalystOutput | null }): Promise<void>;
   updateConversation(id: string, patch: { currentShopId?: string | null; currentProductId?: string | null; lastIntent?: ConversationIntent | null; context?: ConversationContextData; internalUserId?: string | null }): Promise<void>;
   /** PRODUCT-ANALYTICS-2: canonical products of ONE (already authorized) shop, for phrase resolution. */
   findProducts(shopId: string): Promise<ProductCandidate[]>;
@@ -97,6 +104,8 @@ export interface ConversationStore {
   createLink(channel: ConversationChannel, externalUserId: string, internalUserId: string): Promise<void>;
   /** Profile state for the link-time role check. */
   profile(internalUserId: string): Promise<{ active: boolean; role: string | null } | null>;
+  /** PA-4: recent turns of the thread BEFORE a message (plain text, oldest first). Optional: no history without it. */
+  recentTurns?(conversationId: string, limit: number, beforeMessageId: string): Promise<AnalystHistoryTurn[]>;
 }
 
 export interface OutboundSender {
@@ -106,7 +115,7 @@ export interface OutboundSender {
 export interface ConversationDeps {
   store: ConversationStore;
   sender: OutboundSender;
-  analyst: ProductAnalystProvider;
+  analyst: ProductAnalyst;
   now?: () => Date;
 }
 
@@ -121,7 +130,12 @@ export type ConversationOutcome =
   | "unknown"
   | "shop_denied"
   | "shop_required"
-  | "analysis_placeholder";
+  | "analysis_placeholder"
+  | "analysis"
+  | "analysis_failed"
+  | "clarify_product"
+  | "product_not_found"
+  | "mutation_refused";
 
 export interface AcceptedMessage {
   messageId: string;
@@ -156,7 +170,16 @@ export const MESSAGES = {
   linkLocked: "Bạn đã nhập sai mã quá nhiều lần hôm nay. Thử lại vào ngày mai.",
   shopDenied: "Bạn không có quyền xem shop này.",
   shopRequired: (names: string[]) => (names.length ? `Bạn muốn hỏi shop nào? (${names.join(", ")})` : "Tài khoản của bạn chưa được cấp quyền xem shop nào."),
+  mutationRefused: "Trợ lý chỉ phân tích dữ liệu, không thay đổi chiến dịch, ngân sách, giá thầu, giá hay tồn kho. Bạn có thể hỏi về hiệu quả hiện tại để tự quyết định trên Shopee.",
+  productNotFound: (q: string, shop: string) => `Không tìm thấy sản phẩm “${q}” trong shop ${shop}. Bạn thử gõ SKU hoặc item ID nhé.`,
+  productChoices: (items: ProductCandidate[], more: number) =>
+    `Có nhiều sản phẩm khớp, bạn muốn hỏi sản phẩm nào? Gõ lại kèm SKU hoặc item ID:\n${items.map((p, i) => `${i + 1}) ${(p.name ?? "(không tên)").slice(0, 70)}${p.sku ? ` · SKU ${p.sku}` : ""} · ID ${p.itemId}`).join("\n")}${more > 0 ? `\n… và ${more} sản phẩm khác` : ""}`,
 } as const;
+
+/** Change requests are answered without any analysis / model call (spec §113). */
+export const MUTATION_REQUEST = /\b(tang|giam|tat|bat|dung|tam dung|chinh|dieu chinh|doi|sua|set|cap nhat)\b.{0,25}\b(budget|ngan sach|bid|gia thau|chien dich|campaign|gia ban|ton kho|trang thai)\b/;
+/** "Sản phẩm nào yếu nhất?" — a product word, but a SHOP-level question. */
+const SHOP_LEVEL_PRODUCT_QUESTION = /\b(san pham|sp) nao\b|\b(nhung|cac) (san pham|sp)\b|\bcan chu y\b|\b(yeu|te|kem|tot|manh) nhat\b/;
 
 // ------------------------------------------------------------ service
 export async function acceptIncomingMessage(deps: ConversationDeps, message: IncomingMessage): Promise<AcceptedMessage | null> {
@@ -175,10 +198,15 @@ export async function processAcceptedMessage(deps: ConversationDeps, accepted: A
   const { store } = deps;
   const now = deps.now?.() ?? new Date();
   const { conversation, message } = accepted;
-  const reply = async (text: string, status: InboundStatus = "replied") => {
-    const sent = await deps.sender.sendText(message.externalUserId, text);
-    await store.insertOutboundMessage({ conversationId: conversation.id, channel: message.channel, text, status: sent.ok ? "sent" : "failed", providerMessageId: sent.ok ? sent.providerMessageId : null, errorCode: sent.ok ? null : sent.errorCode });
-    await store.setInboundStatus(accepted.messageId, sent.ok ? status : "failed", sent.ok ? null : sent.errorCode);
+  // one or more parts (≤ 3 for an analysis); the inbound status reflects the last send
+  const reply = async (text: string | string[], status: InboundStatus = "replied") => {
+    let last: Awaited<ReturnType<OutboundSender["sendText"]>> = { ok: true, providerMessageId: null };
+    for (const part of Array.isArray(text) ? text : [text]) {
+      last = await deps.sender.sendText(message.externalUserId, part);
+      await store.insertOutboundMessage({ conversationId: conversation.id, channel: message.channel, text: part, status: last.ok ? "sent" : "failed", providerMessageId: last.ok ? last.providerMessageId : null, errorCode: last.ok ? null : last.errorCode });
+      if (!last.ok) break;
+    }
+    await store.setInboundStatus(accepted.messageId, last.ok ? status : "failed", last.ok ? null : last.errorCode);
   };
 
   const routedRaw = routeMessage(message.text);
@@ -222,21 +250,45 @@ export async function processAcceptedMessage(deps: ConversationDeps, accepted: A
   }
 
   // 3. route with context
+  const live = deps.analyst.name !== "disabled";
+  const folded = foldVietnamese(message.text);
   const routed = routeMessage(message.text, { lastIntent: conversation.lastIntent, productQuery: conversation.context.productQuery, period: conversation.context.period });
   if (routed.intent === "HELP") {
     await store.updateConversation(conversation.id, { lastIntent: "HELP" });
     await reply(MESSAGES.help);
     return "help";
   }
-  if (routed.intent === "UNKNOWN") {
-    await reply(MESSAGES.unknown);
-    return "unknown";
+  // change requests never reach the analyst (read only, and no model cost)
+  if (live && MUTATION_REQUEST.test(folded)) {
+    await reply(MESSAGES.mutationRefused);
+    return "mutation_refused";
   }
+  const productAt = conversation.context.productAt ? Date.parse(conversation.context.productAt) : 0;
+  const productFresh = !!conversation.currentProductId && now.getTime() - productAt < PRODUCT_CONTEXT_TTL_MS;
+  let intent = routed.intent;
+  let productQuery = routed.productQuery;
+  let period = routed.period;
+  if (intent === "UNKNOWN") {
+    // a free-form follow-up ("ROAS giảm do CPC hay conversion?") about the remembered shop / product
+    const last = conversation.lastIntent;
+    if (live && conversation.currentShopId && (last === "PRODUCT_ANALYSIS" || last === "SHOP_ANALYSIS" || last === "ADS_ANALYSIS")) {
+      intent = last;
+      productQuery = productFresh ? null : (conversation.context.productQuery ?? null);
+      period = period ?? conversation.context.period ?? null;
+    } else {
+      await reply(MESSAGES.unknown);
+      return "unknown";
+    }
+  }
+  if (live && !routed.followUp && SHOP_LEVEL_PRODUCT_QUESTION.test(folded)) {
+    intent = "SHOP_ANALYSIS";
+    productQuery = null;
+  }
+  const analyticIntent = intent as ProductAnalystRequest["intent"];
 
   // 4. shop resolution — re-authorized on EVERY message; context never grants access
   const allowed = await store.allowedShops(link.internalUserId);
   const allowedIds = new Set(allowed.map((s) => s.id));
-  const folded = foldVietnamese(message.text);
   const mentioned = (await store.allShops()).filter((s) => {
     const name = foldVietnamese(s.name);
     return name.length >= 3 && folded.includes(name);
@@ -255,59 +307,97 @@ export async function processAcceptedMessage(deps: ConversationDeps, accepted: A
     shopId = allowed[0].id;
   }
   if (!shopId) {
-    await store.updateConversation(conversation.id, { currentShopId: null, currentProductId: null, lastIntent: routed.intent, context: { ...conversation.context, productQuery: routed.productQuery, period: routed.period } });
+    await store.updateConversation(conversation.id, { currentShopId: null, currentProductId: null, lastIntent: analyticIntent, context: { ...conversation.context, productQuery, period } });
     await reply(MESSAGES.shopRequired(allowed.map((s) => s.name)));
     return "shop_required";
   }
+  const shopName = allowed.find((s) => s.id === shopId)?.name ?? "";
 
   // 5. product: resolved against the canonical identity of THIS shop only (the same item id in
-  //    another shop is another product); unknown / ambiguous phrase → null, never a guess
-  const productId = routed.productQuery ? resolveProductPhrase(routed.productQuery, await store.findProducts(shopId)) : null;
+  //    another shop is another product). Never a guess: none → say so, several → ask.
+  let productId: string | null = null;
+  if (intent !== "SHOP_ANALYSIS") {
+    const sameShop = shopId === conversation.currentShopId;
+    if (productQuery) {
+      if (productFresh && sameShop && productQuery === conversation.context.productQuery) productId = conversation.currentProductId ?? null;
+      else {
+        const matches = matchProducts(productQuery, await store.findProducts(shopId));
+        if (matches.length === 1) productId = matches[0].id;
+        else if (live) {
+          await store.updateConversation(conversation.id, { currentShopId: shopId, currentProductId: null, lastIntent: analyticIntent, context: { ...conversation.context, productQuery: null, period, productAt: null } });
+          if (!matches.length) {
+            await reply(MESSAGES.productNotFound(productQuery, shopName));
+            return "product_not_found";
+          }
+          await reply(MESSAGES.productChoices(matches.slice(0, PRODUCT_CHOICES_SHOWN), matches.length - PRODUCT_CHOICES_SHOWN));
+          return "clarify_product";
+        }
+      }
+    } else if (productFresh && sameShop) productId = conversation.currentProductId ?? null;
+  }
 
+  const history = live && store.recentTurns ? await store.recentTurns(conversation.id, 8, accepted.messageId) : [];
   const request: ProductAnalystRequest = {
+    channel: message.channel,
     conversationId: conversation.id,
     internalUserId: link.internalUserId,
     shopId,
     productId,
-    productQuery: routed.productQuery,
-    intent: routed.intent,
-    period: routed.period,
+    productQuery,
+    intent: analyticIntent,
+    period,
+    question: message.text.slice(0, 2000),
+    history,
+    analysisType: "user_question",
   };
   // defense in depth: the request about to leave the service must still be authorized
   if (!allowedIds.has(request.shopId)) {
     await reply(MESSAGES.shopDenied);
     return "shop_denied";
   }
-  await store.updateConversation(conversation.id, { currentShopId: shopId, currentProductId: productId, lastIntent: routed.intent, context: { ...conversation.context, productQuery: routed.productQuery, period: routed.period } });
+  await store.updateConversation(conversation.id, {
+    currentShopId: shopId,
+    currentProductId: productId,
+    lastIntent: analyticIntent,
+    context: { ...conversation.context, productQuery, period, productAt: productId ? (productId === conversation.currentProductId && productFresh ? conversation.context.productAt : now.toISOString()) : null },
+  });
 
   const result = await deps.analyst.analyze(request);
-  const shopName = allowed.find((s) => s.id === shopId)?.name ?? "";
-  await reply(formatAnalystReply(result.kind === "placeholder" ? result.text : result.output.summary, request, shopName));
-  return "analysis_placeholder";
+  if (result.kind === "placeholder") {
+    await reply(formatAnalystReply(result.text, request, shopName));
+    return "analysis_placeholder";
+  }
+  if (result.kind === "error") {
+    await reply(result.message);
+    return "analysis_failed";
+  }
+  await reply(formatForZalo(result.output, `${shopName}${period ? ` · ${PERIOD_LABELS[period]}` : ""}`));
+  return "analysis";
 }
 
 /**
- * Deterministic product resolution (no LLM): exact item id, then exact SKU,
+ * Deterministic product matching (no LLM): exact item id, then exact SKU,
  * then names containing every word of the phrase (accent-insensitive).
- * Exactly one match → its id; zero or several → null.
  */
-export function resolveProductPhrase(phrase: string, candidates: readonly ProductCandidate[]): string | null {
+export function matchProducts(phrase: string, candidates: readonly ProductCandidate[]): ProductCandidate[] {
   const q = foldVietnamese(phrase);
-  if (!q) return null;
+  if (!q) return [];
   const digits = q.replace(/\s+/g, "");
-  if (/^[0-9]{5,20}$/.test(digits)) {
-    const byId = candidates.filter((c) => c.itemId === digits);
-    return byId.length === 1 ? byId[0].id : null;
-  }
+  if (/^[0-9]{5,20}$/.test(digits)) return candidates.filter((c) => c.itemId === digits);
   const bySku = candidates.filter((c) => c.sku && foldVietnamese(c.sku) === q);
-  if (bySku.length) return bySku.length === 1 ? bySku[0].id : null;
+  if (bySku.length) return bySku;
   const terms = q.split(" ").filter((t) => t.length >= 2);
-  if (!terms.length) return null;
-  const byName = candidates.filter((c) => {
+  if (!terms.length) return [];
+  return candidates.filter((c) => {
     const hay = foldVietnamese(`${c.name ?? ""} ${c.sku ?? ""}`);
     return terms.every((t) => hay.includes(t));
   });
-  return byName.length === 1 ? byName[0].id : null;
+}
+
+/** Exactly one match → its id; zero or several → null (never a guess). */
+export function resolveProductPhrase(phrase: string, candidates: readonly ProductCandidate[]): string | null {
+  const m = matchProducts(phrase, candidates);
+  return m.length === 1 ? m[0].id : null;
 }
 
 /** What was understood + the analyst's text. Generic plain text; the transport decides nothing. */

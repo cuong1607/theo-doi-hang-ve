@@ -11,10 +11,12 @@
 // ============================================================
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { hasPermission, isRole } from "../auth/permissions.ts";
 import { CONVERSATION_ALLOWED_ROLES } from "../conversation/service.ts";
 
 import { salesComparable, type SalesCoverage } from "./coverage.ts";
 import { buildProductDataQuality, PRODUCT_METRIC_META } from "./data-quality.ts";
+import { loadIntelligenceList } from "./intelligence.ts";
 import { resolveProductPeriod, type ProductPeriod, type ProductPeriodPreset } from "./periods.ts";
 import { loadProductDetail, loadShopFreshness, ProductAnalyticsReadError, type ProductDetail, type ProductRef } from "./read-model.ts";
 import type { ProductSignal } from "./signals.ts";
@@ -27,10 +29,18 @@ export interface ProductToolScope {
   product_id: string;
 }
 
+/** PA-4: shop-level questions ("sản phẩm nào cần chú ý?") — no product in scope. */
+export interface ShopToolScope {
+  internal_user_id: string;
+  shop_id: string;
+}
+
 export type ProductToolPeriodInput = { preset: ProductPeriodPreset } | { from: string; to: string };
 
 export const PRODUCT_TOOL_NAMES = ["get_product_overview", "compare_product_periods", "get_product_sales_summary", "get_product_ads_performance", "get_product_baseline", "get_product_signals"] as const;
 export type ProductToolName = (typeof PRODUCT_TOOL_NAMES)[number];
+export const SHOP_TOOL_NAMES = ["get_shop_product_attention_summary"] as const;
+export type ShopToolName = (typeof SHOP_TOOL_NAMES)[number];
 
 export class ProductToolAccessError extends Error {
   readonly code: "invalid_scope" | "user_not_allowed" | "shop_not_granted" | "product_not_found";
@@ -43,15 +53,28 @@ export class ProductToolAccessError extends Error {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Backend authorization — the model / transport is never trusted for this. */
-export async function authorizeProductTool(db: SupabaseClient, scope: ProductToolScope): Promise<ProductRef> {
-  if (!UUID.test(scope.internal_user_id) || !UUID.test(scope.shop_id) || !UUID.test(scope.product_id)) throw new ProductToolAccessError("invalid_scope", "Phạm vi công cụ không hợp lệ.");
+/**
+ * Backend authorization of the USER + SHOP (every tool call, never cached):
+ * active profile, role allowed in this rollout, Shopee app access
+ * (app:shopee + channel:view) and an explicit ai_user_shop_access grant.
+ */
+export async function authorizeShopTool(db: SupabaseClient, scope: ShopToolScope): Promise<void> {
+  if (!UUID.test(scope.internal_user_id) || !UUID.test(scope.shop_id)) throw new ProductToolAccessError("invalid_scope", "Phạm vi công cụ không hợp lệ.");
   const { data: profile, error: pErr } = await db.from("profiles").select("role, is_active").eq("id", scope.internal_user_id).maybeSingle<{ role: string | null; is_active: boolean }>();
   if (pErr) throw new ProductAnalyticsReadError("người dùng", pErr.message);
-  if (!profile?.is_active || !CONVERSATION_ALLOWED_ROLES.includes(profile.role ?? "")) throw new ProductToolAccessError("user_not_allowed", "Người dùng không có quyền dùng trợ lý.");
+  const role = isRole(profile?.role) ? profile.role : null;
+  if (!profile?.is_active || !role || !CONVERSATION_ALLOWED_ROLES.includes(role) || !hasPermission(role, "app:shopee") || !hasPermission(role, "channel:view")) {
+    throw new ProductToolAccessError("user_not_allowed", "Người dùng không có quyền dùng trợ lý.");
+  }
   const { data: grant, error: gErr } = await db.from("ai_user_shop_access").select("shop_id").eq("internal_user_id", scope.internal_user_id).eq("shop_id", scope.shop_id).maybeSingle();
   if (gErr) throw new ProductAnalyticsReadError("quyền shop", gErr.message);
   if (!grant) throw new ProductToolAccessError("shop_not_granted", "Bạn không có quyền xem shop này.");
+}
+
+/** Backend authorization — the model / transport is never trusted for this. */
+export async function authorizeProductTool(db: SupabaseClient, scope: ProductToolScope): Promise<ProductRef> {
+  if (!UUID.test(scope.internal_user_id) || !UUID.test(scope.shop_id) || !UUID.test(scope.product_id)) throw new ProductToolAccessError("invalid_scope", "Phạm vi công cụ không hợp lệ.");
+  await authorizeShopTool(db, scope);
   const { data: product, error: prErr } = await db.from("shopee_products").select("id, shop_id, provider_item_id").eq("id", scope.product_id).eq("shop_id", scope.shop_id).maybeSingle<{ id: string; shop_id: string; provider_item_id: string }>();
   if (prErr) throw new ProductAnalyticsReadError("sản phẩm", prErr.message);
   // same item id in another shop is a different product: identity = shop + item
@@ -250,6 +273,61 @@ export async function get_product_ads_performance(db: SupabaseClient, scope: Pro
     attribution_warning: "Broad / direct GMV are Shopee Ads attribution metrics. They are NOT the part of sales caused by Ads; total − Ads is NOT organic sales.",
     data_quality: qualityOut(d),
     metric_meta: meta("ads_spend", "ads_broad_gmv", "ads_direct_gmv", "broad_gmv_to_sales_indicator"),
+  };
+}
+
+/**
+ * PA-4: shop-level attention summary (spec §51–53) — the SAME product_intelligence_list
+ * RPC the dashboard uses, summary only: health distribution, the 10 highest-priority
+ * products, shop sales / Ads totals and data quality. No catalogue, no raw rows.
+ */
+export async function get_shop_product_attention_summary(db: SupabaseClient, scope: ShopToolScope, input?: { period?: ProductToolPeriodInput }, now = new Date()) {
+  await authorizeShopTool(db, scope);
+  const p = period(input?.period, now);
+  const list = await loadIntelligenceList(db, [scope.shop_id], p, { sort: "priority", pageSize: 1 }, { withSummary: true, top: 10 });
+  const s = list.summary;
+  const shop = list.shops[0] ?? null;
+  const hero = s?.hero;
+  const salesAvailable = hero ? hero.sales_availability !== "no_data" : false;
+  return {
+    tool: "get_shop_product_attention_summary" as const,
+    period: periodOut(p),
+    products: s?.products ?? 0,
+    needs_attention: s?.needs_attention ?? 0,
+    health_counts: s?.health_counts ?? {},
+    sales_declining_products: s?.sales_declining ?? 0,
+    sales_growing_products: s?.sales_growing ?? 0,
+    ads_efficiency_declining_products: s?.ads_efficiency_declining ?? 0,
+    shop_totals: hero
+      ? {
+          sales_availability: hero.sales_availability,
+          sales_gmv: salesAvailable ? { current: hero.gmv.current, previous: hero.sales_comparable ? hero.gmv.previous : null, pct: hero.sales_comparable ? hero.gmv.pct : null } : null,
+          orders: salesAvailable ? { current: hero.orders.current, previous: hero.sales_comparable ? hero.orders.previous : null, pct: hero.sales_comparable ? hero.orders.pct : null } : null,
+          ads_spend: pick(hero.ads_spend),
+          ads_broad_gmv: pick(hero.ads_broad_gmv),
+          ads_broad_roas: pick(hero.ads_broad_roas),
+        }
+      : null,
+    // shop-level comparison only — not a market / category claim
+    shop_median_sales_change_pct: s?.shop_context[0]?.median_gmv_pct ?? null,
+    top_attention: (s?.top_attention ?? []).slice(0, 10).map((r) => ({
+      name: (r.name ?? "").slice(0, 80),
+      sku: r.sku,
+      item_id: r.item_id,
+      health: r.health.label,
+      priority: { score: r.priority.score, level: r.priority.level },
+      sales_gmv: r.gmv,
+      sales_gmv_pct: r.gmv_pct,
+      sales_exact: r.sales_exact,
+      orders: r.orders,
+      ads_spend: r.spend,
+      broad_roas: r.broad_roas,
+      broad_roas_pct: r.roas_pct,
+      top_signals: r.top_signals.slice(0, 2).map((x) => ({ type: x.type, change_pct: x.change_pct, severity: x.severity })),
+    })),
+    data_quality: shop
+      ? { sales_state: shop.sales_state, sales_current_complete: shop.current_complete, sales_previous_complete: shop.previous_complete, sales_age_minutes: shop.sales_age_minutes, sales_stale: shop.sales_stale, ads_age_minutes: shop.ads_age_minutes, ads_stale: shop.ads_stale, partial_today: p.partialToday }
+      : null,
   };
 }
 

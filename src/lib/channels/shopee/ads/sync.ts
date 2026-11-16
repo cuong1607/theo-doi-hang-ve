@@ -97,6 +97,8 @@ export interface AdsSyncConfig {
   hourlySyncEnabled: boolean;
   /** Hourly rows older than this (report date) are pruned by the retention run; today / yesterday are never pruned. */
   hourlyRetentionDays: number;
+  /** Raw Ads responses (channel_api_snapshots, entity 'ads') older than this are pruned — the latest of a key too (ADS_SNAPSHOT_RETENTION_DAYS). */
+  snapshotRetentionDays: number;
   hourlyFreshTargetMinutes: number;
   hourlyStaleMinutes: number;
   /** Shop-local "HH:MM" when YESTERDAY's hourly rows are re-read once (all campaigns) and reconciled with the daily facts. */
@@ -147,6 +149,7 @@ export function getAdsSyncConfig(env: Record<string, string | undefined> = proce
     hotRecentStatusHours: intEnv(env.ADS_HOT_RECENT_STATUS_HOURS, 36, 1, 7 * 24),
     hourlySyncEnabled: boolEnv(env.ADS_HOURLY_SYNC_ENABLED, false),
     hourlyRetentionDays: intEnv(env.ADS_HOURLY_RETENTION_DAYS, 14, 2, 90),
+    snapshotRetentionDays: intEnv(env.ADS_SNAPSHOT_RETENTION_DAYS, 7, 1, 90),
     hourlyFreshTargetMinutes: intEnv(env.ADS_HOURLY_FRESH_TARGET_MINUTES, 25, 5, 240),
     hourlyStaleMinutes: intEnv(env.ADS_HOURLY_STALE_MINUTES, 35, 10, 480),
     hourlyFinalizeTime: timesEnv(env.ADS_HOURLY_FINALIZE_TIME, ["02:30"])[0],
@@ -305,8 +308,14 @@ export function changedPrimitives(stored: StoredFact, next: AdsPerformancePrimit
  * Raw response history: identical payload for the same request key only refreshes synced_at.
  * `canonicalize` (endpoint-specific, optional) shapes the HASH INPUT only — the
  * stored payload is always the full sanitized response.
+ *
+ * `latestOnly` (performance reads): a changed payload REPLACES the key's row
+ * instead of adding a history row. A hot / hourly key is re-read many times a
+ * day and every answer differs (the day is still running), so history there
+ * was one ~10 KB row per read — the canonical fact tables already hold the
+ * numbers (2026-11-15 cloud overload: 600 MB of Ads snapshots).
  */
-export async function saveAdsSnapshot(db: SupabaseClient, input: { shopId: string; payload: ProviderPayload; key: string; sourceMode: "live" | "fixture"; syncedAt: string; canonicalize?: (raw: unknown) => unknown }) {
+export async function saveAdsSnapshot(db: SupabaseClient, input: { shopId: string; payload: ProviderPayload; key: string; sourceMode: "live" | "fixture"; syncedAt: string; canonicalize?: (raw: unknown) => unknown; latestOnly?: boolean }) {
   const raw = sanitizeAdsPayload(input.payload.raw);
   const hash = payloadHash(input.canonicalize ? input.canonicalize(raw) : raw);
   const match = { shop_id: input.shopId, entity_type: ADS_SNAPSHOT_ENTITY_TYPE, entity_external_id: input.key.slice(0, 200), api_name: input.payload.apiName };
@@ -317,9 +326,39 @@ export async function saveAdsSnapshot(db: SupabaseClient, input: { shopId: strin
     if (upd) throw new Error(`Không cập nhật được snapshot Ads: ${upd.message}`);
     return "refreshed" as const;
   }
+  if (latest && input.latestOnly) {
+    const { error: rep } = await db.from("channel_api_snapshots").update({ payload: raw, payload_hash: hash, source_mode: input.sourceMode, synced_at: input.syncedAt }).eq("id", latest.id);
+    if (rep) throw new Error(`Không cập nhật được snapshot Ads: ${rep.message}`);
+    return "replaced" as const;
+  }
   const { error: ins } = await db.from("channel_api_snapshots").insert({ ...match, payload: raw, payload_hash: hash, source_mode: input.sourceMode, synced_at: input.syncedAt });
   if (ins) throw new Error(`Không lưu được snapshot Ads: ${ins.message}`);
   return "inserted" as const;
+}
+
+/**
+ * Ads snapshot retention (bounded per call; run by the scheduler's retention
+ * step). Unlike the generic policy it also removes the LATEST row of a key:
+ * performance keys carry their report date, so "the latest of its key" would
+ * otherwise live forever. Raw responses only — canonical tables never touched.
+ */
+export async function pruneAdsSnapshots(db: SupabaseClient, retentionDays: number, limit = 500, now: Date = new Date()): Promise<number> {
+  const cutoff = new Date(now.getTime() - Math.max(1, retentionDays) * DAY_MS).toISOString();
+  // the limit-th oldest prunable row bounds this call (no id list in the URL, uses the synced_at index)
+  const { data: edge, error } = await db
+    .from("channel_api_snapshots")
+    .select("synced_at")
+    .eq("entity_type", ADS_SNAPSHOT_ENTITY_TYPE)
+    .lt("synced_at", cutoff)
+    .order("synced_at", { ascending: true })
+    .range(limit - 1, limit - 1);
+  if (error) throw new Error(`Không đọc được snapshot Ads cũ: ${error.message}`);
+  const bound = (edge as Array<{ synced_at: string }> | null)?.[0]?.synced_at;
+  let q = db.from("channel_api_snapshots").delete({ count: "exact" }).eq("entity_type", ADS_SNAPSHOT_ENTITY_TYPE);
+  q = bound ? q.lte("synced_at", bound) : q.lt("synced_at", cutoff);
+  const { count, error: delError } = await q;
+  if (delError) throw new Error(`Không xoá được snapshot Ads cũ: ${delError.message}`);
+  return count ?? 0;
 }
 
 // ------------------------------------------------------------------ canonical writes (bulk upserts, ≤ 500 rows per request)
@@ -422,13 +461,51 @@ export async function upsertAdsShopHourlyFacts(db: SupabaseClient, shopId: strin
   }
 }
 
-export async function upsertAdsCampaignHourlyFacts(db: SupabaseClient, rows: Array<{ shopId: string; campaignId: string; facts: AdsHourlyPrimitives }>, syncedAt: string) {
+/** Campaign ids per read of stored hourly rows: 40 × 24 hours stays under the 1000-row response cap. */
+const HOURLY_READ_CAMPAIGNS = 40;
+
+/**
+ * The rows of a re-read whose numbers differ from what is stored (or are new).
+ * Every hourly read returns the WHOLE day, but only the last hour or two still
+ * move: rewriting the rest was ~95% of all Ads writes (7.3 M updates on
+ * ~650 k rows — 2026-11-15 cloud overload). Exact decimal compare.
+ */
+export async function changedCampaignHourlyRows<T extends { campaignId: string; facts: AdsHourlyPrimitives }>(db: SupabaseClient, rows: T[]): Promise<T[]> {
+  const stored = new Map<string, StoredFact>();
+  const dates = [...new Set(rows.map((r) => r.facts.reportDate))];
+  for (const date of dates) {
+    const ids = [...new Set(rows.filter((r) => r.facts.reportDate === date).map((r) => r.campaignId))];
+    for (const part of chunk(ids, HOURLY_READ_CAMPAIGNS)) {
+      const { data, error } = await db
+        .from("shopee_ads_campaign_hourly_performance")
+        .select(`campaign_id, report_date, report_hour, last_synced_at, ${PRIMITIVE_COLUMNS.join(", ")}`)
+        .eq("report_date", date)
+        .in("campaign_id", part)
+        .range(0, 999);
+      if (error) throw new Error(`Không đọc được hiệu quả chiến dịch theo giờ: ${error.message}`);
+      for (const s of (data ?? []) as unknown as Array<StoredFact & { campaign_id: string; report_hour: number }>) stored.set(`${s.campaign_id}|${date}|${s.report_hour}`, s);
+    }
+  }
+  return rows.filter((r) => {
+    const s = stored.get(`${r.campaignId}|${r.facts.reportDate}|${r.facts.reportHour}`);
+    return !s || changedPrimitives(s, r.facts).length > 0;
+  });
+}
+
+/**
+ * Campaign hourly rows: one per (campaign, date, hour). Only changed / new rows
+ * are written — this table's last_synced_at drives no freshness (the shop
+ * hourly row does), so an unchanged hour is left as it is.
+ */
+export async function upsertAdsCampaignHourlyFacts(db: SupabaseClient, all: Array<{ shopId: string; campaignId: string; facts: AdsHourlyPrimitives }>, syncedAt: string): Promise<{ written: number; unchanged: number }> {
+  const rows = await changedCampaignHourlyRows(db, all);
   for (const part of chunk(rows, UPSERT_CHUNK)) {
     const { error } = await db
       .from("shopee_ads_campaign_hourly_performance")
       .upsert(part.map((r) => ({ shop_id: r.shopId, campaign_id: r.campaignId, ...factColumns(r.facts), report_hour: r.facts.reportHour, last_synced_at: syncedAt })), { onConflict: "campaign_id,report_date,report_hour" });
     if (error) throw new Error(`Không lưu được hiệu quả chiến dịch theo giờ: ${error.message}`);
   }
+  return { written: rows.length, unchanged: all.length - rows.length };
 }
 
 // ------------------------------------------------------------------ restatement log (completed days only)
@@ -782,7 +859,7 @@ export class AdsCampaignPerformanceReadRunner implements SyncJobRunner {
         }
         callsThisSlice++;
         const syncedAt = now().toISOString();
-        await saveAdsSnapshot(this.deps.db, { shopId: shop.id, payload, key: `campaign_daily:${window.from}:${window.to}:${batch[0]}:${batch.length}`, sourceMode: this.deps.provider.mode, syncedAt });
+        await saveAdsSnapshot(this.deps.db, { shopId: shop.id, payload, key: `campaign_daily:${window.from}:${window.to}:${batch[0]}:${batch.length}`, sourceMode: this.deps.provider.mode, syncedAt, latestOnly: true });
         const parsed = parseCampaignDailyPerformance(payload.raw);
         let unknown = 0;
         const rows = parsed.rows.flatMap((r) => {
@@ -849,7 +926,7 @@ export class AdsShopPerformanceReadRunner implements SyncJobRunner {
       const window = cp.windows[cp.windowIndex];
       const payload = await this.deps.provider.getAllCpcAdsDailyPerformance(ctx, { range: window });
       const syncedAt = now().toISOString();
-      await saveAdsSnapshot(this.deps.db, { shopId: shop.id, payload, key: `shop_daily:${window.from}:${window.to}`, sourceMode: this.deps.provider.mode, syncedAt });
+      await saveAdsSnapshot(this.deps.db, { shopId: shop.id, payload, key: `shop_daily:${window.from}:${window.to}`, sourceMode: this.deps.provider.mode, syncedAt, latestOnly: true });
       const parsed = parseShopDailyPerformance(payload.raw);
       if (window.from < today) {
         const { data: stored, error } = await this.deps.db
@@ -944,7 +1021,7 @@ export class AdsShopHourlyReadRunner implements SyncJobRunner {
       const date = cp.dates[cp.index];
       const payload = await this.deps.provider.getAllCpcAdsHourlyPerformance(ctx, { date });
       const syncedAt = now().toISOString();
-      await saveAdsSnapshot(this.deps.db, { shopId: shop.id, payload, key: `shop_hourly:${date}`, sourceMode: this.deps.provider.mode, syncedAt });
+      await saveAdsSnapshot(this.deps.db, { shopId: shop.id, payload, key: `shop_hourly:${date}`, sourceMode: this.deps.provider.mode, syncedAt, latestOnly: true });
       const parsed = parseShopHourlyPerformance(payload.raw);
       // the current hour is read at the moment of the call (a later slice must not reuse an older "now")
       const stored = storableHourlyRows(parsed.rows, { date, today: shopToday(now(), shop.timezone), currentHour: shopHour(now(), shop.timezone) });
@@ -1026,7 +1103,7 @@ export class AdsCampaignHourlyReadRunner implements SyncJobRunner {
         }
         callsThisSlice++;
         const syncedAt = now().toISOString();
-        await saveAdsSnapshot(this.deps.db, { shopId: shop.id, payload, key: `campaign_hourly:${date}:${batch[0]}:${batch.length}`, sourceMode: this.deps.provider.mode, syncedAt });
+        await saveAdsSnapshot(this.deps.db, { shopId: shop.id, payload, key: `campaign_hourly:${date}:${batch[0]}:${batch.length}`, sourceMode: this.deps.provider.mode, syncedAt, latestOnly: true });
         const parsed = parseCampaignHourlyPerformance(payload.raw);
         const stored = storableHourlyRows(parsed.rows, { date, today: shopToday(now(), shop.timezone), currentHour: shopHour(now(), shop.timezone) });
         let unknown = 0;
@@ -1039,7 +1116,8 @@ export class AdsCampaignHourlyReadRunner implements SyncJobRunner {
           }
           return [{ shopId: shop.id, campaignId, facts: r }];
         });
-        await upsertAdsCampaignHourlyFacts(this.deps.db, rows, syncedAt);
+        const written = await upsertAdsCampaignHourlyFacts(this.deps.db, rows, syncedAt);
+        progress.incr("unchangedHourlyRows", written.unchanged);
         recordAnomalies(progress, rows.map((r) => r.facts));
         if (unknown > 0 && !progress.meta.metadataRepairJobId) {
           const repair = await enqueueAdsJob(this.deps.db, { shopId: shop.id, syncType: "ads_campaign_read", strategy: "repair", priority: ADS_PRIORITY.metadataRepair, now: now() });

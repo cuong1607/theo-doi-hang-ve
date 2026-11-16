@@ -118,6 +118,28 @@ The status is decided by `adsHourlyReconciliation` (strictest first):
 - The retention is clamped to ≥ 2 days, so today and yesterday are never deleted.
 - The worker itself never deletes hourly rows.
 
+## Write volume (2026-11-15 cloud overload)
+
+Production Postgres (Micro compute) stopped answering on 14/11 and again on 15/11 (PostgREST `PGRST002`, pg_cron `job startup timeout`). Two Ads write patterns were behind most of the load.
+
+- **Campaign hourly rows were rewritten every read.** Every hourly read returns the whole day, and every row was upserted again: 7.3 M updates on ~650 k rows. Now `changedCampaignHourlyRows` reads the stored rows first (≤ 40 campaigns per read, under the 1000-row cap). Only new rows, or rows whose numbers changed (exact decimal compare), are written. The job counts the rest in `stats.unchangedHourlyRows`.
+  - Shop hourly rows are still always written. They are ≤ 24 per shop, and their `last_synced_at` is the hourly freshness.
+- **Performance snapshots kept a history row per read.** A running day's answer differs on every read, so each read added a ~10 KB row. Performance reads (`shop_daily`, `campaign_daily`, `shop_hourly`, `campaign_hourly`) now call `saveAdsSnapshot(..., latestOnly: true)`, which keeps one row per request key and replaces it when the answer changes. Catalogue and item snapshots keep their history.
+- **Ads snapshot retention** (`pruneAdsSnapshots`, `ADS_SNAPSHOT_RETENTION_DAYS`, default 7) runs at the start of `pruneRetention`. It removes up to 500 rows per tick.
+
+### Pausing all sync
+
+The scheduler is pg_cron job `shopee-sync-scheduler`. Pausing it stops every enqueue and worker run without a deploy. Queued jobs wait; they are not lost.
+
+```sql
+-- pause
+select cron.alter_job(job_id := (select jobid from cron.job where jobname = 'shopee-sync-scheduler'), active := false);
+-- resume
+select cron.alter_job(job_id := (select jobid from cron.job where jobname = 'shopee-sync-scheduler'), active := true);
+```
+
+Deleting rows makes space reusable, but `pg_database_size` does not shrink. Run `VACUUM FULL` only on a quiet database: it locks the table.
+
 ## Capacity
 
 **Measured in the 5-shop simulation** (`ads-hourly.integration.test.ts`):

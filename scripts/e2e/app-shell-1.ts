@@ -32,7 +32,7 @@ async function step(name: string, fn: () => Promise<void>) {
     results.push({ name, ok: true });
     console.log(`  PASS ${name}`);
   } catch (e) {
-    const msg = e instanceof Error ? e.message.slice(0, 400) : String(e);
+    const msg = e instanceof Error ? e.message.slice(0, Number(process.env.E2E_ERR_CHARS ?? 400)) : String(e);
     results.push({ name, ok: false, msg });
     console.log(`  FAIL ${name} - ${msg}`);
   }
@@ -54,9 +54,10 @@ async function settle(page: Page) {
 }
 const overflowX = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
 // entrances play once (~300 ms + stagger): let them finish before the picture
-const shot = async (page: Page, name: string) => {
+const shot = async (page: Page, name: string, fullPage = true) => {
   await page.waitForTimeout(900);
-  await page.screenshot({ path: path.join(OUT, `${name}.png`), fullPage: true });
+  // fullPage resizes the viewport, which closes an open menu: pass false while one is open
+  await page.screenshot({ path: path.join(OUT, `${name}.png`), fullPage });
 };
 const apiCallsInLog = () => (DEV_LOG && existsSync(DEV_LOG) ? (readFileSync(DEV_LOG, "utf8").match(/shopee_api_call/g) ?? []).length : null);
 const dbWrites = async () => {
@@ -194,7 +195,7 @@ async function main() {
       await menu.waitFor();
       expect((await menu.locator('[data-app-id="shopee"][data-current]').count()) === 1, "Shopee marked current");
       expect((await menu.locator('[data-app-id="purchasing"][data-disabled]').count()) === 1, "Gọi hàng disabled");
-      await shot(page, "03-switcher-open");
+      await shot(page, "03-switcher-open", false);
       await Promise.all([page.waitForURL((u) => u.pathname === "/dashboard", { timeout: 120_000 }), menu.locator('[data-app-id="accounting"]').click()]);
       await settle(page);
       expect((await shell(page)) === "accounting", "accounting shell");

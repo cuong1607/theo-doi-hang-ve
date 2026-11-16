@@ -237,3 +237,16 @@ That is about 101 calls per round of 5 shops and about 4 850 calls a day at 48 r
 3. A unit test on window planning.
 
 Until then, the production algorithm is unchanged. Ads HOT priority (2–5) stays above product HOT (6); global concurrency is unchanged; the freshness target stays < 45 min (observed: 7–32 min).
+
+## PRODUCT-ANALYTICS-4: Claude Product Analyst
+
+The design in this document is now implemented. Full reference: [product-analyst-agent.md](product-analyst-agent.md).
+
+- **Tools:** the PA-2 / PA-3 read-only tools (`agent-tools.ts`) plus `get_shop_product_attention_summary` are exposed to the model through an explicit allowlist with enum-only inputs (`product-analyst/tools.ts`).
+  - Every call re-authorizes: user, role, `app:shopee`, shop grant, and that the product belongs to the shop.
+  - Results stay ≤ 6 KB each (≈ 12 KB for a full diagnosis).
+- **Output contract:** `AnalystOutput` now has evidence ids, findings citing them, and two-sided hypotheses. It is validated, then checked by policy guards (no organic / Ads-share / profit / market / certain-cause / mutation / internals), data guards (null ≠ 0, partial today ≠ HIGH confidence) and numeric grounding against the tool results.
+- **Usage, cost and limits:** `ai_usage_logs` (migration 00072).
+- **Cache:** `ai_analysis_cache`, keyed by product + period + data version + prompt version + model family + question. Authorization is checked before the cache is read.
+- **Channels:** Zalo (conversation service) and web (`/apps/shopee/ai`). Separate threads, same orchestrator.
+- **Defaults:** all flags off. The default model is Sonnet-class, configurable. There are no scheduled or catalogue-wide runs.

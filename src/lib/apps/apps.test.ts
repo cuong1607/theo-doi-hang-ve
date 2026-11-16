@@ -155,7 +155,10 @@ test("nav visibility follows role + flags (legacy hidden while off, Ads flag, ad
   assert.ok(!hrefsOf(visibleNav("shopee", ctx({ role: "staff" }))).includes("/settings/shopee"), "staff: no shop connection settings");
   assert.deepEqual(visibleNav("system", ctx({ role: "staff" })), [], "staff: empty system nav (and no access)");
   const ai = visibleNav("shopee", ctx()).flatMap((g) => g.items).find((i) => i.title === "Trợ lý phân tích");
-  assert.equal(ai?.soon, true, "PA-4 assistant is 'Sắp có' (not connected)");
+  assert.equal(ai?.soon, true, "assistant is 'Sắp có' until the web assistant is on for the user");
+  const live = visibleNav("shopee", ctx({ aiWebEnabled: true })).flatMap((g) => g.items).find((i) => i.title === "Trợ lý phân tích");
+  assert.equal(live?.soon, false, "PA-4: a normal link once AI_PRODUCT_ANALYST_ENABLED + _WEB_ENABLED and the role is in the rollout");
+  assert.equal(activeNavItemHref(visibleNav("shopee", ctx({ aiWebEnabled: true })), "/apps/shopee/ai", ""), "/apps/shopee/ai");
   // the default flags never re-enable the retired modules
   assert.equal(getShopeeFlags({}).legacyModulesEnabled, false);
 });

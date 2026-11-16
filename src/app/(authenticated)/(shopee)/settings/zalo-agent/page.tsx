@@ -1,5 +1,5 @@
 import { requirePermission } from "@/lib/auth/session";
-import { getProductAnalystConfig } from "@/lib/product-analyst/provider";
+import { getProductAnalystConfig } from "@/lib/product-analyst/config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getZaloWebhookConfig } from "@/lib/zalo/webhook-handler";
 import { Callout } from "@/components/patterns/callout";
@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 
 // SHOPEE-PRODUCT-ANALYTICS-1 (part B): link the admin's own Zalo account to
 // the conversation agent and choose its shops. Not linked from navigation.
+// PA-4: the same shop grants scope the web assistant (/apps/shopee/ai).
 export default async function ZaloAgentPage() {
   const auth = await requirePermission("integration:manage");
   const db = createAdminClient();
@@ -21,12 +22,16 @@ export default async function ZaloAgentPage() {
   ]);
   const webhook = getZaloWebhookConfig();
   const analyst = getProductAnalystConfig();
+  const state = (on: boolean) => (on ? "BẬT" : "TẮT");
 
   return (
     <PageContainer>
-      <PageHeader title="Trợ lý Zalo (thử nghiệm)" description="Liên kết tài khoản Zalo của bạn với OA và chọn shop mà trợ lý được trả lời. Chỉ quản trị viên trong giai đoạn đầu." />
-      <Callout tone={webhook.enabled ? "info" : "warning"} title={`Webhook: ${webhook.enabled ? "BẬT" : "TẮT"} · Chữ ký: ${webhook.oaSecretKey ? "đã cấu hình" : "CHƯA cấu hình"} · Phân tích AI: ${analyst.enabled ? "bật (chưa có provider)" : "TẮT"}`}>
-        Trợ lý hiện chỉ xác nhận câu hỏi và trả lời &quot;Hệ thống phân tích sản phẩm đang được chuẩn bị.&quot; — chưa phân tích dữ liệu thật.
+      <PageHeader title="Trợ lý phân tích: Zalo & quyền shop" description="Liên kết tài khoản Zalo của bạn với OA và chọn shop mà trợ lý được phân tích cho bạn (áp dụng cho cả Zalo và web). Chỉ quản trị viên trong giai đoạn đầu." />
+      <Callout
+        tone={webhook.enabled ? "info" : "warning"}
+        title={`Webhook: ${state(webhook.enabled)} · Chữ ký: ${webhook.oaSecretKey ? "đã cấu hình" : "CHƯA cấu hình"} · Phân tích AI: ${state(analyst.enabled)} (Zalo ${state(analyst.zaloEnabled)}, web ${state(analyst.webEnabled)})`}
+      >
+        {analyst.enabled ? `Trợ lý dùng mô hình ${analyst.model}, chỉ đọc dữ liệu đã đồng bộ, không thay đổi gì trên Shopee.` : "Khi phân tích AI tắt, trợ lý chỉ xác nhận câu hỏi và trả lời “Hệ thống phân tích sản phẩm đang được chuẩn bị.”"}
       </Callout>
       <ZaloAgentPanel
         links={(links ?? []).map((l) => ({ id: l.id as string, zaloUserId: `…${String(l.zalo_user_id).slice(-4)}`, status: l.status as string, linkedAt: l.linked_at as string }))}

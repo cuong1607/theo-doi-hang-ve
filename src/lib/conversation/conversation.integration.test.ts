@@ -9,7 +9,7 @@ import { createClient } from "@supabase/supabase-js";
 import { zaloWebhookMac } from "../zalo/webhook.ts";
 import { handleZaloWebhookRequest, SenderRateLimiter, type ZaloWebhookConfig } from "../zalo/webhook-handler.ts";
 import type { ProductAnalystRequest } from "../product-analyst/contracts.ts";
-import { DisabledProductAnalystProvider } from "../product-analyst/provider.ts";
+import { DisabledProductAnalyst } from "../product-analyst/provider.ts";
 import { acceptIncomingMessage, generateLinkCode, processAcceptedMessage, type ConversationDeps } from "./service.ts";
 import { SupabaseConversationStore } from "./supabase-store.ts";
 
@@ -60,7 +60,7 @@ before(async () => {
   store = new SupabaseConversationStore(db);
   deps = {
     store,
-    analyst: { name: "spy", analyze: async (r) => (requests.push(r), new DisabledProductAnalystProvider().analyze()) },
+    analyst: { name: "disabled", analyze: async (r) => (requests.push(r), new DisabledProductAnalyst().analyze()) },
     sender: { sendText: async (to, text) => (sent.push({ to, text }), { ok: true, providerMessageId: `out-${TAG}-${sent.length}` }) },
   };
 });
@@ -152,7 +152,8 @@ test("PA-1 / 64: context persisted — product X, then 'còn hôm qua?' keeps X 
 test("PA-1: only conversational fields stored — no raw webhook payload columns", async () => {
   const { data } = await db.from("ai_messages").select("*").limit(1);
   const cols = Object.keys(data?.[0] ?? {});
-  assert.deepEqual(cols.sort(), ["channel", "conversation_id", "created_at", "direction", "error_code", "id", "intent", "processing_status", "provider_message_id", "text", "updated_at"]);
+  // PA-4 adds "analysis": the VALIDATED structured answer of a web reply (bounded) — still no raw payload
+  assert.deepEqual(cols.sort(), ["analysis", "channel", "conversation_id", "created_at", "direction", "error_code", "id", "intent", "processing_status", "provider_message_id", "text", "updated_at"]);
   const { error } = await createClient(url!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!).from("ai_messages").select("id").limit(1);
   assert.ok(error, "anon cannot read conversations");
 });

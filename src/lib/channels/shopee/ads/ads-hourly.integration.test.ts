@@ -211,10 +211,55 @@ test("17 / 13. campaign hourly TODAY (HOT candidates): waits for the catalogue, 
   assert.equal(await count("shopee_ads_campaign_hourly_performance", A.id, { campaign_id: c40!.id }), 15);
   const rows = await count("shopee_ads_campaign_hourly_performance", A.id);
   assert.equal(rows % 15, 0, "only hours 00–14 for every stored campaign");
-  // a re-read keeps the row count (unique campaign × date × hour)
+  // a re-read keeps the row count (unique campaign × date × hour) and REWRITES NOTHING (2026-11-15 cloud overload)
+  const stamp = async () => new Map(((await db.from("shopee_ads_campaign_hourly_performance").select("campaign_id, report_hour, last_synced_at").eq("shop_id", A.id).range(0, 999)).data ?? []).map((r) => [`${r.campaign_id}|${r.report_hour}`, r.last_synced_at]));
+  const before = await stamp();
+  clock = new Date(T0.getTime() + 5 * 60_000);
   await enqueueAdsJob(db, { shopId: A.id, syncType: "ads_campaign_hourly_read", strategy: "manual", priority: ADS_PRIORITY.manualHourly, range: { from: TODAY, to: TODAY }, scope: "hot", now: clock });
   await drain([A.id], provider);
   assert.equal(await count("shopee_ads_campaign_hourly_performance", A.id), rows);
+  const same = (await jobs(A.id)).filter((j) => j.sync_type === "ads_campaign_hourly_read").at(-1)!;
+  assert.equal((same.metadata as { stats?: Record<string, number> }).stats?.unchangedHourlyRows, rows, "identical day → 0 rows written");
+  assert.deepEqual(await stamp(), before, "no row touched");
+  // only the hour that moved is written
+  const bumped = new CountingProvider(new FixtureShopeeAdsProvider(replay, { campaignHourly: (id, _d, row) => (id === "900000040" && row.hour === 14 ? { ...row, expense: Number(row.expense) + 123 } : row) }));
+  clock = new Date(T0.getTime() + 8 * 60_000);
+  await enqueueAdsJob(db, { shopId: A.id, syncType: "ads_campaign_hourly_read", strategy: "manual", priority: ADS_PRIORITY.manualHourly, range: { from: TODAY, to: TODAY }, scope: "hot", now: clock });
+  await drain([A.id], bumped);
+  const moved = (await jobs(A.id)).filter((j) => j.sync_type === "ads_campaign_hourly_read").at(-1)!;
+  assert.equal((moved.metadata as { stats?: Record<string, number> }).stats?.unchangedHourlyRows, rows - 1);
+  const after = await stamp();
+  const touched = [...after].filter(([k, v]) => before.get(k) !== v).map(([k]) => k);
+  assert.deepEqual(touched, [`${c40!.id}|14`], "exactly one row rewritten");
+  // performance snapshots keep ONE row per request key (a changed answer replaces it)
+  const { count: snaps } = await db.from("channel_api_snapshots").select("id", { count: "exact", head: true }).eq("shop_id", A.id).eq("api_name", "/api/v2/ads/get_product_campaign_hourly_performance");
+  assert.equal(snaps, 1, "3 reads, 2 different answers → 1 snapshot row");
+  clock = T0;
+});
+
+test("ads snapshot retention: Ads raw rows older than ADS_SNAPSHOT_RETENTION_DAYS go — the latest of a key too; recent Ads + other entities stay", async () => {
+  const S = await newShop();
+  const day = (d: number) => new Date(Date.now() - d * 86400_000).toISOString();
+  const snap = (entity_type: string, id: string, at: string) => ({ shop_id: S.id, entity_type, entity_external_id: id, api_name: "x", payload: { at }, synced_at: at, source_mode: "fixture" });
+  const { error } = await db.from("channel_api_snapshots").insert([
+    snap("ads", "campaign_daily:2026-09-01", day(20)), // latest of its key, old → purge
+    snap("ads", "campaign_hourly:2026-09-02", day(8)),
+    snap("ads", "campaign_hourly:today", day(1)), // recent → keep
+    snap("order", "A", day(20)), // other entity: generic policy (latest kept)
+  ]);
+  assert.ifError(error);
+  let total = 0;
+  for (let i = 0; i < 5; i++) {
+    // hourly retention 90: shop A's rows are dated on the fixed test clock (28/10) and later tests still read them
+    const r = await pruneRetention(db, getSyncConfig({}), 90, 7);
+    assert.equal(r.error, null);
+    total += r.adsSnapshots;
+    if (r.adsSnapshots === 0) break;
+  }
+  assert.ok(total >= 2);
+  const left = ((await db.from("channel_api_snapshots").select("entity_type, entity_external_id").eq("shop_id", S.id)).data ?? []).map((x) => `${x.entity_type}:${x.entity_external_id}`).sort();
+  assert.deepEqual(left, ["ads:campaign_hourly:today", "order:A"]);
+  await db.from("shops").delete().eq("id", S.id);
 });
 
 test("68. multi-shop isolation: the same provider campaign ids / date / hour in two shops never collide", async () => {

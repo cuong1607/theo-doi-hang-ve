@@ -34,6 +34,7 @@ export const PAGE_TITLES: Record<string, string> = {
   "/settings/zalo-agent": "Trợ lý Zalo (thử nghiệm)",
   "/products/combos": "Combo sản phẩm",
   "/apps/shopee": "Tổng quan",
+  "/apps/shopee/ai": "Trợ lý phân tích",
 };
 
 export function pageTitleFor(pathname: string, fallback: string): string {

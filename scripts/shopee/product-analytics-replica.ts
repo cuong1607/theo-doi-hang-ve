@@ -34,17 +34,36 @@ function localDb(): SupabaseClient {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
+let calls = 0;
 async function all<T>(build: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>, page = 1000): Promise<T[]> {
   const out: T[] = [];
+  const call = ++calls;
   for (let i = 0; ; i += page) {
     const { data, error } = await build(i, i + page - 1);
-    if (error) fail(error.message);
+    if (error) fail(`read #${call} at offset ${i}: ${error.message}`);
     out.push(...(data ?? []));
     if ((data ?? []).length < page) break;
   }
   return out;
 }
 
+/** Keyset pages over id (deep OFFSET pages time out on cloud's large fact tables). */
+type KeysetQuery = { gt(col: string, v: string): KeysetQuery; order(col: string): { limit(n: number): PromiseLike<{ data: unknown[] | null; error: { message: string } | null }> } };
+async function allById<T>(base: () => unknown, page = 1000): Promise<T[]> {
+  const out: T[] = [];
+  const call = ++calls;
+  let after: string | null = null;
+  for (;;) {
+    const q = base() as KeysetQuery;
+    const { data, error } = await (after ? q.gt("id", after) : q).order("id").limit(page);
+    if (error) fail(`read #${call} after ${after ?? "start"}: ${error.message}`);
+    const rows = (data ?? []) as Array<T & { id: string }>;
+    out.push(...rows);
+    if (rows.length < page) break;
+    after = rows[rows.length - 1].id;
+  }
+  return out;
+}
 async function insertChunks(db: SupabaseClient, table: string, rows: Record<string, unknown>[]) {
   for (let i = 0; i < rows.length; i += 500) {
     const { error } = await db.from(table).insert(rows.slice(i, i + 500));
@@ -70,27 +89,27 @@ async function load(outDir: string) {
   await insertChunks(local, "shops", shops.map((s) => ({ id: s.id, channel: "shopee", external_shop_id: `9${String(s.external_shop_id)}`, shop_name: `${REPLICA}${s.shop_name}`, currency: s.currency ?? "VND", region: s.region ?? "VN", timezone: s.timezone, data_source: "live", is_active: true })));
 
   const since = new Date(Date.now() - 75 * 86_400_000).toISOString().slice(0, 10);
-  const campaigns = await all((a, b) => cloud.from("shopee_ads_campaigns").select("*").in("shop_id", ids).order("id").range(a, b));
+  const campaigns = await allById(() => cloud.from("shopee_ads_campaigns").select("*").in("shop_id", ids));
   await insertChunks(local, "shopee_ads_campaigns", campaigns as Record<string, unknown>[]);
-  const links = await all((a, b) => cloud.from("shopee_ads_campaign_products").select("*").in("shop_id", ids).order("id").range(a, b));
+  const links = await allById(() => cloud.from("shopee_ads_campaign_products").select("*").in("shop_id", ids));
   await insertChunks(local, "shopee_ads_campaign_products", links as Record<string, unknown>[]);
-  const daily = await all((a, b) => cloud.from("shopee_ads_campaign_daily_performance").select("*").in("shop_id", ids).gte("report_date", since).order("id").range(a, b));
+  const daily = await allById(() => cloud.from("shopee_ads_campaign_daily_performance").select("*").in("shop_id", ids).gte("report_date", since));
   await insertChunks(local, "shopee_ads_campaign_daily_performance", daily as Record<string, unknown>[]);
-  const hourly = await all((a, b) => cloud.from("shopee_ads_campaign_hourly_performance").select("*").in("shop_id", ids).gte("report_date", new Date(Date.now() - 4 * 86_400_000).toISOString().slice(0, 10)).order("id").range(a, b));
+  const hourly = await allById(() => cloud.from("shopee_ads_campaign_hourly_performance").select("*").in("shop_id", ids).gte("report_date", new Date(Date.now() - 4 * 86_400_000).toISOString().slice(0, 10)));
   await insertChunks(local, "shopee_ads_campaign_hourly_performance", hourly as Record<string, unknown>[]);
-  const adsProducts = await all((a, b) => cloud.from("shopee_ads_products").select("*").in("shop_id", ids).order("id").range(a, b));
+  const adsProducts = await allById(() => cloud.from("shopee_ads_products").select("*").in("shop_id", ids));
   await insertChunks(local, "shopee_ads_products", adsProducts as Record<string, unknown>[]);
 
   if (process.argv.includes("--facts=cloud")) {
     // 2P: mirror exactly what production shows — the facts / identities / job history already on cloud
-    const products = await all((a, b) => cloud.from("shopee_products").select("*").in("shop_id", ids).order("id").range(a, b));
+    const products = await allById(() => cloud.from("shopee_products").select("*").in("shop_id", ids));
     for (let i = 0; i < products.length; i += 500) {
       const { error: pErr } = await local.from("shopee_products").upsert(products.slice(i, i + 500) as Record<string, unknown>[], { onConflict: "shop_id,provider_item_id", ignoreDuplicates: true });
       if (pErr) fail(`shopee_products: ${pErr.message}`);
     }
-    const facts = await all((a, b) => cloud.from("shopee_product_sales_facts").select("*").in("shop_id", ids).order("id").range(a, b));
+    const facts = await allById(() => cloud.from("shopee_product_sales_facts").select("*").in("shop_id", ids));
     await insertChunks(local, "shopee_product_sales_facts", facts as Record<string, unknown>[]);
-    const jobs = await all((a, b) => cloud.from("channel_sync_jobs").select("id, shop_id, sync_type, mode, status, priority, started_at, finished_at, created_at, metadata").in("shop_id", ids).eq("sync_type", "product_sales_facts_read").order("id").range(a, b));
+    const jobs = await allById(() => cloud.from("channel_sync_jobs").select("id, shop_id, sync_type, mode, status, priority, started_at, finished_at, created_at, metadata").in("shop_id", ids).eq("sync_type", "product_sales_facts_read"));
     await insertChunks(local, "channel_sync_jobs", jobs.map((j) => ({ ...(j as Record<string, unknown>), metadata: { ...((j as { metadata: Record<string, unknown> }).metadata ?? {}), replica: true } })));
     // freshness (last success) is read from channel_sync_states
     const states = await all((a, b) => cloud.from("channel_sync_states").select("shop_id, sync_type, last_success_at").in("shop_id", ids).like("sync_type", "product_%").order("shop_id").range(a, b));

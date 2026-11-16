@@ -9,7 +9,7 @@ import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendZaloTextMessage } from "@/lib/zalo/messages";
 
-import { getProductAnalystProvider } from "../product-analyst/provider.ts";
+import { getProductAnalyst } from "../product-analyst/server.ts";
 import type { ConversationDeps, OutboundSender } from "./service.ts";
 import { SupabaseConversationStore } from "./supabase-store.ts";
 
@@ -24,5 +24,6 @@ export const zaloOutboundSender: OutboundSender = {
 };
 
 export function getConversationDeps(): ConversationDeps {
-  return { store: new SupabaseConversationStore(createAdminClient()), sender: zaloOutboundSender, analyst: getProductAnalystProvider() };
+  // PA-4: the orchestrator only when AI_PRODUCT_ANALYST_ENABLED + AI_PRODUCT_ANALYST_ZALO_ENABLED
+  return { store: new SupabaseConversationStore(createAdminClient()), sender: zaloOutboundSender, analyst: getProductAnalyst("zalo") };
 }

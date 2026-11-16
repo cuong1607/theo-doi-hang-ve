@@ -23,8 +23,10 @@ import {
   type ShopRef,
   type UserLink,
 } from "./service.ts";
-import { ANALYST_TOOL_DEFINITIONS, analysisCacheKey, ANALYSIS_RUN_POLICY, FORBIDDEN_TOOL_PATTERNS, validateAnalystOutput, type ProductAnalystProvider, type ProductAnalystRequest } from "../product-analyst/contracts.ts";
-import { DisabledProductAnalystProvider, getProductAnalystConfig, getProductAnalystProvider, PRODUCT_ANALYST_PLACEHOLDER } from "../product-analyst/provider.ts";
+import { analysisCacheKey, ANALYSIS_RUN_POLICY, FORBIDDEN_TOOL_PATTERNS, validateAnalystOutput, type ProductAnalyst, type ProductAnalystRequest } from "../product-analyst/contracts.ts";
+import { getProductAnalystConfig } from "../product-analyst/config.ts";
+import { DisabledProductAnalyst, PRODUCT_ANALYST_PLACEHOLDER } from "../product-analyst/provider.ts";
+import { ANALYST_TOOLS } from "../product-analyst/tools.ts";
 
 const SRC = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..", "..");
 
@@ -111,11 +113,12 @@ function setup(now = new Date("2026-10-30T03:00:00Z")) {
   store.profiles.set("u-staff", { active: true, role: "staff" });
   const sent: Array<{ to: string; text: string }> = [];
   const requests: ProductAnalystRequest[] = [];
-  const analyst: ProductAnalystProvider = {
-    name: "spy",
+  // a spy around the DISABLED analyst: PA-1 behaviour (placeholder, no PA-4 live routing)
+  const analyst: ProductAnalyst = {
+    name: "disabled",
     analyze: async (r) => {
       requests.push(r);
-      return new DisabledProductAnalystProvider().analyze();
+      return new DisabledProductAnalyst().analyze();
     },
   };
   const deps: ConversationDeps = { store, analyst, now: () => now, sender: { sendText: async (to, text) => (sent.push({ to, text }), { ok: true, providerMessageId: `out-${sent.length}` }) } };
@@ -351,12 +354,15 @@ test("PA-1 / 65: no Anthropic call — disabled provider even when the flag is o
   const warn = console.warn;
   console.warn = () => {};
   try {
-    for (const env of [{}, { AI_PRODUCT_ANALYST_ENABLED: "true", AI_PRODUCT_ANALYST_PROVIDER: "anthropic", AI_PRODUCT_ANALYST_MODEL: "claude-sonnet-x" }]) {
-      const p = getProductAnalystProvider(getProductAnalystConfig(env));
-      assert.equal(p.name, "disabled");
-      assert.deepEqual(await p.analyze({ conversationId: "c", internalUserId: "u", shopId: "s", productId: null, productQuery: "x", intent: "PRODUCT_ANALYSIS", period: null }), { kind: "placeholder", text: PRODUCT_ANALYST_PLACEHOLDER });
-    }
-    assert.equal(getProductAnalystConfig({}).enabled, false, "default off");
+    const p = new DisabledProductAnalyst();
+    assert.deepEqual(await p.analyze(), { kind: "placeholder", text: PRODUCT_ANALYST_PLACEHOLDER });
+    // PA-4: everything is off by default, and a channel flag alone enables nothing
+    const off = getProductAnalystConfig({});
+    assert.deepEqual([off.enabled, off.zaloEnabled, off.webEnabled], [false, false, false], "default off");
+    const channelOnly = getProductAnalystConfig({ AI_PRODUCT_ANALYST_ZALO_ENABLED: "true", AI_PRODUCT_ANALYST_WEB_ENABLED: "true" });
+    assert.deepEqual([channelOnly.zaloEnabled, channelOnly.webEnabled], [false, false], "channel flags need the master switch");
+    const providerOnly = getProductAnalystConfig({ AI_PRODUCT_ANALYST_ENABLED: "true" });
+    assert.deepEqual([providerOnly.enabled, providerOnly.zaloEnabled, providerOnly.webEnabled], [true, false, false], "enabling the provider enables no channel");
     assert.equal(fetched, 0);
   } finally {
     globalThis.fetch = realFetch;
@@ -371,47 +377,52 @@ function walk(dir: string): string[] {
   });
 }
 
-test("PA-1 / 45 / 65 / 66: static guards — no model SDK / endpoint, webhook never imports an analyst implementation, no SQL tool", () => {
+test("PA-1 / 45 / 65 / 66 (PA-4): static guards — the model SDK only in claude-provider.ts, webhook never imports an analyst implementation, no SQL tool", () => {
   const scoped = [...walk(path.join(SRC, "lib", "conversation")), ...walk(path.join(SRC, "lib", "product-analyst")), ...walk(path.join(SRC, "lib", "zalo")), ...walk(path.join(SRC, "app", "api", "zalo"))].filter((f) => !f.endsWith(".test.ts"));
   assert.ok(scoped.length >= 8);
   for (const f of scoped) {
     // code only: comments may name what is forbidden
     const src = readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-    assert.doesNotMatch(src, /@anthropic-ai|api\.anthropic\.com|from ["']ai["']|@ai-sdk\//, `${path.basename(f)} must not reach a model`);
+    if (path.basename(f) !== "claude-provider.ts") assert.doesNotMatch(src, /@anthropic-ai|api\.anthropic\.com|from ["']ai["']|@ai-sdk\//, `${path.basename(f)} must not reach a model`);
     assert.doesNotMatch(src, /execute_sql|raw_query|run_sql|\.rpc\(\s*["']exec/i, `${path.basename(f)} exposes no raw SQL`);
   }
   const webhook = readFileSync(path.join(SRC, "app", "api", "zalo", "webhook", "route.ts"), "utf8");
   assert.doesNotMatch(webhook, /product-analyst/, "webhook goes through the conversation service only");
-  for (const t of ANALYST_TOOL_DEFINITIONS) {
+  for (const t of ANALYST_TOOLS) {
     for (const re of FORBIDDEN_TOOL_PATTERNS) {
       assert.doesNotMatch(t.name, re, `tool ${t.name}`);
-      for (const p of t.params) assert.doesNotMatch(p, re, `${t.name}.${p}`);
+      for (const p of Object.keys(t.input_schema.properties)) assert.doesNotMatch(p, re, `${t.name}.${p}`);
     }
   }
   assert.equal(ANALYSIS_RUN_POLICY.scheduledFullCatalogueRuns, false);
 });
 
-test("PA-1 / 53-55: output contract — evidence required, confidence enum, no actions field", () => {
+test("PA-1 / 53-55 (PA-4 shape): output contract — evidence ids required, confidence enum, no actions field", () => {
   const good = {
-    summary: "Doanh số giảm chủ yếu do chuyển đổi.",
-    findings: [{ title: "Conversion weakened", evidence: ["visitors -2%", "orders -18%", "CVR 3.8% → 3.1%"], confidence: "MEDIUM" }],
-    hypotheses: [{ text: "Giá đối thủ thay đổi", confidence: "LOW" }],
-    evidence: ["orders -18%"],
+    summary: "Doanh số giảm cùng lúc với số đơn giảm.",
+    data_quality_note: null,
+    findings: [{ title: "Số đơn giảm", description: "Đơn và doanh số cùng giảm.", severity: "WARNING", evidence_refs: ["e1"] }],
+    hypotheses: [{ statement: "Khả năng vấn đề nằm sau bước click.", confidence: "LOW", supporting_evidence: ["Đơn −18%"], counter_evidence: [], missing_data: ["visitors"] }],
+    evidence: [{ id: "e1", text: "Đơn −18%" }],
     confidence: "MEDIUM",
     missing_data: ["traffic source"],
     suggested_checks: ["Kiểm tra giá"],
+    follow_up_context: { topic: null },
   };
   assert.equal(validateAnalystOutput(good).ok, true);
-  const noEvidence = validateAnalystOutput({ ...good, findings: [{ title: "x", evidence: [], confidence: "HIGH" }] });
-  assert.equal(noEvidence.ok, false);
+  assert.equal(validateAnalystOutput({ ...good, findings: [{ ...good.findings[0], evidence_refs: [] }] }).ok, false, "finding without evidence");
+  assert.equal(validateAnalystOutput({ ...good, findings: [{ ...good.findings[0], evidence_refs: ["e9"] }] }).ok, false, "unknown evidence id");
   const withAction = validateAnalystOutput({ ...good, actions: [{ type: "set_budget" }] });
   assert.equal(withAction.ok, false);
-  assert.ok(!withAction.ok && withAction.errors.includes("unexpected key: actions"));
+  assert.ok(!withAction.ok && withAction.errors.includes("output: unexpected key actions"));
+  assert.equal(validateAnalystOutput({ ...good, findings: [{ ...good.findings[0], action: "pause_campaign" }] }).ok, false, "nested extra key");
   assert.equal(validateAnalystOutput({ ...good, confidence: "CERTAIN" }).ok, false);
+  assert.equal(validateAnalystOutput({ ...good, hypotheses: [{ ...good.hypotheses[0], supporting_evidence: [] }] }).ok, false, "hypothesis needs support");
 });
 
-test("PA-1 / 59: analysis cache key changes only with product / period / data / analysis version", () => {
-  const base = { shopId: "s", productId: "p", intent: "PRODUCT_ANALYSIS", period: "this_week", dataVersion: "d1", analysisVersion: "v1" };
+test("PA-1 / 59 (PA-4): analysis cache key changes with product / period / data / prompt / model / question", () => {
+  const base = { shopId: "s", productId: "p", period: "this_week", dataVersion: "d1", promptVersion: "v1", modelFamily: "m", questionHash: "q" };
   assert.equal(analysisCacheKey(base), analysisCacheKey({ ...base }));
-  for (const k of ["productId", "period", "dataVersion", "analysisVersion"] as const) assert.notEqual(analysisCacheKey(base), analysisCacheKey({ ...base, [k]: "changed" }));
+  for (const k of ["shopId", "productId", "period", "dataVersion", "promptVersion", "modelFamily", "questionHash"] as const) assert.notEqual(analysisCacheKey(base), analysisCacheKey({ ...base, [k]: "changed" }));
+  assert.ok(!analysisCacheKey(base).includes("u-admin"), "no user in the key: access is re-checked before a cached answer is returned");
 });

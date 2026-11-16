@@ -26,6 +26,8 @@ export interface NavItem {
   flag?: "shopeeAds" | "legacy";
   /** Planned, not built: rendered disabled with "Sắp có", never a link. */
   soon?: boolean;
+  /** PA-4: "Sắp có" unless this capability is on for the user (then a normal link). */
+  soonUnless?: "aiWeb";
 }
 
 export interface NavGroup {
@@ -77,7 +79,8 @@ export const APP_NAV: Record<AppId, NavGroup[]> = {
         { title: "Sản phẩm cần chú ý", href: "/shopee/product-analytics?health=ATTENTION", icon: "siren", permission: "channel:view", flag: "shopeeAds" },
       ],
     },
-    { label: "Trợ lý AI", items: [{ title: "Trợ lý phân tích", href: "/apps/shopee/assistant", icon: "bot", soon: true }] },
+    // PA-4: live only with AI_PRODUCT_ANALYST_ENABLED + _WEB_ENABLED for the rollout roles
+    { label: "Trợ lý AI", items: [{ title: "Trợ lý phân tích", href: "/apps/shopee/ai", icon: "bot", permission: "channel:view", soonUnless: "aiWeb" }] },
     {
       label: "Kết nối",
       items: [
@@ -137,6 +140,8 @@ export interface NavContext {
   role: Role;
   adsEnabled: boolean;
   legacyModulesEnabled: boolean;
+  /** PA-4 web assistant available to this user (flags + rollout role) */
+  aiWebEnabled?: boolean;
 }
 
 /** The app's nav for this role and these flags; empty groups dropped. */
@@ -144,7 +149,7 @@ export function visibleNav(app: AppId, ctx: NavContext): NavGroup[] {
   return APP_NAV[app]
     .map((group) => ({
       ...group,
-      items: group.items.filter(
+      items: group.items.map((item) => (item.soonUnless === "aiWeb" ? { ...item, soon: !ctx.aiWebEnabled } : item)).filter(
         (item) =>
           (!item.permission || hasPermission(ctx.role, item.permission)) &&
           (item.flag !== "shopeeAds" || ctx.adsEnabled) &&

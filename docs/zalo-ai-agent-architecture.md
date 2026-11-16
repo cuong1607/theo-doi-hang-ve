@@ -19,7 +19,8 @@ Zalo OA ── POST /api/zalo/webhook ──► verify X-ZEvent-Signature (fail 
                    4. route (deterministic) + context ("còn hôm qua?")
                    5. shop = mention ∩ grants | remembered shop ∩ grants | the single grant
                       (mention of a non-granted shop → "Bạn không có quyền xem shop này.")
-                   6. ProductAnalystProvider.analyze(request)   ← disabled provider: placeholder
+                   6. ProductAnalyst.analyze(request)   ← PA-4: orchestrator when AI_PRODUCT_ANALYST_ENABLED + _ZALO_ENABLED,
+                                                          otherwise the disabled analyst (placeholder)
                    7. OutboundSender.sendText() → ai_messages (outbound) → inbound status replied / failed
 ```
 
@@ -121,7 +122,7 @@ Accent-folded keyword rules:
 | `ZALO_CONVERSATION_ENABLED` | false | When off, the webhook answers 200 `ignored: disabled` and stores nothing. |
 | `ZALO_OA_SECRET_KEY` | — | OA webhook "OA Secret Key". Server-only. |
 | `ZALO_APP_ID`, `ZALO_OA_ID` | existing | App check and own-OA check. |
-| `AI_PRODUCT_ANALYST_ENABLED` / `_PROVIDER` / `_MODEL` | false / anthropic / — | No effect in this phase (placeholder only). |
+| `AI_PRODUCT_ANALYST_ENABLED` + `AI_PRODUCT_ANALYST_ZALO_ENABLED` | false / false | PA-4: both on → Zalo questions go to the Claude Product Analyst ([product-analyst-agent.md](product-analyst-agent.md)). Either off → placeholder. |
 
 There are no `NEXT_PUBLIC_*` Zalo variables.
 
@@ -137,3 +138,22 @@ Known limits:
 - Outbound uses the existing OA CS message API (`/v3.0/oa/message/cs`), with Zalo's own interaction-window rules.
 - The rate limiter is per instance.
 - Processing runs in `after()` (≤ 60 s route budget). The future long-running analysis should move to a queue.
+
+## 8. PRODUCT-ANALYTICS-4: analysis over Zalo
+
+With both flags on, step 6 calls the `ProductAnalystOrchestrator` ([product-analyst-agent.md](product-analyst-agent.md)). The transport rules above are unchanged.
+
+- **Still no model call** for: unlinked users, `LINK` codes, `HELP`, a denied or missing shop, and change requests ("tăng budget…": `mutation_refused`, read-only reply, no analysis, no cost).
+- **Product phrase:** resolved in the current shop by item id, SKU or all name words.
+  - One match → the product.
+  - Several → `clarify_product` with up to 5 choices (name · SKU · item ID).
+  - None → `product_not_found`.
+  - No guess, and no product from another shop.
+- **Shop-level questions** ("sản phẩm nào cần chú ý / yếu nhất") use the shop attention tool.
+- **Context:** the product is remembered for 2 h (`context.productAt`), and `currentProductId` is now read back by the store. "Còn hôm qua?" and free-form follow-ups reuse the shop / product; the grant is re-checked every time.
+- **History:** at most 8 recent turns (replied inbound + sent outbound text) are sent. Link codes are never included.
+- **Answer:** `formatForZalo`. Kết luận · Bằng chứng (≤ 5) · Khả năng · Độ tin cậy · Nên kiểm tra (≤ 3) · Chưa có dữ liệu, in **at most 3 messages** of ≤ 1800 chars each.
+- **Failures:** categorized friendly text ("Mình chưa phân tích được dữ liệu lúc này…"). Outcome `analysis_failed`.
+- **Duplicates:** a redelivered event gives one inbound row, one analysis and one answer (the unique index is unchanged).
+- **Timing:** the analysis runs inside `after()`. The route's `maxDuration` is 120 s, and the analysis is bounded by `AI_PRODUCT_ANALYST_TIMEOUT_MS` (75 s). The webhook still answers 200 immediately.
+- **Not in PA-4:** daily digest and proactive health alerts (PA-5).

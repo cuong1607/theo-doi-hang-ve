@@ -110,7 +110,9 @@ Cards, the switcher, shell identity and URL ownership all read the registry. No 
   * Guarded statically in `src/lib/apps/apps.test.ts`: no provider, token, sync or AI import, and no write.
   * Checked live by `scripts/e2e/app-shell-1.ts`: no new job or snapshot row, and no `shopee_api_call` in the server log.
 * **No DB migration.**
-* **Unchanged by this phase:** Ads stays READ ONLY. Legacy flags and sync jobs are untouched. The Claude assistant stays "Sắp có" (PA-4).
+* **Unchanged by this phase:** Ads stays READ ONLY. Legacy flags and sync jobs are untouched.
+* **PA-4:** "Trợ lý phân tích" (`/apps/shopee/ai`) uses `soonUnless: "aiWeb"`. It is a normal link only when `AI_PRODUCT_ANALYST_ENABLED` + `_WEB_ENABLED` are on and the role is in the rollout; otherwise it shows "Sắp có".
+* **Hydration:** the shell renders the sidebar and header without a `Suspense` boundary. A separately hydrated boundary made the mobile sidebar Sheet mismatch the server HTML (`scripts/e2e/hydration-check.ts`).
 * **Route analytics:** the project has no route-analytics provider, so the `app_hub_opened`, `app_selected` and `app_switched` events are not emitted. None was added just for this.
 
 ## Tests

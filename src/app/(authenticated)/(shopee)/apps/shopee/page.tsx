@@ -7,6 +7,7 @@ import { requirePermission } from "@/lib/auth/session";
 import { loadShopeeSyncHealth } from "@/lib/apps/status";
 import { SYNC_STATE_LABEL, type ShopSyncHealth, type SyncState } from "@/lib/apps/sync-health";
 import { getShopeeFlags } from "@/lib/feature-flags";
+import { webAssistantAvailable } from "@/lib/product-analyst/access";
 import { PRODUCT_SIGNAL_THRESHOLDS } from "@/lib/product-analytics/config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AppIconTile } from "@/components/app-shell/app-icons";
@@ -36,7 +37,8 @@ export default async function ShopeeAppPage() {
     );
   }
   if (hasPermission(role, "channel:manage")) entries.push({ title: "Kết nối shop", description: "Kết nối thêm shop, kết nối lại hoặc ngắt kết nối.", href: "/settings/shopee", icon: Store });
-  entries.push({ title: "Trợ lý phân tích", description: "Hỏi đáp về sản phẩm và quảng cáo bằng AI.", href: "", icon: Bot, soon: "Sắp có" });
+  // PA-4: live for the rollout roles once AI_PRODUCT_ANALYST_ENABLED + _WEB_ENABLED are on
+  entries.push(webAssistantAvailable(role) ? { title: "Trợ lý phân tích", description: "Hỏi đáp về sản phẩm và quảng cáo, có bằng chứng và độ tin cậy.", href: "/apps/shopee/ai", icon: Bot } : { title: "Trợ lý phân tích", description: "Hỏi đáp về sản phẩm và quảng cáo bằng AI.", href: "", icon: Bot, soon: "Sắp có" });
 
   return (
     <div className="space-y-8" data-ads-root>

@@ -14,7 +14,8 @@ import { acceptIncomingMessage, processAcceptedMessage } from "@/lib/conversatio
 import { getZaloWebhookConfig, handleZaloWebhookRequest, SenderRateLimiter } from "@/lib/zalo/webhook-handler";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// PA-4: processing in after() may run one bounded analysis (AI_PRODUCT_ANALYST_TIMEOUT_MS, default 75 s) + up to 3 sends
+export const maxDuration = 120;
 
 const limiter = new SenderRateLimiter();
 

@@ -5,15 +5,17 @@
 // ============================================================
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import type { AnalystHistoryTurn, AnalystOutput } from "../product-analyst/contracts.ts";
 import type { ConversationIntent } from "./router.ts";
 import type { ConversationChannel, ConversationContextData, ConversationRecord, ConversationStore, ProductCandidate, ShopRef, UserLink } from "./service.ts";
 
-type ConversationRow = { id: string; internal_user_id: string | null; current_shop_id: string | null; last_intent: string | null; context: ConversationContextData | null };
+type ConversationRow = { id: string; internal_user_id: string | null; current_shop_id: string | null; current_product_id: string | null; last_intent: string | null; context: ConversationContextData | null };
 
 const toRecord = (r: ConversationRow): ConversationRecord => ({
   id: r.id,
   internalUserId: r.internal_user_id,
   currentShopId: r.current_shop_id,
+  currentProductId: r.current_product_id,
   lastIntent: (r.last_intent as ConversationIntent | null) ?? null,
   context: r.context ?? {},
 });
@@ -27,6 +29,26 @@ export class SupabaseConversationStore implements ConversationStore {
 
   constructor(db: SupabaseClient) {
     this.db = db;
+  }
+
+  /** PA-4: bounded recent turns before a message (oldest first): replied inbound + sent outbound text only. */
+  async recentTurns(conversationId: string, limit: number, beforeMessageId: string): Promise<AnalystHistoryTurn[]> {
+    const { data: anchor, error: aErr } = await this.db.from("ai_messages").select("created_at").eq("id", beforeMessageId).maybeSingle<{ created_at: string }>();
+    check(aErr, "recentTurns.anchor");
+    if (!anchor) return [];
+    const { data, error } = await this.db
+      .from("ai_messages")
+      .select("direction, text, processing_status, intent")
+      .eq("conversation_id", conversationId)
+      .lt("created_at", anchor.created_at)
+      .in("processing_status", ["replied", "sent"])
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    check(error, "recentTurns");
+    return ((data ?? []) as Array<{ direction: string; text: string; intent: string | null }>)
+      .filter((m) => m.intent !== "LINK")
+      .reverse()
+      .map((m) => ({ role: m.direction === "inbound" ? ("user" as const) : ("assistant" as const), text: m.text.slice(0, 1500) }));
   }
 
   async findLink(channel: ConversationChannel, externalUserId: string): Promise<UserLink | null> {
@@ -43,7 +65,7 @@ export class SupabaseConversationStore implements ConversationStore {
   }
 
   async upsertConversation(channel: ConversationChannel, externalUserId: string, internalUserId: string | null): Promise<ConversationRecord> {
-    const cols = "id, internal_user_id, current_shop_id, last_intent, context";
+    const cols = "id, internal_user_id, current_shop_id, current_product_id, last_intent, context";
     const { data: existing, error } = await this.db.from("ai_conversations").select(cols).eq("channel", channel).eq("external_user_id", externalUserId).maybeSingle<ConversationRow>();
     check(error, "readConversation");
     if (existing) {
@@ -51,7 +73,7 @@ export class SupabaseConversationStore implements ConversationStore {
         // link changed (linked / revoked): the stored context of another identity is not carried over
         const { error: upd } = await this.db.from("ai_conversations").update({ internal_user_id: internalUserId, current_shop_id: null, current_product_id: null }).eq("id", existing.id);
         check(upd, "relinkConversation");
-        return toRecord({ ...existing, internal_user_id: internalUserId, current_shop_id: null });
+        return toRecord({ ...existing, internal_user_id: internalUserId, current_shop_id: null, current_product_id: null });
       }
       return toRecord(existing);
     }
@@ -80,7 +102,7 @@ export class SupabaseConversationStore implements ConversationStore {
     check(error, "setInboundStatus");
   }
 
-  async insertOutboundMessage(input: { conversationId: string; channel: ConversationChannel; text: string; status: "sent" | "failed"; providerMessageId: string | null; errorCode: string | null }): Promise<void> {
+  async insertOutboundMessage(input: { conversationId: string; channel: ConversationChannel; text: string; status: "sent" | "failed"; providerMessageId: string | null; errorCode: string | null; analysis?: AnalystOutput | null }): Promise<void> {
     const { error } = await this.db.from("ai_messages").insert({
       conversation_id: input.conversationId,
       channel: input.channel,
@@ -89,8 +111,19 @@ export class SupabaseConversationStore implements ConversationStore {
       text: input.text.slice(0, 4000),
       processing_status: input.status,
       error_code: input.errorCode,
+      // PA-4 web: the validated structured answer (bounded by a CHECK)
+      analysis: input.analysis ?? null,
     });
     check(error, "insertOutbound");
+  }
+
+  /** PA-4 web: the latest messages of a thread for display (oldest first). */
+  async threadMessages(conversationId: string, limit: number): Promise<Array<{ id: string; direction: "inbound" | "outbound"; text: string; analysis: AnalystOutput | null; status: string; createdAt: string }>> {
+    const { data, error } = await this.db.from("ai_messages").select("id, direction, text, analysis, processing_status, created_at").eq("conversation_id", conversationId).order("created_at", { ascending: false }).limit(limit);
+    check(error, "threadMessages");
+    return ((data ?? []) as Array<{ id: string; direction: "inbound" | "outbound"; text: string; analysis: AnalystOutput | null; processing_status: string; created_at: string }>)
+      .reverse()
+      .map((m) => ({ id: m.id, direction: m.direction, text: m.text, analysis: m.analysis, status: m.processing_status, createdAt: m.created_at }));
   }
 
   async updateConversation(id: string, patch: { currentShopId?: string | null; currentProductId?: string | null; lastIntent?: ConversationIntent | null; context?: ConversationContextData; internalUserId?: string | null }): Promise<void> {

@@ -38,7 +38,7 @@ import { EscrowSyncJobRunner, MAX_REPAIR_ESCROW_ORDERS, ShopeeEscrowSyncService 
 import type { ShopeePaymentProvider } from "./payment-provider.ts";
 import { JobRefusedError } from "./sync-errors.ts";
 import { LEGACY_DISABLED_CODE } from "../core/sync-domains.ts";
-import { getAdsSyncConfig } from "./ads/sync.ts";
+import { getAdsSyncConfig, pruneAdsSnapshots } from "./ads/sync.ts";
 
 export interface ShopeeSyncRequest {
   shopId: string;
@@ -364,7 +364,7 @@ export interface SchedulerTickResult extends SchedulerResult {
   /** SHOPEE-ADS-0: pending / retry jobs of retired types cancelled this run. */
   retiredCancelled: number;
   /** SHOPEE-9A: rows removed by the retention policy this run. */
-  retention: { snapshots: number; logs: number; error: string | null };
+  retention: { snapshots: number; logs: number; adsSnapshots?: number; error: string | null };
   /** At least one job is claimable now → the caller starts worker burst(s). */
   workDue: boolean;
   durationMs: number;
@@ -424,13 +424,26 @@ const RETENTION_BATCH = 1000;
  * Canonical tables (orders, financials, returns, payouts, COGS) are never
  * touched. Never throws: housekeeping must not fail the tick.
  */
-export async function pruneRetention(db: SupabaseClient, config: SyncConfig, adsHourlyRetentionDays: number = getAdsSyncConfig().hourlyRetentionDays): Promise<{ snapshots: number; logs: number; adsHourly: number; error: string | null }> {
+export async function pruneRetention(
+  db: SupabaseClient,
+  config: SyncConfig,
+  adsHourlyRetentionDays: number = getAdsSyncConfig().hourlyRetentionDays,
+  adsSnapshotRetentionDays: number = getAdsSyncConfig().snapshotRetentionDays,
+): Promise<{ snapshots: number; logs: number; adsHourly: number; adsSnapshots: number; error: string | null }> {
+  // Ads raw responses first: their own (shorter) retention, latest-of-key included (see pruneAdsSnapshots)
+  let adsSnapshots = 0;
+  let adsError: string | null = null;
+  try {
+    adsSnapshots = await pruneAdsSnapshots(db, adsSnapshotRetentionDays, RETENTION_BATCH / 2);
+  } catch (err) {
+    adsError = err instanceof Error ? err.message : String(err);
+  }
   const snap = await db.rpc("prune_channel_api_snapshots", { p_default_days: config.snapshotRetentionDays, p_financial_days: config.financialSnapshotRetentionDays, p_limit: RETENTION_BATCH });
   const logs = await db.rpc("prune_channel_sync_logs", { p_success_days: config.logSuccessRetentionDays, p_failure_days: config.logFailureRetentionDays, p_limit: RETENTION_BATCH });
   // ADS-3A.1: hourly Ads rows are operational data (default 14 days); today / yesterday are never pruned (DB clamps to ≥ 2 days)
   const hourly = await db.rpc("prune_shopee_ads_hourly", { p_retention_days: adsHourlyRetentionDays, p_limit: RETENTION_BATCH * 5 });
-  const error = snap.error?.message ?? logs.error?.message ?? hourly.error?.message ?? null;
-  return { snapshots: Number(snap.data ?? 0), logs: Number(logs.data ?? 0), adsHourly: Number(hourly.data ?? 0), error: error ? error.slice(0, 200) : null };
+  const error = adsError ?? snap.error?.message ?? logs.error?.message ?? hourly.error?.message ?? null;
+  return { snapshots: Number(snap.data ?? 0), logs: Number(logs.data ?? 0), adsHourly: Number(hourly.data ?? 0), adsSnapshots, error: error ? error.slice(0, 200) : null };
 }
 
 /** True when at least one job is claimable now (used to decide whether to chain another worker run). */

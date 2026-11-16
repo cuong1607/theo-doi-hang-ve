@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Camera, Gauge, History, LineChart, Megaphone, ShieldCheck, ShoppingBag, Sparkles } from "lucide-react";
+import { ArrowLeft, Bot, Camera, Gauge, History, LineChart, Megaphone, ShieldCheck, ShoppingBag, Sparkles } from "lucide-react";
 
 import { requirePermission } from "@/lib/auth/session";
+import { webAssistantAvailable } from "@/lib/product-analyst/access";
 import { getShopeeFlags } from "@/lib/feature-flags";
 import { daysBetween } from "@/lib/analytics/periods";
 import { salesCoverageNote } from "@/lib/product-analytics/coverage";
@@ -33,7 +34,8 @@ const PATH = "/shopee/product-analytics";
 // DB only (0 Shopee calls); no AI diagnosis, no cause inferred.
 export default async function ProductAnalyticsDetailPage({ params, searchParams }: { params: Promise<{ productId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   if (!getShopeeFlags().adsEnabled) notFound();
-  await requirePermission("channel:view");
+  const auth = await requirePermission("channel:view");
+  const aiAvailable = webAssistantAvailable(auth.profile.role);
   const { productId } = await params;
   const sp = await searchParams;
   const db = createAdminClient();
@@ -63,9 +65,21 @@ export default async function ProductAnalyticsDetailPage({ params, searchParams 
 
   return (
     <div data-ads-root className="space-y-5">
-      <Link href={backHref} className="inline-flex items-center gap-1.5 rounded text-sm text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
-        <ArrowLeft aria-hidden="true" className="size-4" /> Danh sách sản phẩm
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link href={backHref} className="inline-flex items-center gap-1.5 rounded text-sm text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
+          <ArrowLeft aria-hidden="true" className="size-4" /> Danh sách sản phẩm
+        </Link>
+        {/* PA-4: opens the assistant with this shop / product / period preselected — no model call until the user asks */}
+        {aiAvailable && (
+          <Link
+            href={`/apps/shopee/ai?shop=${ref.shopId}&product=${ref.productId}${p.preset !== "custom" && p.preset !== "7d" ? `&period=${p.preset}` : ""}`}
+            className="ads-gradient-primary inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-sm font-medium text-white shadow-sm focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:outline-none"
+            data-slot="ask-ai"
+          >
+            <Bot aria-hidden="true" className="size-4" /> Phân tích với AI
+          </Link>
+        )}
+      </div>
 
       <PaPageHeader
         icon={false}
