@@ -426,3 +426,34 @@ test("PA-1 / 59 (PA-4): analysis cache key changes with product / period / data 
   for (const k of ["shopId", "productId", "period", "dataVersion", "promptVersion", "modelFamily", "questionHash"] as const) assert.notEqual(analysisCacheKey(base), analysisCacheKey({ ...base, [k]: "changed" }));
   assert.ok(!analysisCacheKey(base).includes("u-admin"), "no user in the key: access is re-checked before a cached answer is returned");
 });
+
+// ------------------------------------------------------------ supplier debt report
+test("công nợ NCC: admin gets the report, unlinked / non-admin get nothing, failure is friendly", async () => {
+  const { store, deps, sent, requests, msg } = setup();
+  const parts = ["CÔNG NỢ NCC 20/11/2026\n\nTuấn Hậu\n- 05/11/2026: 1 đ"];
+  let calls = 0;
+  deps.supplierDebtReport = async () => (calls++, parts);
+
+  // unlinked: the usual notice, never the report
+  assert.equal(await handleIncomingConversationMessage(deps, msg("công nợ NCC", "9990001")), "unlinked");
+  assert.equal(calls, 0);
+
+  // linked but not admin: refused, report not even built
+  linkAdmin(store, "5550002", "u-staff");
+  assert.equal(await handleIncomingConversationMessage(deps, msg("công nợ NCC", "5550002")), "not_allowed");
+  assert.equal(calls, 0);
+
+  // admin with NO shop grants: report sent as-is, no shop needed and no analyst call
+  linkAdmin(store, "5550001", "u-admin", []);
+  assert.equal(await handleIncomingConversationMessage(deps, msg("Công nợ NCC")), "supplier_debt");
+  assert.equal(calls, 1);
+  assert.equal(sent[sent.length - 1].text, parts[0]);
+  assert.equal(requests.length, 0);
+
+  // failure -> friendly text, outcome supplier_debt_failed
+  deps.supplierDebtReport = async () => {
+    throw new Error("db down");
+  };
+  assert.equal(await handleIncomingConversationMessage(deps, msg("nợ nhà cung cấp")), "supplier_debt_failed");
+  assert.equal(sent[sent.length - 1].text, MESSAGES.supplierDebtFailed);
+});

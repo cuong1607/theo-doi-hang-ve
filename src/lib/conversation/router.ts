@@ -78,6 +78,16 @@ function extractProductQuery(original: string): string | null {
   return q.length >= 2 ? q.slice(0, 120) : null;
 }
 
+/**
+ * "công nợ NCC" / "nợ nhà cung cấp": the supplier-debt report. Deliberately NOT a
+ * ConversationIntent (ai_conversations.last_intent has a CHECK constraint, and the report
+ * needs no shop, product or analyst) — the service answers it before any routing.
+ */
+const SUPPLIER_DEBT = /\bcong no\b|\bno ncc\b|\bncc no\b|\bno nha cung cap\b|\bbao cao no\b/;
+export function isSupplierDebtQuestion(text: string): boolean {
+  return SUPPLIER_DEBT.test(foldVietnamese(text));
+}
+
 export function routeMessage(text: string, context: RouterContext = {}): RoutedMessage {
   const original = text.trim();
   const link = LINK.exec(original);

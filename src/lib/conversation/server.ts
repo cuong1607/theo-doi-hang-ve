@@ -7,6 +7,8 @@
 import "server-only";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { buildSupplierDebtReport } from "@/lib/notifications/supplier-debt-report";
+import { formatSupplierDebtReportMessages } from "@/lib/notifications/supplier-debt-report-message";
 import { sendZaloTextMessage } from "@/lib/zalo/messages";
 
 import { getProductAnalyst } from "../product-analyst/server.ts";
@@ -25,5 +27,10 @@ export const zaloOutboundSender: OutboundSender = {
 
 export function getConversationDeps(): ConversationDeps {
   // PA-4: the orchestrator only when AI_PRODUCT_ANALYST_ENABLED + AI_PRODUCT_ANALYST_ZALO_ENABLED
-  return { store: new SupabaseConversationStore(createAdminClient()), sender: zaloOutboundSender, analyst: getProductAnalyst("zalo") };
+  return {
+    store: new SupabaseConversationStore(createAdminClient()),
+    sender: zaloOutboundSender,
+    analyst: getProductAnalyst("zalo"),
+    supplierDebtReport: async () => formatSupplierDebtReportMessages(await buildSupplierDebtReport()),
+  };
 }

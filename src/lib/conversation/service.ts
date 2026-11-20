@@ -20,7 +20,7 @@ import { createHash, randomInt } from "node:crypto";
 
 import type { AnalystHistoryTurn, AnalystOutput, ProductAnalyst, ProductAnalystRequest } from "../product-analyst/contracts.ts";
 import { formatForZalo } from "../product-analyst/formatter.ts";
-import { foldVietnamese, PERIOD_LABELS, routeMessage, type ConversationIntent, type ConversationPeriod } from "./router.ts";
+import { foldVietnamese, isSupplierDebtQuestion, PERIOD_LABELS, routeMessage, type ConversationIntent, type ConversationPeriod } from "./router.ts";
 
 export type ConversationChannel = "zalo" | "web";
 
@@ -116,6 +116,8 @@ export interface ConversationDeps {
   store: ConversationStore;
   sender: OutboundSender;
   analyst: ProductAnalyst;
+  /** "công nợ NCC": ready-to-send message parts (no shop / analyst involved). Optional: without it the question is not recognised. */
+  supplierDebtReport?: () => Promise<string[]>;
   now?: () => Date;
 }
 
@@ -127,6 +129,8 @@ export type ConversationOutcome =
   | "unlinked_silent"
   | "not_allowed"
   | "help"
+  | "supplier_debt"
+  | "supplier_debt_failed"
   | "unknown"
   | "shop_denied"
   | "shop_required"
@@ -161,7 +165,8 @@ export function generateLinkCode(now: Date, random: (max: number) => number = (m
 // ------------------------------------------------------------ texts (generic; the transport only carries them)
 export const MESSAGES = {
   help:
-    "Trợ lý phân tích (thử nghiệm). Bạn có thể hỏi:\n• Sản phẩm <tên> tuần này sao?\n• Shop <tên> hôm qua thế nào?\n• Quảng cáo sản phẩm <tên> 7 ngày qua?\nSau đó hỏi tiếp \"còn hôm qua?\" để đổi kỳ.",
+    "Trợ lý phân tích (thử nghiệm). Bạn có thể hỏi:\n• Sản phẩm <tên> tuần này sao?\n• Shop <tên> hôm qua thế nào?\n• Quảng cáo sản phẩm <tên> 7 ngày qua?\n• Công nợ NCC\nSau đó hỏi tiếp \"còn hôm qua?\" để đổi kỳ.",
+  supplierDebtFailed: "Mình chưa lấy được công nợ NCC lúc này. Bạn thử lại sau nhé.",
   unknown: "Mình chưa hiểu câu hỏi. Gõ \"hướng dẫn\" để xem các câu hỏi được hỗ trợ.",
   unlinked: "Tài khoản Zalo này chưa được liên kết với hệ thống. Nếu bạn là quản trị viên, hãy tạo mã liên kết trong ứng dụng rồi gửi: LINK <mã>.",
   notAllowed: "Tài khoản liên kết hiện không có quyền dùng trợ lý phân tích.",
@@ -257,6 +262,19 @@ export async function processAcceptedMessage(deps: ConversationDeps, accepted: A
     await store.updateConversation(conversation.id, { lastIntent: "HELP" });
     await reply(MESSAGES.help);
     return "help";
+  }
+  // supplier-debt report: deterministic read of v_invoice_debt, admin-only (checked above), no shop / model
+  if (deps.supplierDebtReport && isSupplierDebtQuestion(message.text)) {
+    let parts: string[];
+    try {
+      parts = await deps.supplierDebtReport();
+    } catch (err) {
+      console.error("[conversation] supplier debt report failed:", err instanceof Error ? err.message : err);
+      await reply(MESSAGES.supplierDebtFailed);
+      return "supplier_debt_failed";
+    }
+    await reply(parts);
+    return "supplier_debt";
   }
   // change requests never reach the analyst (read only, and no model cost)
   if (live && MUTATION_REQUEST.test(folded)) {
