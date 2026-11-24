@@ -8,8 +8,11 @@
 //     AND that was sent BY THIS ACCOUNT reveals that group's id (so the owner
 //     can add it to the allowlist). Nothing else from the message is kept,
 //     and a token typed by another member never triggers it.
-//   * Direct (1-1) messages: "metadata" (default) or "off".
+//   * Direct (1-1) messages: "metadata" (default), "content" or "off". What
+//     leaves the worker is decided later (ingest/serializer.ts strips 1-1 text
+//     unless "content").
 // ============================================================
+import type { DirectMessageMode } from "./config.ts";
 import type { NormalizedEvent } from "./types.ts";
 
 export type FilterDecision =
@@ -20,12 +23,12 @@ export type FilterDecision =
 export interface FilterConfig {
   allowedGroupIds: ReadonlySet<string>;
   discoveryToken: string | null;
-  directMessages: "off" | "metadata";
+  directMessages: DirectMessageMode;
 }
 
 export function decide(event: NormalizedEvent, config: FilterConfig): FilterDecision {
   if (event.conversationType === "direct") {
-    return config.directMessages === "metadata" ? { action: "process", reason: "direct_metadata" } : { action: "drop", reason: "direct_disabled" };
+    return config.directMessages === "off" ? { action: "drop", reason: "direct_disabled" } : { action: "process", reason: "direct_metadata" };
   }
 
   if (event.kind === "message" && config.discoveryToken !== null && event.text !== null && event.text.trim() === config.discoveryToken) {

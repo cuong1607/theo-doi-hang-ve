@@ -98,3 +98,20 @@ describe("login error classification", () => {
     assert.equal(classifyLoginError("weird"), "rejected");
   });
 });
+
+describe("config: Phase 02 ingestion", () => {
+  const opts = { platform: "win32" as const, workerDir: WORKER, exists: () => false };
+  it("off by default; when on it needs an https URL and a worker key", () => {
+    assert.equal(loadConfig(base, opts).ingest.enabled, false);
+    assert.throws(() => loadConfig({ ...base, ZP_INGEST_ENABLED: "true" }, opts), /ZP_INGEST_URL/);
+    assert.throws(() => loadConfig({ ...base, ZP_INGEST_ENABLED: "true", ZP_INGEST_URL: "http://example.com", ZP_WORKER_KEY: "win-01" }, opts), /HTTPS/);
+    assert.throws(() => loadConfig({ ...base, ZP_INGEST_ENABLED: "true", ZP_INGEST_URL: "https://example.com" }, opts), /ZP_WORKER_KEY/);
+    const c = loadConfig({ ...base, ZP_INGEST_ENABLED: "true", ZP_INGEST_URL: "https://example.com", ZP_WORKER_KEY: "win-01" }, opts);
+    assert.deepEqual([c.ingest.enabled, c.ingest.batchSize, c.ingest.maxAttempts], [true, 25, 12]);
+    assert.doesNotThrow(() => loadConfig({ ...base, ZP_INGEST_ENABLED: "true", ZP_INGEST_URL: "http://localhost:3000", ZP_WORKER_KEY: "win-01" }, opts));
+  });
+  it("direct messages accept off | metadata | content", () => {
+    assert.equal(loadConfig({ ...base, ZP_DIRECT_MESSAGES: "content" }, opts).directMessages, "content");
+    assert.throws(() => loadConfig({ ...base, ZP_DIRECT_MESSAGES: "all" }, opts), ConfigError);
+  });
+});

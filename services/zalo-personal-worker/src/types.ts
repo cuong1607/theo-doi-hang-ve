@@ -72,6 +72,8 @@ export type RejectReason =
   | "missing_message_id"
   | "invalid_message_id"
   | "missing_sender"
-  | "invalid_sender";
+  | "invalid_sender"
+  /** an id arrived as a JS number beyond 2^53 (precision already lost) */
+  | "unsafe_numeric_id";
 
 export type NormalizeResult = { ok: true; event: NormalizedEvent } | { ok: false; reason: RejectReason };

@@ -1,6 +1,6 @@
 {
   "name": "zalo-personal-worker",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "CONGTRANGBEDDING — Zalo Personal connector (zca-js). Long-running worker, independent from the Next.js app.",
   "type": "module",
@@ -18,7 +18,12 @@
     "stop": "node --env-file-if-exists=.env src/main.ts stop",
     "resume": "node --env-file-if-exists=.env src/main.ts resume",
     "test": "node --test --test-concurrency=1 \"test/**/*.test.ts\"",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "ingest:set-secret": "node --env-file-if-exists=.env src/main.ts ingest-set-secret",
+    "ingest:clear-secret": "node --env-file-if-exists=.env src/main.ts ingest-clear-secret",
+    "ingest:status": "node --env-file-if-exists=.env src/main.ts ingest-status",
+    "outbox:retry-dead": "node --env-file-if-exists=.env src/main.ts outbox-retry-dead",
+    "outbox:clear": "node --env-file-if-exists=.env src/main.ts outbox-clear"
   },
   "dependencies": {
     "zca-js": "2.4.0"

@@ -12,7 +12,25 @@ import path from "node:path";
 import { isLogLevel, type LogLevel } from "./logger.ts";
 
 export type SessionProtection = "dpapi" | "aes-key";
-export type DirectMessageMode = "off" | "metadata";
+/** off = dropped · metadata = no text leaves the worker · content = text is sent (server policy still applies) */
+export type DirectMessageMode = "off" | "metadata" | "content";
+
+export interface IngestConfig {
+  enabled: boolean;
+  /** Backend base URL (https; http only for localhost). */
+  baseUrl: string | null;
+  workerKey: string | null;
+  /** Optional: injected by a service manager (VPS). Otherwise the DPAPI-protected file is used. */
+  secretFromEnv: string | null;
+  batchSize: number;
+  maxAttempts: number;
+  timeoutMs: number;
+  backoff: { baseMs: number; maxMs: number };
+  heartbeatMs: number;
+  pollMs: number;
+  outboxMaxEvents: number;
+  outboxMaxBytes: number;
+}
 
 export interface WorkerConfig {
   enabled: boolean;
@@ -35,6 +53,7 @@ export interface WorkerConfig {
   stopPollMs: number;
   metadataRetentionDays: number;
   dedupe: { maxEntries: number; ttlMs: number };
+  ingest: IngestConfig;
 }
 
 export class ConfigError extends Error {
@@ -132,7 +151,24 @@ export function loadConfig(env: Env, opts: { platform?: NodeJS.Platform; workerD
   }
 
   const directRaw = env.ZP_DIRECT_MESSAGES?.trim().toLowerCase() || "metadata";
-  if (directRaw !== "off" && directRaw !== "metadata") throw new ConfigError('ZP_DIRECT_MESSAGES phải là "off" hoặc "metadata".');
+  if (directRaw !== "off" && directRaw !== "metadata" && directRaw !== "content") throw new ConfigError('ZP_DIRECT_MESSAGES phải là "off", "metadata" hoặc "content".');
+
+  const ingestEnabled = bool(env.ZP_INGEST_ENABLED, false);
+  const ingestUrl = env.ZP_INGEST_URL?.trim() || null;
+  const workerKey = env.ZP_WORKER_KEY?.trim() || null;
+  if (ingestEnabled) {
+    if (!ingestUrl) throw new ConfigError("ZP_INGEST_ENABLED=true cần ZP_INGEST_URL (ví dụ https://theo-doi-hang-ve.vercel.app).");
+    let u: URL;
+    try {
+      u = new URL(ingestUrl);
+    } catch {
+      throw new ConfigError("ZP_INGEST_URL không hợp lệ.");
+    }
+    const local = ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname);
+    if (u.protocol !== "https:" && !(local && u.protocol === "http:")) throw new ConfigError("ZP_INGEST_URL phải dùng HTTPS (http chỉ cho localhost).");
+    if (!workerKey || !/^[a-z0-9][a-z0-9_-]{2,47}$/.test(workerKey)) throw new ConfigError("ZP_INGEST_ENABLED=true cần ZP_WORKER_KEY hợp lệ (3-48 ký tự a-z, 0-9, _ và -).");
+  }
+  const ingestBaseMs = int("ZP_INGEST_BACKOFF_BASE_MS", env.ZP_INGEST_BACKOFF_BASE_MS, 2_000, 200, 60_000);
 
   const logLevel = env.ZP_LOG_LEVEL?.trim().toLowerCase() || "info";
   if (!isLogLevel(logLevel)) throw new ConfigError('ZP_LOG_LEVEL phải là "debug", "info", "warn" hoặc "error".');
@@ -158,6 +194,20 @@ export function loadConfig(env: Env, opts: { platform?: NodeJS.Platform; workerD
     stopPollMs: int("ZP_STOP_POLL_MS", env.ZP_STOP_POLL_MS, 2_000, 200, 60_000),
     metadataRetentionDays: int("ZP_METADATA_RETENTION_DAYS", env.ZP_METADATA_RETENTION_DAYS, 7, 1, 90),
     dedupe: { maxEntries: 5_000, ttlMs: 6 * 60 * 60 * 1000 },
+    ingest: {
+      enabled: ingestEnabled,
+      baseUrl: ingestUrl,
+      workerKey,
+      secretFromEnv: env.ZP_INGEST_SECRET?.trim() || null,
+      batchSize: int("ZP_INGEST_BATCH_SIZE", env.ZP_INGEST_BATCH_SIZE, 25, 1, 25),
+      maxAttempts: int("ZP_INGEST_MAX_ATTEMPTS", env.ZP_INGEST_MAX_ATTEMPTS, 12, 1, 100),
+      timeoutMs: int("ZP_INGEST_TIMEOUT_MS", env.ZP_INGEST_TIMEOUT_MS, 15_000, 1_000, 120_000),
+      backoff: { baseMs: ingestBaseMs, maxMs: int("ZP_INGEST_BACKOFF_MAX_MS", env.ZP_INGEST_BACKOFF_MAX_MS, 15 * 60_000, ingestBaseMs, 6 * 60 * 60_000) },
+      heartbeatMs: int("ZP_HEARTBEAT_INTERVAL_MS", env.ZP_HEARTBEAT_INTERVAL_MS, 60_000, 5_000, 30 * 60_000),
+      pollMs: int("ZP_INGEST_POLL_MS", env.ZP_INGEST_POLL_MS, 1_000, 100, 60_000),
+      outboxMaxEvents: int("ZP_OUTBOX_MAX_EVENTS", env.ZP_OUTBOX_MAX_EVENTS, 5_000, 10, 100_000),
+      outboxMaxBytes: int("ZP_OUTBOX_MAX_BYTES", env.ZP_OUTBOX_MAX_BYTES, 20 * 1024 * 1024, 64 * 1024, 512 * 1024 * 1024),
+    },
   };
 }
 
@@ -172,5 +222,8 @@ export function dataPaths(dataDir: string) {
     qrDir: path.join(dataDir, "qr"),
     logsDir: path.join(dataDir, "logs"),
     discoveryFile: path.join(dataDir, "discovered-groups.jsonl"),
+    ingestSecretFile: path.join(dataDir, "ingest-secret.json"),
+    outboxKeyFile: path.join(dataDir, "outbox.key"),
+    outboxDir: path.join(dataDir, "outbox"),
   };
 }

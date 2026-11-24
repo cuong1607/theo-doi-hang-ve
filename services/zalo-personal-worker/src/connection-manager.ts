@@ -33,6 +33,8 @@ export interface ConnectionManagerDeps {
   health: HealthMonitor;
   onEvent(name: RawEventName, raw: unknown): void;
   onSession?(session: ZaloSession | null): void;
+  /** Called after every state change (e.g. to send a heartbeat right away). */
+  onStateChange?(state: ConnectionState): void;
   /** Abortable sleep (tests inject an instant one). */
   sleep?(ms: number, signal: AbortSignal): Promise<void>;
   random?(): number;
@@ -241,7 +243,14 @@ export class ConnectionManager {
     const state = nextState(previousState, event);
     this.stateValue = state;
     this.deps.health.setState(state, extra);
-    if (state !== previousState) this.deps.logger.info("state_changed", { state, previousState, ...extra });
+    if (state !== previousState) {
+      this.deps.logger.info("state_changed", { state, previousState, ...extra });
+      try {
+        this.deps.onStateChange?.(state);
+      } catch {
+        /* observers never break the lifecycle */
+      }
+    }
   }
 
   private fail(reason: ErrorReason, event: ConnectionEvent): RunResult {

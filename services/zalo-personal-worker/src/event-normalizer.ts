@@ -28,10 +28,27 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === "string" ? v : typeof v === "number" && Number.isFinite(v) ? String(v) : null);
 
+/** Thrown inside the normalizer when an id arrived as an unsafe JS number. */
+class UnsafeIdError extends Error {}
+
+/**
+ * Zalo ids are 64-bit. zca-js parses frames with plain JSON.parse, so an id
+ * sent as a JSON NUMBER above 2^53 is silently rounded (e.g. …891500): two
+ * different groups could collapse into one id. Such ids are refused, never
+ * "fixed"; string ids (the normal case) pass through untouched.
+ */
+function idStr(v: unknown): string | null {
+  if (typeof v === "number") {
+    if (!Number.isSafeInteger(v)) throw new UnsafeIdError();
+    return String(v);
+  }
+  return typeof v === "string" ? v : null;
+}
+
 const reject = (reason: RejectReason): NormalizeResult => ({ ok: false, reason });
 
 function threadOf(raw: Obj, isGroup: boolean): { ok: true; id: string; type: ConversationType } | { ok: false; reason: RejectReason } {
-  const id = str(raw.threadId);
+  const id = idStr(raw.threadId);
   if (!id) return { ok: false, reason: "missing_thread_id" };
   if (!ZALO_ID.test(id) || id === "0") return { ok: false, reason: "invalid_thread_id" };
   return { ok: true, id, type: isGroup ? "group" : "direct" };
@@ -66,7 +83,7 @@ function parseMentions(raw: unknown, textLength: number): Mention[] {
   const out: Mention[] = [];
   for (const m of raw.slice(0, MAX_MENTIONS)) {
     if (!isObj(m)) continue;
-    const uid = str(m.uid);
+    const uid = idStr(m.uid);
     const pos = typeof m.pos === "number" ? m.pos : Number.NaN;
     const len = typeof m.len === "number" ? m.len : Number.NaN;
     if (!uid || !ZALO_ID.test(uid)) continue;
@@ -78,6 +95,15 @@ function parseMentions(raw: unknown, textLength: number): Mention[] {
 
 export function normalizeEvent(name: RawEventName, raw: unknown, ctx: { connectionId: string; now: Date }): NormalizeResult {
   if (!isObj(raw)) return reject("malformed");
+  try {
+    return normalizeKnown(name, raw, ctx);
+  } catch (err) {
+    if (err instanceof UnsafeIdError) return reject("unsafe_numeric_id");
+    throw err;
+  }
+}
+
+function normalizeKnown(name: RawEventName, raw: Obj, ctx: { connectionId: string; now: Date }): NormalizeResult {
   switch (name) {
     case "message":
       return normalizeMessage(raw, ctx);
@@ -98,11 +124,11 @@ function normalizeMessage(raw: Obj, ctx: { connectionId: string; now: Date }): N
   const thread = threadOf(raw, raw.type === 1);
   if (!thread.ok) return reject(thread.reason);
 
-  const messageId = str(data.msgId);
+  const messageId = idStr(data.msgId);
   if (!messageId) return reject("missing_message_id");
   if (!MESSAGE_ID.test(messageId)) return reject("invalid_message_id");
 
-  const sender = str(data.uidFrom);
+  const sender = idStr(data.uidFrom);
   if (!sender) return reject("missing_sender");
   if (!ZALO_ID.test(sender) || sender === "0") return reject("invalid_sender");
 
@@ -142,9 +168,9 @@ function normalizeMessageSignal(kind: "undo" | "reaction", raw: Obj, ctx: { conn
   if (!data) return reject("malformed");
   const thread = threadOf(raw, raw.isGroup === true);
   if (!thread.ok) return reject(thread.reason);
-  const sender = str(data.uidFrom);
+  const sender = idStr(data.uidFrom);
   const content = isObj(data.content) ? data.content : null;
-  const ref = kind === "undo" ? str(content?.globalMsgId) : str(data.msgId);
+  const ref = kind === "undo" ? idStr(content?.globalMsgId) : idStr(data.msgId);
   return {
     ok: true,
     event: {

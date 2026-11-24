@@ -28,6 +28,11 @@ import { SessionManager } from "./session-manager.ts";
 import { createProtector } from "./session-protector.ts";
 import { clearStop, requestStop, stopRequested, watchStopFile } from "./stop-signal.ts";
 import { ZcaConnector, type ZaloSession } from "./zalo-client.ts";
+import { CompositeSink } from "./ingest/outbox-sink.ts";
+import { Outbox } from "./ingest/outbox.ts";
+import { IngestSetupError, startIngestion, type IngestRuntime } from "./ingest/runtime.ts";
+import { clearIngestSecret, isValidIngestSecret, loadIngestSecret, loadOrCreateOutboxKey, saveIngestSecret } from "./ingest/secret-store.ts";
+import type { EventSink } from "./metadata-sink.ts";
 
 const WORKER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -82,8 +87,24 @@ async function cmdRun(config: WorkerConfig, logger: Logger): Promise<number> {
     const removed = await pruneMetadataLogs(paths.logsDir, config.metadataRetentionDays);
     if (removed) logger.info("metadata_logs_pruned", { removed });
     const salt = await loadOrCreateSalt(paths.saltFile);
-    const sink = new JsonlMetadataSink({ logsDir: paths.logsDir, discoveryFile: paths.discoveryFile, salt });
+    const metadataSink = new JsonlMetadataSink({ logsDir: paths.logsDir, discoveryFile: paths.discoveryFile, salt });
     let ownId: string | null = null;
+    let manager: ConnectionManager | null = null;
+
+    // Phase 02: durable outbox → backend (off unless ZP_INGEST_ENABLED=true)
+    let ingest: IngestRuntime | null = null;
+    if (config.ingest.enabled) {
+      try {
+        ingest = await startIngestion({ config, logger, health, protector: createProtector(config), connectionState: () => ({ state: manager?.state ?? "disconnected", errorReason: health.current.errorReason }) });
+      } catch (err) {
+        if (err instanceof IngestSetupError) {
+          print(err.message);
+          return EXIT.operator;
+        }
+        throw err;
+      }
+    }
+    const sink: EventSink = ingest ? new CompositeSink([metadataSink, ingest.sink]) : metadataSink;
 
     const pipeline = createEventPipeline({
       connectionId: config.connectionId,
@@ -96,7 +117,7 @@ async function cmdRun(config: WorkerConfig, logger: Logger): Promise<number> {
       announce: print,
     });
 
-    const manager = new ConnectionManager({
+    manager = new ConnectionManager({
       connector: new ZcaConnector(),
       sessions: sessionsFor(config),
       config,
@@ -109,8 +130,11 @@ async function cmdRun(config: WorkerConfig, logger: Logger): Promise<number> {
         } catch {
           ownId = null;
         }
+        ingest?.onAccount(ownId);
       },
+      onStateChange: (state) => ingest?.onStateChange(state),
     });
+    const run = manager;
 
     let signals = 0;
     const onSignal = (sig: string) => {
@@ -120,18 +144,19 @@ async function cmdRun(config: WorkerConfig, logger: Logger): Promise<number> {
         process.exit(EXIT.unexpected);
       }
       print("Đang dừng worker an toàn… (nhấn Ctrl+C lần nữa để thoát ngay)");
-      manager.stop(sig);
+      run.stop(sig);
     };
     process.on("SIGINT", onSignal);
     process.on("SIGTERM", onSignal);
-    const disposeStopWatch = watchStopFile(paths.stopFile, config.stopPollMs, () => manager.stop("stop_file"));
+    const disposeStopWatch = watchStopFile(paths.stopFile, config.stopPollMs, () => run.stop("stop_file"));
     const healthTimer = setInterval(() => void health.flush(), config.healthIntervalMs);
 
     print(`Worker Zalo Personal đang chạy (connection "${config.connectionId}"). Nhóm được phép: ${config.allowedGroupIds.size}. Ctrl+C hoặc \`npm run stop\` để dừng.`);
-    logger.info("worker_started", { connectionId: config.connectionId, allowedGroups: config.allowedGroupIds.size, discovery: config.discoveryToken !== null, directMessages: config.directMessages, protection: config.sessionProtection });
+    logger.info("worker_started", { connectionId: config.connectionId, allowedGroups: config.allowedGroupIds.size, discovery: config.discoveryToken !== null, directMessages: config.directMessages, protection: config.sessionProtection, ingest: config.ingest.enabled });
+    if (ingest) print(`Đồng bộ về backend: BẬT (${new URL(config.ingest.baseUrl!).host}, worker "${config.ingest.workerKey}"). Outbox đang chờ: ${ingest.outbox.stats().depth}.`);
 
     try {
-      const outcome = await manager.run();
+      const outcome = await run.run();
       if (outcome.state === "error") {
         print(explainError(outcome.reason));
         return EXIT.operator;
@@ -143,6 +168,8 @@ async function cmdRun(config: WorkerConfig, logger: Logger): Promise<number> {
       clearInterval(healthTimer);
       process.off("SIGINT", onSignal);
       process.off("SIGTERM", onSignal);
+      // after the listener stopped: let delivery finish its in-flight request (outbox stays consistent)
+      await ingest?.shutdown();
       await health.flush();
     }
   });
@@ -249,6 +276,56 @@ async function cmdSessionClear(config: WorkerConfig): Promise<number> {
   });
 }
 
+// ------------------------------------------------------------ ingest (Phase 02)
+async function readSecretFromStdin(): Promise<string> {
+  const { createInterface } = await import("node:readline");
+  const { Writable } = await import("node:stream");
+  let muted = false;
+  const output = new Writable({
+    write(chunk, _enc, cb) {
+      if (!muted) process.stdout.write(chunk);
+      cb();
+    },
+  });
+  const rl = createInterface({ input: process.stdin, output, terminal: process.stdin.isTTY === true });
+  return new Promise((resolve) => {
+    rl.question("Dán worker secret (zps_…) rồi nhấn Enter (không hiển thị): ", (answer) => {
+      rl.close();
+      process.stdout.write("\n");
+      resolve(answer.trim());
+    });
+    muted = true;
+  });
+}
+
+async function cmdIngestSetSecret(config: WorkerConfig): Promise<number> {
+  const secret = await readSecretFromStdin();
+  if (!isValidIngestSecret(secret)) {
+    print("Secret không đúng định dạng (zps_ + 43 ký tự). Không lưu gì.");
+    return EXIT.config;
+  }
+  await saveIngestSecret(dataPaths(config.dataDir).ingestSecretFile, createProtector(config), secret);
+  print(`Đã lưu ingest secret (bảo vệ bằng ${config.sessionProtection}) tại thư mục dữ liệu, ngoài Git.`);
+  return EXIT.ok;
+}
+
+async function openOutbox(config: WorkerConfig): Promise<Outbox> {
+  const paths = dataPaths(config.dataDir);
+  const outbox = new Outbox({ dir: paths.outboxDir, key: await loadOrCreateOutboxKey(paths.outboxKeyFile, createProtector(config)), maxEvents: config.ingest.outboxMaxEvents, maxBytes: config.ingest.outboxMaxBytes });
+  await outbox.init();
+  return outbox;
+}
+
+async function cmdIngestStatus(config: WorkerConfig): Promise<number> {
+  const paths = dataPaths(config.dataDir);
+  const protector = createProtector(config);
+  const secret = await loadIngestSecret(paths.ingestSecretFile, protector, config.ingest.secretFromEnv).then((v) => (v ? "present" : "missing")).catch(() => "unreadable");
+  const outbox = await openOutbox(config);
+  const health = await readHealth(paths.healthFile);
+  print(JSON.stringify({ enabled: config.ingest.enabled, backend: config.ingest.baseUrl ? new URL(config.ingest.baseUrl).host : null, workerKey: config.ingest.workerKey, connectionKey: config.connectionId, secret, outbox: outbox.stats(), lastRun: health?.ingest ?? null }, null, 2));
+  return EXIT.ok;
+}
+
 // ------------------------------------------------------------ status / stop / resume
 async function cmdStatus(config: WorkerConfig): Promise<number> {
   const paths = dataPaths(config.dataDir);
@@ -286,6 +363,28 @@ async function main(argv: string[]): Promise<number> {
       await requestStop(dataPaths(config.dataDir).stopFile);
       print("Đã tạo lệnh DỪNG KHẨN CẤP. Worker đang chạy sẽ dừng trong vài giây; mọi lệnh kết nối bị chặn cho tới `npm run resume`.");
       return EXIT.ok;
+    case "ingest-set-secret":
+      return cmdIngestSetSecret(config);
+    case "ingest-clear-secret":
+      await clearIngestSecret(dataPaths(config.dataDir).ingestSecretFile);
+      print("Đã xóa ingest secret cục bộ.");
+      return EXIT.ok;
+    case "ingest-status":
+      return cmdIngestStatus(config);
+    case "outbox-retry-dead": {
+      const moved = await withLock(config, async () => (await openOutbox(config)).retryDead(Date.now()));
+      print(`Đã đưa ${moved} mục dead-letter về hàng chờ.`);
+      return EXIT.ok;
+    }
+    case "outbox-clear": {
+      if (!rest.includes("--yes")) {
+        print("Xóa toàn bộ outbox (cả mục CHƯA gửi). Chạy lại với: npm run outbox:clear -- --yes");
+        return EXIT.refused;
+      }
+      await withLock(config, async () => (await openOutbox(config)).clear("all"));
+      print("Đã xóa outbox.");
+      return EXIT.ok;
+    }
     case "resume":
       print((await clearStop(dataPaths(config.dataDir).stopFile)) ? "Đã gỡ lệnh dừng khẩn cấp." : "Không có lệnh dừng nào.");
       return EXIT.ok;

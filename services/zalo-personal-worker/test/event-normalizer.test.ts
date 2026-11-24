@@ -162,3 +162,31 @@ describe("event-normalizer: helpers", () => {
     assert.equal(dedupeKey({ kind: "group_event", conversationType: "group", conversationId: GROUP_ALLOWED, externalMessageId: null, senderExternalId: null }), null);
   });
 });
+
+describe("event-normalizer: 64-bit id safety", () => {
+  it("a 19-digit id as a STRING passes through unchanged", () => {
+    const m = message(rawGroupMessage({ threadId: "2547837462290891517", msgId: "7000000000000000123" }));
+    assert.equal(m.conversationId, "2547837462290891517");
+    assert.equal(m.externalMessageId, "7000000000000000123");
+  });
+
+  it("an id that arrived as a JS NUMBER beyond 2^53 is refused (precision already lost)", () => {
+    for (const raw of [
+      { ...rawGroupMessage(), threadId: 2547837462290891500 },
+      rawGroupMessage({ msgId: 7000000000000000123 as unknown as string }),
+      rawGroupMessage({ uidFrom: 3000000000000000001 as unknown as string }),
+    ]) {
+      assert.deepEqual(normalizeEvent("message", raw, ctx), { ok: false, reason: "unsafe_numeric_id" });
+    }
+  });
+
+  it("a small numeric id (safe integer) is accepted", () => {
+    const m = message(rawGroupMessage({ msgId: 123456 as unknown as string }));
+    assert.equal(m.externalMessageId, "123456");
+  });
+
+  it("an unsafe numeric mention uid makes the whole event refused, not silently dropped", () => {
+    const r = normalizeEvent("message", rawGroupMessage({ content: "@Ai", mentions: [{ uid: 1000000000000000001, pos: 0, len: 3, type: 0 }] }), ctx);
+    assert.deepEqual(r, { ok: false, reason: "unsafe_numeric_id" });
+  });
+});

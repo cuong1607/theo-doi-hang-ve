@@ -20,6 +20,8 @@ export interface HealthSnapshot {
   lastEventAt: string | null;
   reconnectAttempt: number;
   errorReason: ErrorReason | null;
+  /** Phase 02 delivery state (null when ingestion is off). Aggregates only. */
+  ingest: null | { outboxDepth: number; deadLetters: number; outboxFullDrops: number; lastDeliveryOkAt: string | null; consecutiveFailures: number; authPaused: boolean; lastErrorCategory: string | null };
   counters: {
     received: number;
     processed: number;
@@ -52,6 +54,7 @@ export class HealthMonitor {
       lastEventAt: null,
       reconnectAttempt: 0,
       errorReason: null,
+      ingest: null,
       counters: { received: 0, processed: 0, duplicates: 0, discovered: 0, dropped: {}, rejected: {} },
     };
   }
@@ -69,6 +72,10 @@ export class HealthMonitor {
     else if (state !== "error") this.snapshot.errorReason = null;
     if (extra.reconnectAttempt !== undefined) this.snapshot.reconnectAttempt = extra.reconnectAttempt;
     void this.flush();
+  }
+
+  setIngest(ingest: HealthSnapshot["ingest"]): void {
+    this.snapshot.ingest = ingest;
   }
 
   count(kind: "received" | "processed" | "duplicates" | "discovered"): void {

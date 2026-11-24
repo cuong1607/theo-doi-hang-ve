@@ -3,6 +3,8 @@
 > Dự án CONGTRANGBEDDING · repo `theo-doi-hang-ve` · 2026-11-24 · nền: commit `b5c4135`
 > Đọc kèm: [architecture-audit.md](architecture-audit.md) (Phase 00) · [implementation-plan.md](implementation-plan.md) (task, test, nghiệm thu)
 >
+> **Cập nhật Phase 02 (2026-11-24):** việc lưu tin Zalo Personal đã được triển khai trong các bảng riêng `zalo_personal_*` (migration `00073`) cho **cả 1-1 lẫn nhóm**. Điều này khác §5.1, nơi tin 1-1 dự kiến nằm trong `ai_conversations` / `ai_messages`; lý do ở [phase-02-integration.md](phase-02-integration.md) §1. `ai_conversations` / `ai_messages` và CHECK `channel` của chúng **không đổi**. Bảng `workspaces` / `ai_channel_access` (Q1, Q2) **chưa** được tạo: Phase 02 dùng `owner_user_id` của connection làm ranh giới cô lập.
+>
 > Tài liệu này **chỉ là thiết kế**: chưa có code, chưa có migration, chưa chạm database production.
 > Ký hiệu: ✅ đã xác minh trong source · ⚠️ cần kiểm chứng · ❗ xung đột / cần chủ dự án chốt.
 

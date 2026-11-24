@@ -91,6 +91,26 @@ Kiểu nội bộ `NormalizedMessage` (`src/types.ts`) gồm các trường: `ch
 - Chỉ chạy **một** instance cho mỗi tài khoản.
 - Phiên DPAPI tạo trên Windows **không** dùng được trên Linux. Trên VPS phải đăng nhập QR lại.
 
+## Phase 02 — đồng bộ về backend
+
+Bật bằng `ZP_INGEST_ENABLED=true` (mặc định tắt). Chi tiết: [docs/zalo-ai/phase-02-integration.md](../../docs/zalo-ai/phase-02-integration.md).
+
+- **Luồng:** event được phép → `ingest/serializer.ts` (bỏ text 1-1 trừ khi `ZP_DIRECT_MESSAGES=content`) → outbox cục bộ mã hóa, bền qua restart → gửi HTTPS có ký HMAC tới `/api/internal/zalo-personal/events`. Heartbeat gửi tới `/heartbeat`.
+- **Không có khóa Supabase trong worker.** Chỉ có HMAC secret của worker, nạp bằng `npm run ingest:set-secret` và lưu bằng DPAPI.
+- **Retry:** backoff lũy thừa có jitter, tôn trọng `Retry-After`; quá `ZP_INGEST_MAX_ATTEMPTS` thì dead-letter. Gặp 401 / 403 / tài khoản không khớp thì **dừng gửi** (không retry vô hạn), giữ nguyên outbox.
+- **Lệnh:** `ingest:set-secret`, `ingest:clear-secret`, `ingest:status`, `outbox:retry-dead`, `outbox:clear -- --yes`.
+
+| File | Vai trò |
+|---|---|
+| `src/ingest/serializer.ts` | Wire event + `eventKey` ổn định, tối thiểu hóa dữ liệu |
+| `src/ingest/outbox.ts` | Outbox: file nguyên tử, AES-256-GCM, giới hạn số event / dung lượng, dead-letter |
+| `src/ingest/http-client.ts` | Client có ký (bắt buộc HTTPS), phân loại phản hồi |
+| `src/ingest/delivery.ts` | Vòng gửi at-least-once |
+| `src/ingest/heartbeat.ts` | Session / listener / backend / thời điểm tin gần nhất, tách riêng |
+| `src/ingest/secret-store.ts` | Ingest secret + khóa outbox (DPAPI / AES) |
+| `src/ingest/signing.ts` | **Bản sao** của `src/lib/zalo-personal/signing.ts`; hai bộ test cùng kiểm một vector cố định |
+| `src/ingest/runtime.ts` | Lắp ráp các phần trên |
+
 ## Không có trong Phase 01
 
 Gemini, Supabase, dashboard, tự trả lời, gửi tin, đồng bộ toàn bộ nhóm, backfill lịch sử, triển khai lên VPS hoặc Vercel.
