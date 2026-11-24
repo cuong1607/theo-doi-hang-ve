@@ -14,7 +14,7 @@ import { MessageItem } from "./message-item";
 
 type Cursor = { beforeAt: string; beforeId: string } | null;
 
-export function MessageHistory({ conversationId, initial, initialCursor, pageSize }: { conversationId: string; initial: MessageView[]; initialCursor: Cursor; pageSize: number }) {
+export function MessageHistory({ conversationId, initial, initialCursor, pageSize, highlightId }: { conversationId: string; initial: MessageView[]; initialCursor: Cursor; pageSize: number; highlightId?: string }) {
   const [messages, setMessages] = useState(initial);
   const [cursor, setCursor] = useState<Cursor>(initialCursor);
   const [pending, startTransition] = useTransition();
@@ -36,7 +36,7 @@ export function MessageHistory({ conversationId, initial, initialCursor, pageSiz
     <div className="space-y-3">
       <ol className="space-y-2" aria-label="Tin nhắn, mới nhất trước">
         {messages.map((m) => (
-          <MessageItem key={m.id} message={m} />
+          <MessageItem key={m.id} message={m} highlight={m.id === highlightId} />
         ))}
       </ol>
       <div className="flex flex-col items-center gap-1 pt-2 text-xs text-muted-foreground">

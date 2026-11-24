@@ -15,8 +15,14 @@ import { hasPermission, type Role } from "@/lib/auth/permissions";
 import { authorizeRoute, requireActiveUser } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-import { isZaloPersonalDashboardEnabled } from "../config.ts";
+import { randomUUID } from "node:crypto";
+
+import { encryptSecret, parseEncryptionKey } from "@/lib/security/secrets";
+
+import { isZaloPersonalDashboardEnabled, workerSecretContext } from "../config.ts";
+import { generateWorkerSecret } from "../signing.ts";
 import type { Actor } from "./access.ts";
+import { canConnect, type SelfServiceDeps } from "./self-service.ts";
 import { describeIssues } from "./contracts.ts";
 import { httpStatusOf, moduleAccess, type DashboardDeps, type Result } from "./service.ts";
 import { SupabaseDashboardStore } from "./supabase-store.ts";
@@ -26,12 +32,11 @@ export function getDashboardDeps(): DashboardDeps {
 }
 
 /**
- * Whether the "Trợ lý Zalo AI" app is shown to this user (hub card, switcher,
- * shell). Queries only when the flag is on and the role may use the module;
- * any failure (e.g. migration not applied yet) hides the app instead of
- * breaking the other apps' pages.
+ * Whether the user owns a connection or holds a grant. Queries only when the
+ * flag is on and the role may use the module; any failure (e.g. migration not
+ * applied yet) counts as "no access" instead of breaking the other apps' pages.
  */
-export const zaloAppVisible = cache(async (userId: string, role: Role): Promise<boolean> => {
+export const zaloDataAccess = cache(async (userId: string, role: Role): Promise<boolean> => {
   if (!isZaloPersonalDashboardEnabled() || !hasPermission(role, "zalo_personal:use")) return false;
   try {
     return (await moduleAccess(getDashboardDeps(), { userId, role })).allowed;
@@ -40,15 +45,42 @@ export const zaloAppVisible = cache(async (userId: string, role: Role): Promise<
   }
 });
 
-/** Pages: flag off → 404; no role permission or no connection / grant → 403 page. */
-export async function requireZaloPersonal(): Promise<{ actor: Actor; deps: DashboardDeps }> {
+/**
+ * Shown with data access (owns a connection / holds a grant), or with
+ * "zalo_personal:connect" so a user can set up their OWN connection. The
+ * latter never shows any other user's data: without data access every page
+ * leads to the setup page.
+ */
+export const zaloAppVisible = cache(async (userId: string, role: Role): Promise<boolean> => {
+  if (!isZaloPersonalDashboardEnabled() || !hasPermission(role, "zalo_personal:use")) return false;
+  return (await zaloDataAccess(userId, role)) || canConnect(role);
+});
+
+/**
+ * Pages: flag off → 404; no role permission → 403 page. Without data access, a
+ * user who may connect is sent to the setup page (which gets onboarding=true);
+ * anybody else gets the 403 page.
+ */
+export async function requireZaloPersonal(opts: { setupPage?: boolean } = {}): Promise<{ actor: Actor; deps: DashboardDeps; onboarding: boolean }> {
   if (!isZaloPersonalDashboardEnabled()) notFound();
   const { user, profile } = await requireActiveUser();
   if (!hasPermission(profile.role, "zalo_personal:use")) redirect("/forbidden");
   const actor: Actor = { userId: user.id, role: profile.role };
   const deps = getDashboardDeps();
-  if (!(await zaloAppVisible(user.id, profile.role))) redirect("/forbidden");
-  return { actor, deps };
+  if (await zaloDataAccess(user.id, profile.role)) return { actor, deps, onboarding: false };
+  if (!canConnect(profile.role)) redirect("/forbidden");
+  if (!opts.setupPage) redirect("/apps/zalo/personal/connections");
+  return { actor, deps, onboarding: true };
+}
+
+export function getSelfServiceDeps(): SelfServiceDeps {
+  const store = new SupabaseDashboardStore(createAdminClient());
+  const key = parseEncryptionKey(process.env.APP_ENCRYPTION_KEY);
+  return {
+    dashboard: store,
+    store,
+    secrets: { generate: generateWorkerSecret, encrypt: (secret, workerId) => encryptSecret(secret, key, workerSecretContext(workerId)), newId: () => randomUUID() },
+  };
 }
 
 /** Pages: a service refusal becomes the 404 / 403 page (never a raw error on screen). */

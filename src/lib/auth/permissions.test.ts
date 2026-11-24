@@ -16,6 +16,10 @@ const EXPECTED: Record<Role, Permission[]> = {
     "payment:create", "channel:map", "channel:sync", "return:receive",
     // ZALO PERSONAL Phase 03 — necessary only; data grants decide what is visible
     "zalo_personal:use", "app:zalo",
+    // ZALO PERSONAL Phase 04 — Ask AI inside the same data scope
+    "zalo_personal:ai",
+    // self-service: own connection only
+    "zalo_personal:connect",
     ...APP_ENTRY,
   ],
   viewer: [

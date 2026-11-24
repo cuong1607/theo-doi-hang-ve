@@ -26,6 +26,7 @@ import type {
   SyncRow,
   WorkerRow,
 } from "./service.ts";
+import type { SelfServiceFailure, SelfServiceStore } from "./self-service.ts";
 
 type Raw = Record<string, unknown>;
 
@@ -105,7 +106,7 @@ function messageRow(r: Raw): MessageRow {
 
 const scopeArgs = (sc: ConversationScope) => ({ p_full: sc.full, p_group: sc.group, p_ids: sc.ids });
 
-export class SupabaseDashboardStore implements DashboardStore {
+export class SupabaseDashboardStore implements DashboardStore, SelfServiceStore {
   private readonly db: SupabaseClient;
   constructor(db: SupabaseClient) {
     this.db = db;
@@ -386,5 +387,27 @@ export class SupabaseDashboardStore implements DashboardStore {
   async activeProfiles(): Promise<ProfileRow[]> {
     const rows = check<Raw[]>("profiles", await this.db.from("profiles").select("id, full_name, role, is_active").eq("is_active", true).in("role", ["admin", "staff"]).order("full_name").limit(500));
     return rows.map((r) => ({ id: r.id as string, name: s(r.full_name), role: r.role as string, isActive: r.is_active === true }));
+  }
+
+  // ------------------------------------------------------------ self-service (00076; ownership re-checked in SQL)
+  private async selfService<T>(op: string, fn: string, args: Record<string, unknown>): Promise<T | SelfServiceFailure> {
+    const r = check<{ ok: boolean; error?: string } & Record<string, unknown>>(op, await this.db.rpc(fn, args));
+    return (r.ok ? r : { ok: false, error: r.error ?? "server_error" }) as T | SelfServiceFailure;
+  }
+
+  createConnection(actorId: string, key: string, directMode: "off" | "metadata") {
+    return this.selfService<{ ok: true; id: string; key: string }>("createConnection", "zp_create_connection", { p_actor: actorId, p_key: key, p_direct_mode: directMode });
+  }
+
+  issueWorker(actorId: string, connectionId: string, workerId: string, workerKey: string, secretEncrypted: string) {
+    return this.selfService<{ ok: true; id: string; workerKey: string }>("issueWorker", "zp_issue_worker", { p_actor: actorId, p_connection_id: connectionId, p_worker_id: workerId, p_worker_key: workerKey, p_secret_ciphertext: secretEncrypted });
+  }
+
+  revokeWorker(actorId: string, connectionId: string, workerId: string) {
+    return this.selfService<{ ok: true; changed: boolean }>("revokeWorker", "zp_revoke_worker", { p_actor: actorId, p_connection_id: connectionId, p_worker_id: workerId });
+  }
+
+  setConnectionStatus(actorId: string, connectionId: string, status: "active" | "disabled") {
+    return this.selfService<{ ok: true; changed: boolean }>("setConnectionStatus", "zp_set_connection_status", { p_actor: actorId, p_connection_id: connectionId, p_status: status });
   }
 }

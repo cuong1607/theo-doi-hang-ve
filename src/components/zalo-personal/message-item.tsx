@@ -8,10 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/ui/format";
 import type { MessageView } from "@/lib/zalo-personal/dashboard/service";
 
-export function MessageItem({ message, showConversation = false }: { message: MessageView; showConversation?: boolean }) {
+export function MessageItem({ message, showConversation = false, highlight = false }: { message: MessageView; showConversation?: boolean; highlight?: boolean }) {
   const m = message;
   return (
-    <li data-slot="zp-message" className={`rounded-lg border px-3 py-2.5 ${m.isSelf ? "border-app-accent-border bg-app-accent-soft/50" : "bg-card"}`}>
+    <li data-slot="zp-message" id={`m-${m.id}`} aria-current={highlight ? "true" : undefined} className={`rounded-lg border px-3 py-2.5 ${m.isSelf ? "border-app-accent-border bg-app-accent-soft/50" : "bg-card"} ${highlight ? "ring-2 ring-ring" : ""}`}>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1 font-medium text-foreground">
           <User aria-hidden="true" className="size-3.5" />

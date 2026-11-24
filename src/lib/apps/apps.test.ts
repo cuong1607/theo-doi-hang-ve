@@ -132,7 +132,7 @@ test("ZALO PERSONAL Phase 03: 'Trợ lý Zalo AI' needs the role AND the data ga
   assert.equal(appForPath("/apps/zalo/personal/conversations/abc"), "zalo");
   assert.equal(appForPath("/api/zalo/webhook"), null, "Zalo OA webhook is not part of the app");
   const nav = visibleNav("zalo", ctx({ role: "staff" }));
-  assert.deepEqual(hrefsOf(nav), ["/apps/zalo/personal", "/apps/zalo/personal/connections", "/apps/zalo/personal/groups", "/apps/zalo/personal/conversations", "/apps/zalo/personal/search", "/apps/zalo/personal/sync"]);
+  assert.deepEqual(hrefsOf(nav), ["/apps/zalo/personal", "/apps/zalo/personal/connections", "/apps/zalo/personal/groups", "/apps/zalo/personal/conversations", "/apps/zalo/personal/search", "/apps/zalo/personal/sync", "/apps/zalo/personal/ai"]);
   assert.deepEqual(visibleNav("zalo", ctx({ role: "viewer" })), []);
   assert.equal(activeNavItemHref(nav, "/apps/zalo/personal/conversations/123"), "/apps/zalo/personal/conversations");
   assert.equal(activeNavItemHref(nav, "/apps/zalo/personal"), "/apps/zalo/personal");

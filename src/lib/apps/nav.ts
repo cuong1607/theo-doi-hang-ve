@@ -138,6 +138,8 @@ export const APP_NAV: Record<AppId, NavGroup[]> = {
         { title: "Hội thoại", href: "/apps/zalo/personal/conversations", icon: "messages", permission: "zalo_personal:use" },
         { title: "Tìm tin nhắn", href: "/apps/zalo/personal/search", icon: "search", permission: "zalo_personal:use" },
         { title: "Nhật ký đồng bộ", href: "/apps/zalo/personal/sync", icon: "activity", permission: "zalo_personal:use" },
+        // Phase 04 — Ask AI / summaries inside the same data scope (no sending)
+        { title: "Hỏi AI", href: "/apps/zalo/personal/ai", icon: "lightbulb", permission: "zalo_personal:ai" },
       ],
     },
   ],

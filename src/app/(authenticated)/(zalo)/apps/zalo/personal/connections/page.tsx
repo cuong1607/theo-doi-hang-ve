@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Plug, Terminal } from "lucide-react";
+import { CheckCircle2, Circle, Plug, Terminal } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,8 +7,10 @@ import { Callout } from "@/components/patterns/callout";
 import { EmptyState } from "@/components/patterns/empty-state";
 import { PageContainer, PageHeader, SectionHeader } from "@/components/patterns/page-header";
 import { AccessManager } from "@/components/zalo-personal/access-manager";
+import { NewConnectionButton, OwnerConnectionActions } from "@/components/zalo-personal/connection-setup";
 import { HealthBadge, HeartbeatAge, LISTENER_LABEL, SESSION_LABEL, SituationCallout } from "@/components/zalo-personal/health";
 import { formatDateTime } from "@/lib/ui/format";
+import { canConnect } from "@/lib/zalo-personal/dashboard/self-service";
 import { requireZaloPersonal, unwrap } from "@/lib/zalo-personal/dashboard/server";
 import { AUDIT_LABEL, listAudit, listConnections, listGrants, type ConnectionView } from "@/lib/zalo-personal/dashboard/service";
 
@@ -26,6 +28,30 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
+/** Setup checklist for the owner: what is done, what is next (from real signals only). */
+function Checklist({ c }: { c: ConnectionView }) {
+  const w = c.workers.find((x) => x.status === "active");
+  const steps = [
+    { done: true, text: "Tạo kết nối" },
+    { done: !!w, text: "Cấp worker và cài trên máy Windows (cấu hình + secret)" },
+    { done: !!w?.lastHeartbeatAt, text: "Worker gửi heartbeat đầu tiên (npm run start)" },
+    { done: w?.sessionState === "authenticated", text: "Đăng nhập Zalo trên máy Windows (npm run login, quét QR)" },
+    { done: w?.listenerState === "active" && !!c.accountIdMasked, text: "Listener đang nhận tin, tài khoản Zalo đã gắn" },
+  ];
+  const next = steps.findIndex((x) => !x.done);
+  return (
+    <ol className="space-y-1 text-sm" aria-label="Các bước kết nối">
+      {steps.map((x, i) => (
+        <li key={x.text} className={`flex items-center gap-2 ${x.done ? "text-muted-foreground" : i === next ? "font-medium" : "text-muted-foreground"}`}>
+          {x.done ? <CheckCircle2 aria-hidden="true" className="size-4 text-success" /> : <Circle aria-hidden="true" className="size-4" />}
+          {x.text}
+          {i === next && <Badge variant="outline">Bước tiếp theo</Badge>}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 function backendText(c: ConnectionView): string {
   const w = c.workers.find((x) => x.status === "active");
   if (!w) return "—";
@@ -40,8 +66,10 @@ function backendText(c: ConnectionView): string {
 // remote command channel in Phase 01/02, so there is no disconnect button: the
 // instructions for the Windows machine are shown instead.
 export default async function ZaloPersonalConnectionsPage() {
-  const { actor, deps } = await requireZaloPersonal();
-  const connections = unwrap(await listConnections(deps, actor));
+  const { actor, deps, onboarding } = await requireZaloPersonal({ setupPage: true });
+  const connections = onboarding ? [] : unwrap(await listConnections(deps, actor));
+  const mayConnect = canConnect(actor.role);
+  const owned = connections.filter((c) => c.isOwner).length;
   const extras = await Promise.all(
     connections.map(async (c) => ({
       id: c.id,
@@ -52,9 +80,23 @@ export default async function ZaloPersonalConnectionsPage() {
 
   return (
     <PageContainer>
-      <PageHeader title="Kết nối Zalo cá nhân" description="Mỗi kết nối là một tài khoản Zalo cá nhân chạy qua worker trên máy Windows. Dashboard chỉ hiển thị trạng thái; đăng nhập (QR) và ngắt kết nối làm trên máy Windows." />
+      <PageHeader
+        title="Kết nối Zalo cá nhân"
+        description="Mỗi kết nối là một tài khoản Zalo cá nhân chạy qua worker trên máy Windows. Tạo kết nối và cấp worker ngay tại đây; đăng nhập Zalo (quét QR) làm trên máy Windows."
+        actions={mayConnect && connections.length > 0 ? <NewConnectionButton variant="outline" disabled={owned >= 3} /> : undefined}
+      />
 
-      {connections.length === 0 && <EmptyState icon={Plug} title="Chưa có kết nối nào bạn được xem" description="Chủ sở hữu kết nối có thể cấp quyền cho bạn ở trang này." />}
+      {connections.length === 0 &&
+        (mayConnect ? (
+          <EmptyState
+            icon={Plug}
+            title="Kết nối tài khoản Zalo cá nhân của bạn"
+            description="1) Tạo kết nối và cấp worker tại đây → 2) cài cấu hình + secret trên máy Windows → 3) quét QR đăng nhập Zalo trên máy đó. Kết nối thuộc về bạn: người khác chỉ xem được khi bạn cấp quyền."
+            action={<NewConnectionButton />}
+          />
+        ) : (
+          <EmptyState icon={Plug} title="Chưa có kết nối nào bạn được xem" description="Chủ sở hữu kết nối có thể cấp quyền cho bạn ở trang này." />
+        ))}
 
       {connections.map((c) => {
         const extra = extras.find((e) => e.id === c.id);
@@ -73,6 +115,12 @@ export default async function ZaloPersonalConnectionsPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
+                {c.isOwner && mayConnect && (
+                  <div className="grid gap-4 rounded-lg border bg-muted/20 p-3 md:grid-cols-2">
+                    <Checklist c={c} />
+                    <OwnerConnectionActions connectionId={c.id} connectionKey={c.connectionKey} status={c.status} workers={c.workers.map((w) => ({ id: w.id, workerKey: w.workerKey, status: w.status }))} />
+                  </div>
+                )}
                 <SituationCallout health={c.health} />
                 <div className="grid gap-x-8 md:grid-cols-2">
                   <dl className="divide-y text-sm">

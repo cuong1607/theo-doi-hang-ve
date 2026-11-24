@@ -648,6 +648,10 @@ function filesUnder(rel: string): string[] {
   return out;
 }
 const UI = [...filesUnder("src/components/zalo-personal"), ...filesUnder("src/app/(authenticated)/(zalo)"), ...filesUnder("src/app/api/zalo-personal")];
+// Phase 04 adds the Ask AI surface in ai/ folders on purpose; it has its own (stricter)
+// guards in src/lib/zalo-personal/ai/ai.test.ts. Everything else keeps the Phase 03 rules.
+const isAi = (f: string) => /[\\/]ai[\\/]/.test(f);
+const DASHBOARD = UI.filter((f) => !isAi(f));
 
 describe("static guards", () => {
   it("found the dashboard files", () => assert.ok(UI.length >= 20, String(UI.length)));
@@ -664,8 +668,8 @@ describe("static guards", () => {
     assert.doesNotMatch(store, /secret_encrypted|request_nonces|select\("\*"\)/);
   });
   it("every API route authenticates + authorizes through authorizeZaloApi and validates path ids", () => {
-    const routes = filesUnder("src/app/api/zalo-personal").filter((f) => f.endsWith("route.ts"));
-    assert.equal(routes.length, 11);
+    const routes = filesUnder("src/app/api/zalo-personal").filter((f) => f.endsWith("route.ts") && !isAi(f));
+    assert.equal(routes.length, 14);
     for (const f of routes) {
       const src = readFileSync(f, "utf8");
       assert.match(src, /authorizeZaloApi\(\)/, f);
@@ -674,9 +678,9 @@ describe("static guards", () => {
     }
   });
   it("every page gates through requireZaloPersonal", () => {
-    for (const f of filesUnder("src/app/(authenticated)/(zalo)").filter((x) => x.endsWith("page.tsx"))) assert.match(readFileSync(f, "utf8"), /requireZaloPersonal\(\)/, f);
+    for (const f of filesUnder("src/app/(authenticated)/(zalo)").filter((x) => x.endsWith("page.tsx") && !isAi(x))) assert.match(readFileSync(f, "utf8"), /requireZaloPersonal\((\{ setupPage: true \})?\)/, f);
   });
   it("no sending / AI / Zalo OA code is reachable from the dashboard", () => {
-    for (const f of UI) assert.doesNotMatch(readFileSync(f, "utf8"), /lib\/zalo\/|zca-js|sendMessage|anthropic|gemini|product-analyst/i, f);
+    for (const f of DASHBOARD) assert.doesNotMatch(readFileSync(f, "utf8"), /lib\/zalo\/|zca-js|sendMessage|anthropic|gemini|product-analyst/i, f);
   });
 });

@@ -61,6 +61,12 @@ export const PERMISSIONS = {
   // sees their own connection, everyone else (admin included) only what the
   // owner granted in zalo_personal_access_grants (src/lib/zalo-personal/dashboard/access.ts).
   "zalo_personal:use": OPERATORS,
+  // ZALO PERSONAL Phase 04: Ask AI / summaries over the conversations the user may
+  // already read (same data scope as zalo_personal:use; never widens it).
+  "zalo_personal:ai": OPERATORS,
+  // Self-service: create a Zalo Personal connection the user OWNS, issue / revoke its
+  // worker, pause / resume it. Never gives access to anybody else's connection.
+  "zalo_personal:connect": OPERATORS,
 
   // APP-SHELL-1: app-level access (which workspaces a role may enter). Navigation
   // only — every page inside still checks its own feature permission, and shop

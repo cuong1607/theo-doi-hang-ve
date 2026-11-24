@@ -5,6 +5,10 @@
 >
 > **Cập nhật Phase 02 (2026-11-24):** việc lưu tin Zalo Personal đã được triển khai trong các bảng riêng `zalo_personal_*` (migration `00073`) cho **cả 1-1 lẫn nhóm**. Điều này khác §5.1, nơi tin 1-1 dự kiến nằm trong `ai_conversations` / `ai_messages`; lý do ở [phase-02-integration.md](phase-02-integration.md) §1. `ai_conversations` / `ai_messages` và CHECK `channel` của chúng **không đổi**. Bảng `workspaces` / `ai_channel_access` (Q1, Q2) **chưa** được tạo: Phase 02 dùng `owner_user_id` của connection làm ranh giới cô lập.
 >
+> **Cập nhật Phase 04 (2026-11-24):** bộ nhớ AI (D1) được triển khai cho kênh Zalo Personal trong các bảng riêng (migration `00075`): `ai_conversation_summaries`, `ai_memory_facts`, `ai_memory_sources`, `ai_assistant_sessions` / `ai_assistant_turns`, `ai_request_usage`. Namespace bị CHECK giới hạn ở `personal_direct` / `personal_group`. Bảng `ai_memories` ở §5.1 không được tạo; Web / OA không đổi. Chi tiết ở [phase-04-ai-memory.md](phase-04-ai-memory.md).
+>
+> **Cập nhật self-service (2026-11-24):** migration `00076` cho phép người có quyền `zalo_personal:connect` (admin, staff) tự tạo kết nối Zalo Personal **do chính mình sở hữu**, cấp / thu hồi worker, tạm dừng / bật lại, có audit. Lưu nội dung tin 1-1 vẫn chỉ operator bật được. Chi tiết ở [self-service.md](self-service.md).
+>
 > Tài liệu này **chỉ là thiết kế**: chưa có code, chưa có migration, chưa chạm database production.
 > Ký hiệu: ✅ đã xác minh trong source · ⚠️ cần kiểm chứng · ❗ xung đột / cần chủ dự án chốt.
 

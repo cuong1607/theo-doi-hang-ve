@@ -307,7 +307,7 @@ export const GROUP_MODE_LABEL: Record<GroupRow["mode"], string> = {
 
 export const CONSENT_LABEL: Record<GroupRow["consentStatus"], string> = { none: "Chưa ghi nhận", granted: "Đã đồng ý", withdrawn: "Đã rút lại" };
 
-function conversationTitle(c: { conversationType: "user" | "group"; externalConversationId: string; groupName?: string | null }): string {
+export function conversationTitle(c: { conversationType: "user" | "group"; externalConversationId: string; groupName?: string | null }): string {
   if (c.conversationType === "group") return c.groupName?.trim() || `Nhóm ${maskId(c.externalConversationId)}`;
   return `Chat 1-1 ${maskId(c.externalConversationId)}`;
 }
@@ -318,7 +318,7 @@ async function loadScope(deps: DashboardDeps, actor: Actor): Promise<AccessScope
   return buildScope(actor, connections, grants);
 }
 
-function signalsOf(w: WorkerRow): SyncSignals {
+export function signalsOf(w: WorkerRow): SyncSignals {
   const s = w.sync;
   return {
     workerStatus: w.status,
@@ -338,6 +338,8 @@ const maxIso = (values: (string | null | undefined)[]): string | null => values.
 // ------------------------------------------------------------ view models
 
 export interface WorkerView {
+  /** worker row id (not a secret): used by the owner to revoke it */
+  id: string;
   workerKey: string;
   status: "active" | "revoked";
   version: string | null;
@@ -378,6 +380,7 @@ export interface ConnectionView {
 
 function connectionView(scope: AccessScope, c: ConnectionRow, workers: WorkerRow[], now: Date): ConnectionView {
   const ws: WorkerView[] = workers.map((w) => ({
+    id: w.id,
     workerKey: w.workerKey,
     status: w.status,
     version: w.sync?.workerVersion ?? null,
@@ -815,6 +818,11 @@ export const AUDIT_LABEL: Record<string, string> = {
   "group.consent_withdrawn": "Rút lại đồng ý (nhóm về Tắt)",
   "access.granted": "Cấp quyền truy cập",
   "access.revoked": "Thu hồi quyền truy cập",
+  "connection.created": "Tạo kết nối",
+  "connection.paused": "Tạm dừng kết nối",
+  "connection.resumed": "Bật lại kết nối",
+  "worker.issued": "Cấp worker",
+  "worker.revoked": "Thu hồi worker",
 };
 
 export async function listAudit(deps: DashboardDeps, actor: Actor, connectionId: string): Promise<Result<AuditRow[]>> {

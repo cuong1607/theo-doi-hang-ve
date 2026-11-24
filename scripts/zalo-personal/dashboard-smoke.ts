@@ -32,7 +32,7 @@ const XSS = `<script>alert("smoke")</script><img src=x onerror=alert(2)>`;
 let failures = 0;
 /** Server redirect (307) or, once streaming started, the RSC redirect marker; never the protected data. */
 const redirectsTo = (r: { status: number; location: string; text: string }, target: string) =>
-  ([307, 308].includes(r.status) && r.location.includes(target)) || (r.status === 200 && r.text.includes(`NEXT_REDIRECT;replace;${target};`) && !r.text.includes("Tin nhắn nhận hôm nay") && !r.text.includes("smoke-"));
+  ([307, 308].includes(r.status) && r.location.includes(target)) || (r.status === 200 && r.text.includes(`NEXT_REDIRECT;replace;${target};`) && !r.text.includes("Tin nhắn nhận hôm nay") && !r.text.includes(`smoke-${RUN}`));
 const check = (name: string, ok: boolean, detail = "") => {
   if (!ok) failures++;
   process.stdout.write(`${ok ? "PASS" : "FAIL"}  ${name}${detail && !ok ? `  (${detail})` : ""}\n`);
@@ -40,6 +40,7 @@ const check = (name: string, ok: boolean, detail = "") => {
 
 const createdUsers: string[] = [];
 let connectionId = "";
+const createdConnections: string[] = [];
 
 async function user(tag: string, role: "admin" | "staff" | "viewer"): Promise<{ id: string; cookie: string }> {
   const email = `zp3-smoke-${tag}-${RUN}@example.test`;
@@ -83,7 +84,8 @@ async function main() {
   const hubOwner = await get("/apps", owner.cookie);
   check("hub (owner): 'Trợ lý Zalo AI' card shown", hubOwner.status === 200 && hubOwner.text.includes("Trợ lý Zalo AI"), String(hubOwner.status));
   const hubStaff = await get("/apps", staff.cookie);
-  check("hub (staff without grant): card hidden", hubStaff.status === 200 && !hubStaff.text.includes("Trợ lý Zalo AI"));
+  // self-service: a staff member may set up their OWN connection, so the app is shown — with no data
+  check("hub (staff without grant): card shown for self-service setup", hubStaff.status === 200 && hubStaff.text.includes("Trợ lý Zalo AI"));
   const hubViewer = await get("/apps", viewer.cookie);
   check("hub (viewer): card hidden", hubViewer.status === 200 && !hubViewer.text.includes("Trợ lý Zalo AI"));
 
@@ -102,7 +104,9 @@ async function main() {
   check("connections page: no fake disconnect button (no command channel)", connPage.text.includes("không có nút ngắt kết nối"));
 
   const staffPage = await get("/apps/zalo/personal", staff.cookie);
-  check("page (staff without grant) → /forbidden, no data in the HTML", redirectsTo(staffPage, "/forbidden"), `${staffPage.status} ${staffPage.location}`);
+  check("page (staff without grant) → setup page, no data in the HTML", redirectsTo(staffPage, "/apps/zalo/personal/connections"), `${staffPage.status} ${staffPage.location}`);
+  const setup = await get("/apps/zalo/personal/connections", staff.cookie);
+  check("setup page (staff without grant): onboarding, none of the owner's data", setup.status === 200 && setup.text.includes("Thêm kết nối Zalo") && !setup.text.includes(`smoke-${RUN}`), String(setup.status));
   const viewerPage = await get("/apps/zalo/personal/groups", viewer.cookie);
   check("page (viewer) → /forbidden, no data in the HTML", redirectsTo(viewerPage, "/forbidden"), `${viewerPage.status} ${viewerPage.location}`);
   const anonPage = await get("/apps/zalo/personal");
@@ -140,11 +144,37 @@ async function main() {
   check("after grant: staff reads the group, 1 row + cursor", staffNow.status === 200 && JSON.parse(staffNow.text).data.rows.length === 1 && JSON.parse(staffNow.text).data.nextCursor !== null, staffNow.text.slice(0, 200));
   const hubStaff2 = await get("/apps", staff.cookie);
   check("after grant: card shown to staff", hubStaff2.text.includes("Trợ lý Zalo AI"));
+  // ---------------------------------------------------------------- self-service (00076)
+  const json = (b: unknown) => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(b) });
+  const viewerCreate = await get("/api/zalo-personal/connections", viewer.cookie, json({ directMode: "metadata" }));
+  check("self-service: viewer cannot create a connection (403)", viewerCreate.status === 403, String(viewerCreate.status));
+  const noOwner = await get("/api/zalo-personal/connections", staff.cookie, json({ directMode: "metadata", ownerUserId: owner.id }));
+  check("self-service: owner can't be chosen by the client (400)", noOwner.status === 400, String(noOwner.status));
+  const created = await get("/api/zalo-personal/connections", staff.cookie, json({ name: "Smoke tự kết nối", directMode: "metadata" }));
+  const newId = created.status === 200 ? (JSON.parse(created.text).data.id as string) : "";
+  if (newId) createdConnections.push(newId);
+  check("self-service: staff creates their own connection", created.status === 200 && !!newId, created.text);
+  const issued = await fetch(new URL(`/api/zalo-personal/connections/${newId}/workers`, BASE), { method: "POST", headers: { cookie: staff.cookie } });
+  const issuedText = await issued.text();
+  const secret = issued.status === 200 ? (JSON.parse(issuedText).data.secret as string) : "";
+  check("self-service: worker issued, secret returned once, no-store", issued.status === 200 && secret.length > 20 && (issued.headers.get("cache-control") ?? "").includes("no-store"), issuedText.slice(0, 200));
+  const ownerIssue = await get(`/api/zalo-personal/connections/${newId}/workers`, owner.cookie, { method: "POST" });
+  check("self-service: another user can't issue a worker for it (404)", ownerIssue.status === 404, String(ownerIssue.status));
+  const listAfter = await get("/api/zalo-personal/connections", staff.cookie);
+  const pageAfter = await get("/apps/zalo/personal/connections", staff.cookie);
+  check("self-service: the secret never appears again (API list / page)", !!secret && !listAfter.text.includes(secret) && !pageAfter.text.includes(secret));
+  const paused = await get(`/api/zalo-personal/connections/${newId}`, staff.cookie, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "disabled" }) });
+  check("self-service: owner pauses the connection", paused.status === 200, paused.text);
+
   const all = [ov, search, staffNow, connPage].map((r) => r.text).join("\n");
   check("no secret / token / cookie value in any response", !all.includes(PASSWORD) && !/secret_encrypted|service_role|sb-[a-z0-9]+-auth-token/i.test(all));
 }
 
 async function cleanup() {
+  for (const id of createdConnections) {
+    for (const t of ["zalo_personal_audit_log", "zalo_personal_sync_state", "zalo_personal_workers"]) await db.from(t).delete().eq("connection_id", id);
+    await db.from("zalo_personal_connections").delete().eq("id", id);
+  }
   if (connectionId) {
     for (const t of ["zalo_personal_audit_log", "zalo_personal_access_grants", "zalo_personal_messages", "zalo_personal_ingestion_events", "zalo_personal_conversations", "zalo_personal_groups", "zalo_personal_sync_state", "zalo_personal_workers"]) await db.from(t).delete().eq("connection_id", connectionId);
     await db.from("zalo_personal_connections").delete().eq("id", connectionId);

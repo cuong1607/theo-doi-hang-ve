@@ -119,3 +119,15 @@ export function vnStartOfDay(now: Date = new Date()): Date {
 export function vnDate(d: Date = new Date()): string {
   return new Date(d.getTime() + VN_OFFSET_MS).toISOString().slice(0, 10);
 }
+
+// ------------------------------------------------------------ self-service (00076)
+export const createConnectionBody = z
+  .object({
+    /** a label the user recognises; turned into the connection key (+ random suffix) */
+    name: z.string().trim().max(40).optional(),
+    /** 1-1 chats: nothing or metadata only. Storing 1-1 content stays an operator decision. */
+    directMode: z.enum(["off", "metadata"]),
+  })
+  .strict();
+
+export const connectionStatusBody = z.object({ status: z.enum(["active", "disabled"]) }).strict();
