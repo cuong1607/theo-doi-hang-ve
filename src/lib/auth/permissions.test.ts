@@ -14,6 +14,8 @@ const EXPECTED: Record<Role, Permission[]> = {
     "dashboard:view", "receipt:view", "invoice:view", "outstanding:view", "debt:view", "payment:view",
     "product:view", "supplier:view", "channel:view", "cost:view", "receipt:create", "receipt:edit", "invoice:create", "invoice:edit",
     "payment:create", "channel:map", "channel:sync", "return:receive",
+    // ZALO PERSONAL Phase 03 — necessary only; data grants decide what is visible
+    "zalo_personal:use", "app:zalo",
     ...APP_ENTRY,
   ],
   viewer: [

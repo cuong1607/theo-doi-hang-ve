@@ -35,3 +35,13 @@ export function getZaloPersonalIngestConfig(env: Env = process.env): ZaloPersona
 export function workerSecretContext(workerId: string): string {
   return `zalo_personal_workers:${workerId}:hmac`;
 }
+
+/**
+ * Phase 03 dashboard switch (ZALO_PERSONAL_DASHBOARD_ENABLED, default false).
+ * Off: the module is hidden from the hub / switcher, its pages answer 404 and
+ * its API answers 404 not_enabled — and no zalo_personal table is queried, so
+ * the code is safe to deploy before migrations 00073 / 00074 are applied.
+ */
+export function isZaloPersonalDashboardEnabled(env: Env = process.env): boolean {
+  return ["true", "1", "on", "yes"].includes((env.ZALO_PERSONAL_DASHBOARD_ENABLED ?? "").trim().toLowerCase());
+}

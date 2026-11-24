@@ -56,6 +56,12 @@ export const PERMISSIONS = {
   "return:disposition": ADMIN, // SHOPEE-6: return disposition (restock moves stock + reverses COGS → profit)
   "payout:reconcile": ADMIN, // SHOPEE-7: payout reconciliation notes / mismatch resolution (never changes amounts)
 
+  // ZALO PERSONAL Phase 03: may use the Zalo Personal dashboard at all. Only a
+  // NECESSARY condition — what is visible comes from data: the connection owner
+  // sees their own connection, everyone else (admin included) only what the
+  // owner granted in zalo_personal_access_grants (src/lib/zalo-personal/dashboard/access.ts).
+  "zalo_personal:use": OPERATORS,
+
   // APP-SHELL-1: app-level access (which workspaces a role may enter). Navigation
   // only — every page inside still checks its own feature permission, and shop
   // scope is unchanged. Mapped so no existing role loses a screen it had.
@@ -65,6 +71,7 @@ export const PERMISSIONS = {
   "app:creative": ALL,
   "app:marketing": ALL,
   "app:system": ADMIN, // users + notification settings were admin-only already
+  "app:zalo": OPERATORS, // ZALO PERSONAL Phase 03 — "Trợ lý Zalo AI"; hidden unless the user also owns a connection or holds a grant
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;

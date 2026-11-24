@@ -40,7 +40,7 @@ const hrefsOf = (groups: ReturnType<typeof visibleNav>) => groups.flatMap((g) =>
 
 test("registry: unique ids, every field set, one nav config per app, accent = id", () => {
   const ids = APP_REGISTRY.map((a) => a.id);
-  assert.deepEqual(ids, ["accounting", "shopee", "purchasing", "creative", "marketing", "system"]);
+  assert.deepEqual(ids, ["accounting", "shopee", "purchasing", "creative", "marketing", "zalo", "system"]);
   assert.equal(new Set(ids).size, ids.length);
   for (const app of APP_REGISTRY) {
     assert.ok(app.name && app.subtitle && app.description && app.icon && app.href.startsWith("/"), app.id);
@@ -109,14 +109,35 @@ test("app access: no existing role loses a screen; system app is admin-only and 
   assert.equal(canAccessApp("viewer", "system"), false);
   assert.equal(canAccessApp(null, "accounting"), false, "no role → nothing");
 
-  const admin = hubApps("admin");
+  // ZALO PERSONAL Phase 03: the shell always passes the data gate; without a connection / grant the app is hidden
+  const admin = hubApps("admin", { zalo: false });
   assert.deepEqual(admin.map((a) => [a.id, a.access]), [["accounting", "open"], ["shopee", "open"], ["purchasing", "soon"], ["creative", "soon"], ["marketing", "soon"], ["system", "open"]]);
   for (const role of ["staff", "viewer"] as const) {
-    const apps = hubApps(role);
+    const apps = hubApps(role, { zalo: false });
     assert.ok(!apps.some((a) => a.id === "system"), `${role}: internal app hidden`);
     assert.equal(apps.filter((a) => a.access === "open").length, 2);
   }
   assert.deepEqual(hubApps(null).filter((a) => a.access === "open"), [], "no access → the hub's empty state");
+});
+
+test("ZALO PERSONAL Phase 03: 'Trợ lý Zalo AI' needs the role AND the data gate; viewer never; old menus unchanged", () => {
+  assert.equal(canAccessApp("admin", "zalo"), true);
+  assert.equal(canAccessApp("staff", "zalo"), true);
+  assert.equal(canAccessApp("viewer", "zalo"), false);
+  for (const role of ["admin", "staff"] as const) {
+    assert.equal(hubApps(role, { zalo: true }).find((a) => a.id === "zalo")?.access, "open", role);
+    assert.equal(hubApps(role, { zalo: false }).some((a) => a.id === "zalo"), false, `${role}: hidden without connection / grant`);
+  }
+  assert.equal(hubApps("viewer", { zalo: true }).some((a) => a.id === "zalo"), false, "a gate never overrides the role");
+  assert.equal(appForPath("/apps/zalo/personal/conversations/abc"), "zalo");
+  assert.equal(appForPath("/api/zalo/webhook"), null, "Zalo OA webhook is not part of the app");
+  const nav = visibleNav("zalo", ctx({ role: "staff" }));
+  assert.deepEqual(hrefsOf(nav), ["/apps/zalo/personal", "/apps/zalo/personal/connections", "/apps/zalo/personal/groups", "/apps/zalo/personal/conversations", "/apps/zalo/personal/search", "/apps/zalo/personal/sync"]);
+  assert.deepEqual(visibleNav("zalo", ctx({ role: "viewer" })), []);
+  assert.equal(activeNavItemHref(nav, "/apps/zalo/personal/conversations/123"), "/apps/zalo/personal/conversations");
+  assert.equal(activeNavItemHref(nav, "/apps/zalo/personal"), "/apps/zalo/personal");
+  // the other apps' menus did not change
+  assert.deepEqual(hrefsOf(visibleNav("system", ctx())), ["/users", "/settings/notifications"]);
 });
 
 test("post-login: plain sign-in → /apps, deep links kept, open redirects refused", () => {

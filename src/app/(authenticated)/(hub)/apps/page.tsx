@@ -5,7 +5,7 @@ import { hubApps } from "@/lib/apps/registry";
 import { loadShopeeConnectionSummary } from "@/lib/apps/status";
 import { connectionSummaryText } from "@/lib/apps/sync-health";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { shellUser } from "@/components/app-shell/app-shell";
+import { appDataGates, shellUser } from "@/components/app-shell/app-shell";
 import { HubCard, type HubCardStatus } from "@/components/app-shell/hub-card";
 import { EmptyState } from "@/components/patterns/empty-state";
 
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 // Shopee connection count (2 tiny DB reads, no Shopee call, no analytics RPC).
 export default async function AppHubPage() {
   const user = await shellUser();
-  const apps = hubApps(user.role);
+  const apps = hubApps(user.role, await appDataGates());
   const shopeeOpen = apps.some((a) => a.id === "shopee" && a.access === "open");
   const shopee = shopeeOpen ? await loadShopeeConnectionSummary(createAdminClient()) : null;
 

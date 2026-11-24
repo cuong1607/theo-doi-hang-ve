@@ -19,6 +19,11 @@ import {
   Lightbulb,
   ListChecks,
   Megaphone,
+  MessageCircle,
+  MessagesSquare,
+  Activity,
+  Plug,
+  Search,
   PackagePlus,
   PackageSearch,
   Palette,
@@ -50,6 +55,7 @@ export const APP_ICONS: Record<AppIconName, LucideIcon> = {
   "shopping-cart": ShoppingCart,
   palette: Palette,
   megaphone: Megaphone,
+  "message-circle": MessageCircle,
   settings: Settings,
 };
 
@@ -87,6 +93,10 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   target: Target,
   pen: PenLine,
   calendar: CalendarDays,
+  plug: Plug,
+  messages: MessagesSquare,
+  search: Search,
+  activity: Activity,
 };
 
 /** The app's icon on its two-hue gradient tile (needs a [data-app] ancestor). */

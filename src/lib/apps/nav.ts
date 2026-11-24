@@ -14,7 +14,8 @@ export type NavIconName =
   | "shopping-bag" | "trending-up" | "undo" | "scale" | "banknote"
   | "megaphone" | "chart" | "siren" | "bot" | "store" | "heart-pulse"
   | "users" | "bell"
-  | "clipboard" | "list-checks" | "lightbulb" | "image" | "video" | "library" | "layout-template" | "target" | "pen" | "calendar";
+  | "clipboard" | "list-checks" | "lightbulb" | "image" | "video" | "library" | "layout-template" | "target" | "pen" | "calendar"
+  | "plug" | "messages" | "search" | "activity";
 
 export interface NavItem {
   title: string;
@@ -122,6 +123,21 @@ export const APP_NAV: Record<AppId, NavGroup[]> = {
         { title: "Nội dung", href: "/apps/marketing/content", icon: "pen", soon: true },
         { title: "Hiệu quả kênh", href: "/apps/marketing/performance", icon: "trending-up", soon: true },
         { title: "Lịch", href: "/apps/marketing/calendar", icon: "calendar", soon: true },
+      ],
+    },
+  ],
+  // ZALO PERSONAL Phase 03 — "Trợ lý Zalo AI → Zalo cá nhân". Every page and API
+  // re-checks the data scope on the server (owner / grants); the menu is UX only.
+  zalo: [
+    {
+      label: "Zalo cá nhân",
+      items: [
+        { title: "Tổng quan", href: "/apps/zalo/personal", icon: "dashboard", permission: "zalo_personal:use" },
+        { title: "Kết nối", href: "/apps/zalo/personal/connections", icon: "plug", permission: "zalo_personal:use" },
+        { title: "Nhóm", href: "/apps/zalo/personal/groups", icon: "users", permission: "zalo_personal:use" },
+        { title: "Hội thoại", href: "/apps/zalo/personal/conversations", icon: "messages", permission: "zalo_personal:use" },
+        { title: "Tìm tin nhắn", href: "/apps/zalo/personal/search", icon: "search", permission: "zalo_personal:use" },
+        { title: "Nhật ký đồng bộ", href: "/apps/zalo/personal/sync", icon: "activity", permission: "zalo_personal:use" },
       ],
     },
   ],

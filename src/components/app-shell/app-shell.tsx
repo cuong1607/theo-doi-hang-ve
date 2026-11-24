@@ -15,6 +15,7 @@ import { displayLogin } from "@/lib/auth/login-identifier";
 import { requireActiveUser } from "@/lib/auth/session";
 import { getShopeeFlags } from "@/lib/feature-flags";
 import { webAssistantAvailable } from "@/lib/product-analyst/access";
+import { zaloAppVisible } from "@/lib/zalo-personal/dashboard/server";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 
 import { DomainSidebar } from "./domain-sidebar";
@@ -26,11 +27,23 @@ export async function shellUser(): Promise<ShellUser> {
   return { displayName: profile.full_name || displayLogin(user.email ?? "") || "Người dùng", email: displayLogin(user.email ?? ""), role: profile.role };
 }
 
+/**
+ * Data-dependent app access, computed on the server (React-cached per request).
+ * Zalo Personal: shown only with its flag on AND a connection owned or a grant held;
+ * no query at all for roles without the permission, or with the flag off.
+ */
+export async function appDataGates(): Promise<Partial<Record<AppId, boolean>>> {
+  const { user, profile } = await requireActiveUser();
+  return { zalo: await zaloAppVisible(user.id, profile.role) };
+}
+
 export async function AppShell({ app: appId, children }: { app: AppId; children: React.ReactNode }) {
   const user = await shellUser();
   if (!canAccessApp(user.role, appId)) redirect("/forbidden");
+  const gates = await appDataGates();
+  if (gates[appId] === false) redirect("/forbidden");
   const flags = getShopeeFlags();
-  const apps = hubApps(user.role);
+  const apps = hubApps(user.role, gates);
   const app = apps.find((a) => a.id === appId)!;
   const groups = visibleNav(appId, { role: user.role, adsEnabled: flags.adsEnabled, legacyModulesEnabled: flags.legacyModulesEnabled, aiWebEnabled: webAssistantAvailable(user.role) });
 

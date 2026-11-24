@@ -10,10 +10,10 @@
 import { hasPermission, type Permission, type Role } from "../auth/permissions.ts";
 import { LEGACY_SHOPEE_PAGE_PREFIXES } from "../feature-flags.ts";
 
-export type AppId = "accounting" | "shopee" | "purchasing" | "creative" | "marketing" | "system";
+export type AppId = "accounting" | "shopee" | "purchasing" | "creative" | "marketing" | "zalo" | "system";
 
 /** Icon keys (mapped to lucide-react in components/app-shell/app-icons.tsx). */
-export type AppIconName = "warehouse" | "store-chart" | "shopping-cart" | "palette" | "megaphone" | "settings";
+export type AppIconName = "warehouse" | "store-chart" | "shopping-cart" | "palette" | "megaphone" | "message-circle" | "settings";
 
 export interface AppDefinition {
   id: AppId;
@@ -109,6 +109,23 @@ export const APP_REGISTRY: readonly AppDefinition[] = [
     routePrefixes: ["/apps/marketing"],
   },
   {
+    // ZALO PERSONAL Phase 03. Hidden unless ZALO_PERSONAL_DASHBOARD_ENABLED, the role
+    // may use it (admin / staff) AND the user owns a connection or holds a grant
+    // (data gate passed to hubApps by the server, see app-shell.tsx).
+    id: "zalo",
+    name: "Trợ lý Zalo AI",
+    subtitle: "Zalo cá nhân",
+    description: "Kết nối Zalo cá nhân, nhóm được phép theo dõi, lịch sử hội thoại và trạng thái đồng bộ.",
+    icon: "message-circle",
+    accent: "zalo",
+    href: "/apps/zalo/personal",
+    enabled: true,
+    permission: "app:zalo",
+    whenDenied: "hide",
+    statusSource: null,
+    routePrefixes: ["/apps/zalo"],
+  },
+  {
     id: "system",
     name: "Quản trị hệ thống",
     subtitle: "Người dùng & thông báo",
@@ -143,10 +160,11 @@ export type HubApp = AppDefinition & { access: "open" | "soon" | "locked" };
  * open (navigates), soon (visible, never navigates), locked (visible, no
  * access). Apps with whenDenied "hide" are left out without access.
  */
-export function hubApps(role: Role | null | undefined): HubApp[] {
+export function hubApps(role: Role | null | undefined, dataGates: Partial<Record<AppId, boolean>> = {}): HubApp[] {
   const out: HubApp[] = [];
   for (const app of APP_REGISTRY) {
-    const allowed = canAccessApp(role, app.id);
+    // dataGates: server-computed, data-dependent access (false = no access even if the role allows it)
+    const allowed = canAccessApp(role, app.id) && dataGates[app.id] !== false;
     if (!allowed && app.whenDenied === "hide") continue;
     out.push({ ...app, access: !allowed ? "locked" : app.enabled ? "open" : "soon" });
   }

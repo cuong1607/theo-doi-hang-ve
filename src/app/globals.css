@@ -303,6 +303,7 @@
 [data-app="creative"] { --app-h1: 300; --app-h2: 350; }
 [data-app="marketing"] { --app-h1: 48; --app-h2: 78; }
 [data-app="system"] { --app-h1: 265; --app-h2: 230; --app-c: 0.06; }
+[data-app="zalo"] { --app-h1: 245; --app-h2: 205; } /* blue / cyan (Zalo AI assistant) */
 
 /* Two-hue gradient (icon tiles, small accents). */
 @utility app-gradient {
