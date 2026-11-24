@@ -49,3 +49,18 @@ src/THEO DOI HANG VE.xlsx
 
 # read-only Shopee live payloads (scripts/shopee/live-readonly.ts)
 /.shopee-live/
+
+# Zalo Personal worker (services/zalo-personal-worker) — never commit
+# dependencies, build output, sessions, QR images, logs or local data.
+/services/*/node_modules/
+/services/*/dist/
+/services/*/.data/
+/services/*/logs/
+/services/*/*.log
+/services/zalo-personal-worker/.env
+# zca-js writes ./qr.png when no QR callback is given — never commit one
+qr.png
+session.json
+worker.lock
+# the generic ".env*" rule above also matches this template: keep it tracked
+!/services/zalo-personal-worker/.env.example

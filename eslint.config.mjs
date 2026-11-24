@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Zalo Personal worker: independent package (own tsconfig / tests); only its build output is skipped here
+    "services/*/dist/**",
   ]),
 ]);
 
