@@ -9,6 +9,7 @@
 // grants nothing beyond what each page already checks.
 import { redirect } from "next/navigation";
 
+import { systemAssistantAvailable } from "@/lib/ai-system/server";
 import { visibleNav } from "@/lib/apps/nav";
 import { canAccessApp, hubApps, type AppId } from "@/lib/apps/registry";
 import { displayLogin } from "@/lib/auth/login-identifier";
@@ -45,7 +46,7 @@ export async function AppShell({ app: appId, children }: { app: AppId; children:
   const flags = getShopeeFlags();
   const apps = hubApps(user.role, gates);
   const app = apps.find((a) => a.id === appId)!;
-  const groups = visibleNav(appId, { role: user.role, adsEnabled: flags.adsEnabled, legacyModulesEnabled: flags.legacyModulesEnabled, aiWebEnabled: webAssistantAvailable(user.role) });
+  const groups = visibleNav(appId, { role: user.role, adsEnabled: flags.adsEnabled, legacyModulesEnabled: flags.legacyModulesEnabled, aiWebEnabled: webAssistantAvailable(user.role), aiSystemEnabled: systemAssistantAvailable(user.role) });
 
   return (
     <div data-app={app.accent} data-app-shell={appId} className="contents">

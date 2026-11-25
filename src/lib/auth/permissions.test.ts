@@ -20,6 +20,8 @@ const EXPECTED: Record<Role, Permission[]> = {
     "zalo_personal:ai",
     // self-service: own connection only
     "zalo_personal:connect",
+    // PHASE 05 — Central AI System Assistant (each tool still needs its screen permission)
+    "ai_system:use",
     ...APP_ENTRY,
   ],
   viewer: [

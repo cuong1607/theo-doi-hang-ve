@@ -68,6 +68,12 @@ export const PERMISSIONS = {
   // worker, pause / resume it. Never gives access to anybody else's connection.
   "zalo_personal:connect": OPERATORS,
 
+  // PHASE 05: Central AI System Assistant (read-only questions about business data).
+  // Only a NECESSARY condition: every tool ALSO requires the feature permission of
+  // its screen (debt:view, receipt:view, …) and Shopee tools the existing AI shop
+  // grant — the assistant never sees more than the user's own screens.
+  "ai_system:use": OPERATORS,
+
   // APP-SHELL-1: app-level access (which workspaces a role may enter). Navigation
   // only — every page inside still checks its own feature permission, and shop
   // scope is unchanged. Mapped so no existing role loses a screen it had.

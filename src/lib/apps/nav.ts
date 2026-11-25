@@ -29,6 +29,8 @@ export interface NavItem {
   soon?: boolean;
   /** PA-4: "Sắp có" unless this capability is on for the user (then a normal link). */
   soonUnless?: "aiWeb";
+  /** PHASE 05: hidden unless this capability is on for the user (flag + permission). */
+  requires?: "aiSystem";
 }
 
 export interface NavGroup {
@@ -38,7 +40,13 @@ export interface NavGroup {
 
 export const APP_NAV: Record<AppId, NavGroup[]> = {
   accounting: [
-    { items: [{ title: "Tổng quan", href: "/dashboard", icon: "dashboard" }] },
+    {
+      items: [
+        { title: "Tổng quan", href: "/dashboard", icon: "dashboard" },
+        // PHASE 05 — Central AI System Assistant (AI_SYSTEM_ASSISTANT_ENABLED + ai_system:use)
+        { title: "Trợ lý AI", href: "/apps/accounting/assistant", icon: "bot", permission: "ai_system:use", requires: "aiSystem" },
+      ],
+    },
     {
       label: "Hàng về",
       items: [
@@ -160,6 +168,8 @@ export interface NavContext {
   legacyModulesEnabled: boolean;
   /** PA-4 web assistant available to this user (flags + rollout role) */
   aiWebEnabled?: boolean;
+  /** PHASE 05 system assistant available to this user (flag + ai_system:use) */
+  aiSystemEnabled?: boolean;
 }
 
 /** The app's nav for this role and these flags; empty groups dropped. */
@@ -170,6 +180,7 @@ export function visibleNav(app: AppId, ctx: NavContext): NavGroup[] {
       items: group.items.map((item) => (item.soonUnless === "aiWeb" ? { ...item, soon: !ctx.aiWebEnabled } : item)).filter(
         (item) =>
           (!item.permission || hasPermission(ctx.role, item.permission)) &&
+          (item.requires !== "aiSystem" || !!ctx.aiSystemEnabled) &&
           (item.flag !== "shopeeAds" || ctx.adsEnabled) &&
           (item.flag !== "legacy" || ctx.legacyModulesEnabled),
       ),
