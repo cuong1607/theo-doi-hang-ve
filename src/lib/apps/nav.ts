@@ -29,8 +29,8 @@ export interface NavItem {
   soon?: boolean;
   /** PA-4: "Sắp có" unless this capability is on for the user (then a normal link). */
   soonUnless?: "aiWeb";
-  /** PHASE 05: hidden unless this capability is on for the user (flag + permission). */
-  requires?: "aiSystem";
+  /** PHASE 05 / 06: hidden unless this capability is on for the user (flag + permission). */
+  requires?: "aiSystem" | "aiTasks";
 }
 
 export interface NavGroup {
@@ -150,6 +150,19 @@ export const APP_NAV: Record<AppId, NavGroup[]> = {
         { title: "Hỏi AI", href: "/apps/zalo/personal/ai", icon: "lightbulb", permission: "zalo_personal:ai" },
       ],
     },
+    // PHASE 06 — task detection & reminders (AI_TASKS_ENABLED); visibility per task = the source chat's scope
+    {
+      label: "Công việc",
+      items: [
+        { title: "Việc cần xác nhận", href: "/apps/zalo/personal/tasks?view=pending", icon: "clipboard", permission: "zalo_personal:use", requires: "aiTasks" },
+        { title: "Việc của tôi", href: "/apps/zalo/personal/tasks?view=mine", icon: "list-checks", permission: "zalo_personal:use", requires: "aiTasks" },
+        { title: "Quá hạn", href: "/apps/zalo/personal/tasks?view=overdue", icon: "siren", permission: "zalo_personal:use", requires: "aiTasks" },
+        { title: "Tất cả công việc", href: "/apps/zalo/personal/tasks", icon: "clipboard", permission: "zalo_personal:use", requires: "aiTasks" },
+        { title: "Thông báo", href: "/apps/zalo/personal/notifications", icon: "bell", permission: "zalo_personal:use", requires: "aiTasks" },
+        { title: "Lịch sử nhắc việc", href: "/apps/zalo/personal/tasks/reminders", icon: "history", permission: "zalo_personal:use", requires: "aiTasks" },
+        { title: "Cài đặt nhắc việc", href: "/apps/zalo/personal/tasks/preferences", icon: "calendar", permission: "zalo_personal:use", requires: "aiTasks" },
+      ],
+    },
   ],
   system: [
     {
@@ -170,6 +183,8 @@ export interface NavContext {
   aiWebEnabled?: boolean;
   /** PHASE 05 system assistant available to this user (flag + ai_system:use) */
   aiSystemEnabled?: boolean;
+  /** PHASE 06 task engine on (AI_TASKS_ENABLED + Zalo Personal dashboard) */
+  aiTasksEnabled?: boolean;
 }
 
 /** The app's nav for this role and these flags; empty groups dropped. */
@@ -181,6 +196,7 @@ export function visibleNav(app: AppId, ctx: NavContext): NavGroup[] {
         (item) =>
           (!item.permission || hasPermission(ctx.role, item.permission)) &&
           (item.requires !== "aiSystem" || !!ctx.aiSystemEnabled) &&
+          (item.requires !== "aiTasks" || !!ctx.aiTasksEnabled) &&
           (item.flag !== "shopeeAds" || ctx.adsEnabled) &&
           (item.flag !== "legacy" || ctx.legacyModulesEnabled),
       ),

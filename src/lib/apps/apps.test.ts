@@ -140,6 +140,25 @@ test("ZALO PERSONAL Phase 03: 'Trợ lý Zalo AI' needs the role AND the data ga
   assert.deepEqual(hrefsOf(visibleNav("system", ctx())), ["/users", "/settings/notifications"]);
 });
 
+test("PHASE 06: 'Công việc' items only with AI_TASKS_ENABLED; exactly one active item for task pages", () => {
+  const nav = visibleNav("zalo", ctx({ role: "staff", aiTasksEnabled: true }));
+  const tasks = nav.find((g) => g.label === "Công việc")!;
+  assert.deepEqual(tasks.items.map((i) => i.href), [
+    "/apps/zalo/personal/tasks?view=pending",
+    "/apps/zalo/personal/tasks?view=mine",
+    "/apps/zalo/personal/tasks?view=overdue",
+    "/apps/zalo/personal/tasks",
+    "/apps/zalo/personal/notifications",
+    "/apps/zalo/personal/tasks/reminders",
+    "/apps/zalo/personal/tasks/preferences",
+  ]);
+  assert.equal(visibleNav("zalo", ctx({ role: "staff" })).some((g) => g.label === "Công việc"), false, "off by default");
+  assert.deepEqual(visibleNav("zalo", ctx({ role: "viewer", aiTasksEnabled: true })), []);
+  assert.equal(activeNavItemHref(nav, "/apps/zalo/personal/tasks", "view=overdue"), "/apps/zalo/personal/tasks?view=overdue");
+  assert.equal(activeNavItemHref(nav, "/apps/zalo/personal/tasks/2b1c", ""), "/apps/zalo/personal/tasks");
+  assert.equal(activeNavItemHref(nav, "/apps/zalo/personal/tasks/reminders", ""), "/apps/zalo/personal/tasks/reminders");
+});
+
 test("post-login: plain sign-in → /apps, deep links kept, open redirects refused", () => {
   assert.equal(safeNextPath(""), "/apps");
   assert.equal(safeNextPath("/shopee/ads"), "/shopee/ads");
