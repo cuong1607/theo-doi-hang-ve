@@ -72,11 +72,15 @@ export function getOutboundDeps(): OutboundDeps {
   return { ingest: getZaloPersonalIngestDeps(), config: getReplyConfig(), store: new SupabaseReplyStore(createAdminClient()) };
 }
 
-/** Pages: flags off → 404; otherwise the Phase 03 gate. */
-export async function requireReplyPage(): Promise<{ actor: Actor; deps: ReviewDeps }> {
+/**
+ * Pages: flags off → 404; otherwise the Phase 03 gate. `linkOnly` (settings
+ * page): a staff member without any Zalo data access still gets in — the page
+ * then only shows "link my Zalo" (every connection section is scoped and empty).
+ */
+export async function requireReplyPage(opts: { linkOnly?: boolean } = {}): Promise<{ actor: Actor; deps: ReviewDeps; linkOnly: boolean }> {
   if (!replyEnabled()) notFound();
-  const { actor } = await requireZaloPersonal();
-  return { actor, deps: getReviewDeps() };
+  const { actor, onboarding } = await requireZaloPersonal({ setupPage: opts.linkOnly === true });
+  return { actor, deps: getReviewDeps(), linkOnly: onboarding };
 }
 
 const json = (status: number, body: Record<string, unknown>) => NextResponse.json(body, { status, headers: { "Cache-Control": "no-store" } });

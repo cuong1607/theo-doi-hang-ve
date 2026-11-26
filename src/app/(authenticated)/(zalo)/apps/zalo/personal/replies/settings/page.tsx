@@ -18,8 +18,23 @@ const on = (b: boolean) => (b ? "BẬT" : "TẮT");
 // PHASE 04.5 — Reply Settings: draft-only / auto, limits, allowlist, block list,
 // pause, emergency stop, account linking. Enforced by the backend.
 export default async function ReplySettingsPage() {
-  const { actor, deps } = await requireReplyPage();
+  // a staff member without Zalo data access may still link their own Zalo here
+  const { actor, deps, linkOnly } = await requireReplyPage({ linkOnly: true });
   const s = unwrapReply(await getSettings(deps, actor));
+
+  if (linkOnly) {
+    return (
+      <PageContainer>
+        <PageHeader title="Liên kết Zalo với trợ lý" description="Liên kết tài khoản Zalo của bạn để nhắn hỏi trợ lý qua Zalo. Trợ lý trả lời theo đúng quyền của tài khoản CONGTRANGBEDDING này." />
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Liên kết tài khoản Zalo của tôi</CardTitle>
+          </CardHeader>
+          <CardContent>{s.canLink ? <LinkCodeCard identities={s.identities} /> : <p className="text-sm text-muted-foreground">Vai trò của bạn chưa được dùng trợ lý nên không cần liên kết.</p>}</CardContent>
+        </Card>
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer>

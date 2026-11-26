@@ -273,6 +273,19 @@ async function main() {
       const a = await op.request.post(`${BASE}/api/zalo-personal/replies/${ids.dmDraft}/actions`, { data: { action: "approve", version: 1 } });
       expect(a.status() === 404 || a.status() === 403, `action ${a.status()}`);
     });
+    await step("outsider (staff, no Zalo access): settings page = link my Zalo only; a code is issued", async () => {
+      await op.goto(`${BASE}/apps/zalo/personal/replies/settings`);
+      await settle(op);
+      expect(op.url().includes("/replies/settings"), `redirected to ${op.url()}`);
+      const text = await main$(op);
+      expect(text.includes("Liên kết tài khoản Zalo của tôi"), "link card shown");
+      expect(!text.includes("Dừng khẩn cấp") && !text.includes(`e2e-${TAG}`.slice(0, 32)), "no admin section, no other connection");
+      await op.getByRole("button", { name: "Tạo mã liên kết" }).click();
+      await op.locator("text=/LINK [A-Z2-9]{8}/").waitFor({ timeout: 20_000 });
+      await shot(op, "outsider-link-code");
+      const { count } = await db.from("ai_identity_link_codes").select("id", { count: "exact", head: true }).eq("internal_user_id", ids.outsider);
+      expect(count === 1, `code stored for the outsider (${count})`);
+    });
     await octx.close();
 
     await step("anonymous: reply API → 401; worker endpoint without signature → 401", async () => {

@@ -678,7 +678,8 @@ describe("static guards", () => {
     assert.match(tasksServer, /export async function requireTasksPage\(\)[\s\S]{0,300}await requireZaloPersonal\(\)/);
     const replyServer = readFileSync(path.join(ROOT, "src/lib/zalo-reply/server.ts"), "utf8");
     assert.match(replyServer, /export async function authorizeReplyApi\(\)[\s\S]{0,400}await authorizeZaloApi\(\)/);
-    assert.match(replyServer, /export async function requireReplyPage\(\)[\s\S]{0,300}await requireZaloPersonal\(\)/);
+    // linkOnly (settings page) = the Phase 03 onboarding gate (setupPage): still an active user with zalo_personal:use + connect
+    assert.match(replyServer, /export async function requireReplyPage\(opts: \{ linkOnly\?: boolean \} = \{\}\)[\s\S]{0,300}await requireZaloPersonal\(\{ setupPage: opts\.linkOnly === true \}\)/);
     for (const f of routes) {
       const src = readFileSync(f, "utf8");
       assert.match(src, /authorizeZaloApi\(\)|authorizeTasksApi\(\)|authorizeReplyApi\(\)/, f);
@@ -687,7 +688,7 @@ describe("static guards", () => {
     }
   });
   it("every page gates through requireZaloPersonal", () => {
-    for (const f of filesUnder("src/app/(authenticated)/(zalo)").filter((x) => x.endsWith("page.tsx") && !isAi(x))) assert.match(readFileSync(f, "utf8"), /requireZaloPersonal\((\{ setupPage: true \})?\)|requireTasksPage\(\)|requireReplyPage\(\)/, f);
+    for (const f of filesUnder("src/app/(authenticated)/(zalo)").filter((x) => x.endsWith("page.tsx") && !isAi(x))) assert.match(readFileSync(f, "utf8"), /requireZaloPersonal\((\{ setupPage: true \})?\)|requireTasksPage\(\)|requireReplyPage\((\{ linkOnly: true \})?\)/, f);
   });
   it("no sending / AI / Zalo OA code is reachable from the dashboard", () => {
     for (const f of DASHBOARD) assert.doesNotMatch(readFileSync(f, "utf8"), /lib\/zalo\/|zca-js|sendMessage|anthropic|gemini|product-analyst/i, f);
