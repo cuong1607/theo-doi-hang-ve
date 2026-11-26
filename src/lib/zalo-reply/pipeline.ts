@@ -50,8 +50,33 @@ const draft = (kind: DraftKind, text: string, askerUserId: string | null, extra:
   ...extra,
 });
 
-/** Decides the result for one claimed inbound row (no write). Exported for tests. */
+/** Auto mode is effective: system flag + this connection in 'auto'. */
+const autoMode = (deps: PipelineDeps, ctx: InboundContext) => deps.config.autoReplyEnabled && ctx.settings.replyMode === "auto";
+
+/**
+ * Decides the result for one claimed inbound row (no write). Exported for tests.
+ * Every draft kind passes the same auto-approval policy (the DB re-checks it).
+ */
 export async function decide(deps: PipelineDeps, ctx: InboundContext): Promise<StoreResultInput> {
+  const result = await decideDraft(deps, ctx);
+  if (!("draft" in result)) return result;
+  const payload = result.draft;
+  payload.autoApprove = autoApproveAllowed({
+    flagEnabled: deps.config.autoReplyEnabled,
+    replyMode: ctx.settings.replyMode,
+    allowlisted: ctx.allowlisted,
+    conversationType: ctx.conversationType,
+    groupMode: ctx.groupMode,
+    groupSendVerified: ctx.groupSendVerified,
+    directVerified: ctx.directVerified,
+    askerLinked: payload.askerUserId !== null,
+    kind: payload.kind,
+    responseStatus: payload.responseStatus,
+  });
+  return result;
+}
+
+async function decideDraft(deps: PipelineDeps, ctx: InboundContext): Promise<StoreResultInput> {
   const s = ctx.settings;
   if (ctx.connectionStatus !== "active") return { skip: "connection_disabled" };
   if (s.replyMode === "off") return { skip: "replies_off" };
@@ -75,7 +100,8 @@ export async function decide(deps: PipelineDeps, ctx: InboundContext): Promise<S
 
   // ---- identity: the SENDER, through a verified link only
   const identity = await resolvePersonalIdentity(deps.identity, ctx.connectionId, ctx.senderExternalId);
-  if (identity.status === "unlinked") return direct && s.unlinkedHelp ? { draft: draft("link_help", REPLY_TEXT.unlinkedHelp, null) } : { skip: "unlinked" };
+  // auto mode never answers strangers (a guidance draft would only wait for an approval nobody gives)
+  if (identity.status === "unlinked") return direct && s.unlinkedHelp && !autoMode(deps, ctx) ? { draft: draft("link_help", REPLY_TEXT.unlinkedHelp, null) } : { skip: "unlinked" };
   if (identity.status === "inactive") return direct ? { draft: draft("notice", REPLY_TEXT.inactive, null) } : { skip: "asker_inactive" };
   const actor = identity.actor;
 
@@ -128,19 +154,6 @@ export async function decide(deps: PipelineDeps, ctx: InboundContext): Promise<S
     if (!d.ok) payload = draft("notice", REPLY_TEXT.groupDenied, actor.userId, { pipeline: "system", responseStatus: "denied" });
     else payload = draft("ai_answer", d.text, actor.userId, { pipeline: "system", citations: d.citations, caveats: d.caveats, responseStatus: r.status, model: r.meta.model, requiredPermissions: d.requiredPermissions });
   }
-
-  payload.autoApprove = autoApproveAllowed({
-    flagEnabled: deps.config.autoReplyEnabled,
-    replyMode: s.replyMode,
-    allowlisted: ctx.allowlisted,
-    conversationType: ctx.conversationType,
-    groupMode: ctx.groupMode,
-    groupSendVerified: ctx.groupSendVerified,
-    directVerified: ctx.directVerified,
-    askerLinked: true,
-    kind: payload.kind,
-    responseStatus: payload.responseStatus,
-  });
   return { draft: payload };
 }
 

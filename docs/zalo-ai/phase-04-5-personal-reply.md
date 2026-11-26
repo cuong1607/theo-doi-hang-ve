@@ -2,7 +2,7 @@
 
 > Đọc kèm [phase-02-integration.md](phase-02-integration.md) (worker, ingestion có chữ ký), [phase-03-dashboard.md](phase-03-dashboard.md) (phạm vi quyền), [phase-04-ai-memory.md](phase-04-ai-memory.md) (Gemini, RAG, chính sách dữ liệu), [phase-05-system-assistant.md](phase-05-system-assistant.md) (trợ lý, System Tools, liên kết danh tính).
 > Code: `src/lib/zalo-reply/**`, `services/zalo-personal-worker/src/outbound/**`, migration `00079_zalo_personal_reply.sql`, rollback [phase-04-5-rollback.sql](phase-04-5-rollback.sql).
-> Trạng thái: chạy được ở local, mọi cờ **mặc định TẮT**. Chưa áp 00079 lên cloud, chưa deploy, **chưa gửi tin Zalo thật nào**.
+> Trạng thái: code đã lên `master` (09ab544), 00079 đã áp lên cloud (cron `zp-reply-tick` ngủ đông: chưa có Vault `zp_reply_tick_url`). Mọi cờ **mặc định TẮT**. **Chưa gửi tin Zalo thật nào**.
 
 Người dùng đã liên kết có thể hỏi bot qua chat 1-1, `@nhắc bot` (metadata) hoặc `/bot` trong nhóm. Hệ thống tạo **bản nháp**. Người có quyền duyệt (hoặc, với hội thoại thử nghiệm đã bật, tự động). Chỉ worker của đúng kết nối gửi tin, sau khi database kiểm tra lại mọi điều kiện ngay trước lúc gửi.
 
@@ -277,3 +277,32 @@ Test tự động chỉ dùng mock adapter và `FakeAiProvider`. **Không gọi 
 | 3. Gỡ schema (**chỉ khi chủ dự án duyệt**) | [phase-04-5-rollback.sql](phase-04-5-rollback.sql) (đã thử ở local: gỡ → áp lại) | Có: bản nháp, lịch sử gửi, audit, cài đặt |
 
 `send_verified_at` của nhóm (do tin đã gửi thật đặt) được giữ khi rollback. Nhóm đã ở `interactive` vẫn hợp lệ với ràng buộc Phase 02.
+
+## 15. Phase 04.5.1 — Realtime + tự trả lời 1-1 (26/11/2026)
+
+Sau buổi test thật đầu tiên (2 tin duyệt tay đã gửi), chủ tài khoản quyết định: trả lời gần như tức thì, bỏ bước duyệt cho chat 1-1 với người đã liên kết. Code `src/lib/zalo-reply/{engine,pipeline,policy,config,server}.ts`, route `events`, worker `outbound/service.ts`, migration `00080_zalo_personal_reply_realtime_auto.sql`.
+
+**Realtime**
+
+| Chặng | Trước | Sau |
+|---|---|---|
+| Server quét tin mới | cron mỗi phút (trung bình ~30 giây) | `after()` ngay trong request `events` khi batch có tin được lưu; cron vẫn chạy làm lưới an toàn |
+| Độ trễ quét | 3 giây | `PERSONAL_REPLY_SCAN_LAG_MS` = 1,5 giây |
+| Kết nối mới (chưa có `scan_state`) | con trỏ = bây giờ | con trỏ = 1 phút trước (tin vừa kích hoạt không bị bỏ) |
+| Worker hỏi hàng gửi | 15 giây | có tin đến: claim ngay, rồi mỗi 1,5 giây trong 60 giây (`ZP_SEND_FAST_POLL_MS`, `ZP_SEND_FAST_WINDOW_MS`) |
+| Cooldown tối thiểu / hội thoại | 10 giây | 5 giây |
+
+Nhiều tin cùng lúc trong một instance được gộp: một lượt chạy và đúng một lượt bổ sung (`FastReplyScheduler`). Đo ở local (`scripts/e2e/zalo-reply-realtime.ts`, AI giả): server tạo xong bản nháp `auto` và giao job khoảng **2 giây** sau khi nhận tin. Với Gemini thật cộng thêm thời gian gọi model.
+
+**Tự trả lời (`PERSONAL_AUTO_REPLY_ENABLED` + kết nối ở chế độ `auto`)**
+
+| | 1-1 | Nhóm |
+|---|---|---|
+| Allowlist | không cần | bắt buộc (ghi chú đồng ý) |
+| Loại tin tự gửi | `ai_answer` (người hỏi đã liên kết, mọi trạng thái), `notice`, `link_result` | `ai_answer` trạng thái `answered` |
+| Điều kiện đường gửi | kết nối đã gửi thành công ≥ 1 tin duyệt tay | `interactive` + `send_verified_at` |
+| Người lạ (chưa liên kết) | không trả lời, không tạo bản nháp | không trả lời |
+
+DB vẫn kiểm tra lại ở `zp_reply_store_result` và `zp_reply_claim_outbound`. Mọi cổng khác giữ nguyên: dừng khẩn cấp, tạm dừng, chặn người gửi, profile còn hoạt động, giới hạn theo người / nhóm / ngày, giới hạn toàn hệ thống, worker giãn tối thiểu 5 giây giữa hai lần gửi.
+
+**Rollback**: chuyển kết nối về `draft_only` (hoặc tắt cờ) thì mọi bản nháp mới chờ duyệt lại, bản nháp `auto` còn trong hàng bị hủy lúc claim. Tắt realtime: `PERSONAL_REPLY_FAST_PATH=false`, `ZP_SEND_FAST_WINDOW_MS=0`.

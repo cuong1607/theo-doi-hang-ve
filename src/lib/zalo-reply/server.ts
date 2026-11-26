@@ -19,7 +19,7 @@ import { authorizeZaloApi, getDashboardDeps, requireZaloPersonal } from "@/lib/z
 import { getZaloPersonalIngestDeps } from "@/lib/zalo-personal/server";
 
 import { getReplyConfig } from "./config.ts";
-import type { EngineDeps } from "./engine.ts";
+import { FastReplyScheduler, runFastReply, type EngineDeps } from "./engine.ts";
 import type { OutboundDeps } from "./outbound.ts";
 import { httpStatusOf, type Actor, type Result, type ReviewDeps } from "./service.ts";
 import { SupabaseReplyStore } from "./supabase-store.ts";
@@ -48,6 +48,24 @@ export function getReplyEngineDeps(workerId: string, signal?: AbortSignal): Engi
     // counters / categories only — never message text, answers or ids of people
     log: (event, fields) => console.info(JSON.stringify({ source: "zalo-reply", event, ...fields })),
   };
+}
+
+function fastWorkerId(): string {
+  const region = (process.env.VERCEL_REGION ?? "local").toLowerCase().replace(/[^a-z0-9]/g, "");
+  return `reply-fast-${region}-${crypto.randomUUID().slice(0, 8)}`;
+}
+
+// one per server instance: a burst of ingests → one run (+ one follow-up)
+const fastScheduler = new FastReplyScheduler(() => runFastReply(() => getReplyEngineDeps(fastWorkerId()), { lagMs: getReplyConfig().scanLagMs }));
+
+/**
+ * Realtime: called (inside after()) by the events endpoint when an ingest
+ * stored at least one message. No-op unless replies + the fast path are on.
+ */
+export function triggerFastReply(): Promise<void> | null {
+  const config = getReplyConfig();
+  if (!config.fastPath || !replyEnabled()) return null;
+  return fastScheduler.trigger();
 }
 
 export function getOutboundDeps(): OutboundDeps {

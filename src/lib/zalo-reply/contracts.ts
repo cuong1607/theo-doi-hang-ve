@@ -64,7 +64,7 @@ export const settingsBody = z
     replyMode: z.enum(["off", "draft_only", "auto"]).optional(),
     directEnabled: z.boolean().optional(),
     unlinkedHelp: z.boolean().optional(),
-    cooldownSeconds: z.number().int().min(10).max(3600).optional(),
+    cooldownSeconds: z.number().int().min(5).max(3600).optional(),
     perUserPerHour: z.number().int().min(1).max(100).optional(),
     perGroupPerHour: z.number().int().min(1).max(200).optional(),
     dailySendLimit: z.number().int().min(1).max(500).optional(),

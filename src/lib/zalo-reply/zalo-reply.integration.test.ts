@@ -29,7 +29,7 @@ import { SupabaseZaloPersonalStore } from "../zalo-personal/supabase-store.ts";
 import { getReplyConfig, type ReplyConfig } from "./config.ts";
 import { runReplyTick, type EngineDeps } from "./engine.ts";
 import { handleOutbound } from "./outbound.ts";
-import { actOnDraft, control, getDraft, getSettings, listDrafts, saveSettings, type ReviewDeps } from "./service.ts";
+import { actOnDraft, control, createLinkCode, getDraft, getSettings, listDrafts, saveSettings, type ReviewDeps } from "./service.ts";
 import { SupabaseReplyStore } from "./supabase-store.ts";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -453,6 +453,44 @@ describe("outbound queue: claim / report (00079 gates)", () => {
     assert.equal((await db.from("zalo_personal_reply_drafts").select("status, error_category").eq("id", String(d!.id)).single()).data!.error_category, "auto_not_allowed");
     await control(review(auto), actorOf("owner"), { action: "disallow_conversation", connectionId: ids.c1, conversationId: ids.conv });
     await saveSettings(review(auto), actorOf("owner"), { connectionId: ids.c1, replyMode: "draft_only" });
+  });
+
+  it("00080 — 1-1 auto without allowlist: linked asker answered + LINK confirmation queued as 'auto'; stranger gets nothing; claim re-checks", async () => {
+    await settleQueue();
+    const auto = { PERSONAL_AUTO_REPLY_ENABLED: "true" };
+    // cooldown floor is now 5 s (DB CHECK + contract)
+    assert.ok((await saveSettings(review(auto), actorOf("owner"), { connectionId: ids.c1, replyMode: "auto", cooldownSeconds: 5, unlinkedHelp: true })).ok);
+    const tooLow = await db.from("zalo_personal_reply_settings").update({ cooldown_seconds: 4 }).eq("connection_id", ids.c1);
+    assert.ok(tooLow.error, "the DB refuses a cooldown under 5 s");
+    const code = await createLinkCode(review(auto), actorOf("manager"));
+    assert.ok(code.ok, JSON.stringify(code));
+    await ingest(ids.w1, ACC1, [ev("auto_dm", "user", U_ADMIN, U_ADMIN, "công nợ là gì?"), ev("auto_stranger", "user", U_STRANGER, U_STRANGER, "chào shop")]);
+    await runReplyTick(engine(auto));
+    // the LINK in a later tick (same sender: the order inside one tick is not defined)
+    await ingest(ids.w1, ACC1, [ev("auto_link", "user", U_STRANGER, U_STRANGER, `LINK ${code.data.code}`)]);
+    await runReplyTick(engine(auto));
+    const answer = await draftFor("auto_dm");
+    assert.deepEqual([answer?.kind, answer?.status, answer?.approval], ["ai_answer", "queued", "auto"], "the DM is NOT allowlisted and is still automatic");
+    assert.equal(await draftFor("auto_stranger"), null, "no guidance draft for a stranger in auto mode");
+    assert.equal((await inboundFor("auto_stranger"))?.reason, "unlinked");
+    const link = await draftFor("auto_link");
+    assert.deepEqual([link?.kind, link?.status, link?.approval], ["link_result", "queued", "auto"]);
+
+    // the claim re-checks (rate windows moved out of the way: earlier tests sent to these chats)
+    const old = new Date(Date.now() - 2 * 3_600_000).toISOString();
+    await db.from("zalo_personal_reply_drafts").update({ sent_at: old, sending_started_at: old }).eq("connection_id", ids.c1).in("status", ["sent", "delivery_unknown"]);
+    const first = await claim(ids.w1, ACC1, true);
+    assert.ok(first.ok && first.job, JSON.stringify(first));
+    assert.equal(first.job.threadType, "user");
+    assert.ok([answer!.id, link!.id].includes(first.job.draftId));
+    // flag off at send time → the remaining auto draft is cancelled, never sent
+    const second = await claim(ids.w1, ACC1, false);
+    assert.ok(second.ok && second.job === null);
+    const remaining = [answer!.id, link!.id].find((x) => x !== first.job!.draftId)!;
+    const r = (await db.from("zalo_personal_reply_drafts").select("status, error_category").eq("id", String(remaining)).single()).data!;
+    assert.deepEqual([r.status, r.error_category], ["cancelled", "auto_not_allowed"]);
+    await settleQueue();
+    await saveSettings(review(auto), actorOf("owner"), { connectionId: ids.c1, replyMode: "draft_only", cooldownSeconds: 60 });
   });
 
   it("settings page: owner only sees own connections; sent count today; flags reported", async () => {

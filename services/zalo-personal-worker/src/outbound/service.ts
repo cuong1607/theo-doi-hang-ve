@@ -35,6 +35,9 @@ export interface OutboundOptions {
   pollMs: number;
   timeoutMs: number;
   minIntervalMs: number;
+  /** realtime (nudge): poll this often for fastWindowMs after a message arrived */
+  fastPollMs?: number;
+  fastWindowMs?: number;
   now?: () => number;
   sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
 }
@@ -90,6 +93,8 @@ export class OutboundService {
   private current: Promise<TickOutcome> | null = null;
   private lastSendAt = 0;
   private failures = 0;
+  private fastUntil = 0;
+  private wake: (() => void) | null = null;
   readonly stats: OutboundStats = { sent: 0, failed: 0, unknown: 0, notSent: 0, lastSentAt: null, pausedReason: null, lastClaimReason: null };
 
   constructor(o: OutboundOptions) {
@@ -102,7 +107,6 @@ export class OutboundService {
 
   start(): void {
     if (this.loop) return;
-    const sleep = this.o.sleep ?? defaultSleep;
     this.loop = (async () => {
       while (!this.controller.signal.aborted) {
         let wait = this.o.pollMs;
@@ -111,14 +115,45 @@ export class OutboundService {
           const r = await this.current;
           if (r === "sent" || r === "not_sent" || r === "failed" || r === "unknown" || r === "duplicate") wait = this.o.minIntervalMs;
           else if (r === "backoff") wait = Math.min(this.o.pollMs * 2 ** Math.min(this.failures, 5), 10 * 60_000);
+          else if (this.fastActive()) wait = Math.min(wait, this.o.fastPollMs ?? this.o.pollMs);
         } catch (err) {
           this.o.logger.error("outbound_tick_failed", { error: safeError(err) });
         } finally {
           this.current = null;
         }
-        await sleep(wait, this.controller.signal);
+        await this.idle(wait);
       }
     })();
+  }
+
+  private fastActive(): boolean {
+    return this.now() < this.fastUntil;
+  }
+
+  /** Sleeps; stop() or nudge() ends the wait early. */
+  private async idle(ms: number): Promise<void> {
+    const sleep = this.o.sleep ?? defaultSleep;
+    const ac = new AbortController();
+    const onStop = () => ac.abort();
+    this.controller.signal.addEventListener("abort", onStop, { once: true });
+    this.wake = () => ac.abort();
+    try {
+      await sleep(ms, ac.signal);
+    } finally {
+      this.wake = null;
+      this.controller.signal.removeEventListener("abort", onStop);
+    }
+  }
+
+  /**
+   * Realtime: a message from someone else just arrived. Claim now and then
+   * every fastPollMs for fastWindowMs (the reply is drafted server-side within
+   * seconds). Every gate (minimum interval, pause, backend checks) still applies.
+   */
+  nudge(): void {
+    if (!this.o.fastWindowMs || this.controller.signal.aborted) return;
+    this.fastUntil = this.now() + this.o.fastWindowMs;
+    this.wake?.();
   }
 
   /** Graceful: no new claim; waits for the in-flight send (≤ its timeout) and its report. */

@@ -41,6 +41,10 @@ export interface SendConfig {
   timeoutMs: number;
   /** local brake: minimum gap between two sends from this account */
   minIntervalMs: number;
+  /** realtime: claim this often right after a message arrives … */
+  fastPollMs: number;
+  /** … for this long (0 = always the idle pollMs) */
+  fastWindowMs: number;
 }
 
 export interface WorkerConfig {
@@ -197,6 +201,8 @@ export function loadConfig(env: Env, opts: { platform?: NodeJS.Platform; workerD
       pollMs: int("ZP_SEND_POLL_MS", env.ZP_SEND_POLL_MS, 15_000, 2_000, 10 * 60_000),
       timeoutMs: int("ZP_SEND_TIMEOUT_MS", env.ZP_SEND_TIMEOUT_MS, 20_000, 3_000, 120_000),
       minIntervalMs: int("ZP_SEND_MIN_INTERVAL_MS", env.ZP_SEND_MIN_INTERVAL_MS, 5_000, 1_000, 10 * 60_000),
+      fastPollMs: int("ZP_SEND_FAST_POLL_MS", env.ZP_SEND_FAST_POLL_MS, 1_500, 500, 60_000),
+      fastWindowMs: int("ZP_SEND_FAST_WINDOW_MS", env.ZP_SEND_FAST_WINDOW_MS, 60_000, 0, 10 * 60_000),
     },
     connectionId,
     dataDir,

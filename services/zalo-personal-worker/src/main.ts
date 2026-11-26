@@ -106,11 +106,17 @@ async function cmdRun(config: WorkerConfig, logger: Logger): Promise<number> {
         throw err;
       }
     }
-    const sink: EventSink = ingest ? new CompositeSink([metadataSink, ingest.sink]) : metadataSink;
-    let currentSession: ZaloSession | null = null;
-
     // Phase 04.5: approved replies (off unless ZP_SEND_ENABLED=true; the backend flags + gates still apply)
     let outbound: OutboundService | null = null;
+    // realtime: a message from someone else → the outbound loop claims right away for a while
+    const nudgeSink: EventSink = {
+      async record(event) {
+        if (event.kind === "message" && !event.isSelf) outbound?.nudge();
+      },
+      async discovered() {},
+    };
+    const sink: EventSink = ingest ? new CompositeSink([metadataSink, ingest.sink, nudgeSink]) : metadataSink;
+    let currentSession: ZaloSession | null = null;
     if (config.send.enabled && ingest) {
       const journal = new SendJournal({ file: paths.sendJournalFile });
       const recovered = await journal.init();
@@ -126,6 +132,8 @@ async function cmdRun(config: WorkerConfig, logger: Logger): Promise<number> {
         pollMs: config.send.pollMs,
         timeoutMs: config.send.timeoutMs,
         minIntervalMs: config.send.minIntervalMs,
+        fastPollMs: config.send.fastPollMs,
+        fastWindowMs: config.send.fastWindowMs,
       });
     }
 
@@ -179,7 +187,7 @@ async function cmdRun(config: WorkerConfig, logger: Logger): Promise<number> {
     logger.info("worker_started", { connectionId: config.connectionId, allowedGroups: config.allowedGroupIds.size, discovery: config.discoveryToken !== null, directMessages: config.directMessages, protection: config.sessionProtection, ingest: config.ingest.enabled });
     if (ingest) print(`Đồng bộ về backend: BẬT (${new URL(config.ingest.baseUrl!).host}, worker "${config.ingest.workerKey}"). Outbox đang chờ: ${ingest.outbox.stats().depth}.`);
     if (outbound) {
-      print("GỬI TIN TRẢ LỜI: BẬT (ZP_SEND_ENABLED). Chỉ gửi tin đã được duyệt trên hệ thống; `npm run stop` để dừng ngay.");
+      print("GỬI TIN TRẢ LỜI: BẬT (ZP_SEND_ENABLED). Chỉ gửi tin hệ thống cho phép (đã duyệt, hoặc tự động khi kết nối ở chế độ Tự động); `npm run stop` để dừng ngay.");
       outbound.start();
     }
 

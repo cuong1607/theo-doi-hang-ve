@@ -50,7 +50,9 @@ export async function runReplyTick(deps: EngineDeps): Promise<{ status: "disable
   // ---- scan
   let claims: Awaited<ReturnType<typeof deps.store.scanClaim>> = [];
   try {
-    claims = await deps.store.scanClaim(deps.workerId, 120, 0, 10);
+    // a connection's FIRST scan starts 1 minute back: the message that triggered a
+    // realtime tick is already a second or two old. Older history is never answered.
+    claims = await deps.store.scanClaim(deps.workerId, 120, 1, 10);
   } catch {
     stats.errors++;
   }
@@ -111,4 +113,58 @@ export async function runReplyTick(deps: EngineDeps): Promise<{ status: "disable
 
   log("tick", { ...stats });
   return { status: stats.errors > 0 ? (stats.drafts + stats.scanned > 0 ? "partial" : "error") : "ok", stats };
+}
+
+// ------------------------------------------------------------------ realtime fast path
+// Run right after the worker delivered a stored message (events endpoint,
+// Next.js after()): wait out the scan lag, then one normal tick. When the scan
+// lease is busy (the cron or another fast tick is scanning) no connection is
+// claimed → one retry shortly after, so the message is not left to the cron.
+
+const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+export async function runFastReply(makeDeps: () => EngineDeps, opts: { lagMs: number; retryMs?: number; sleep?: (ms: number) => Promise<void> }): Promise<TickStats | null> {
+  const sleep = opts.sleep ?? defaultSleep;
+  await sleep(opts.lagMs + 250);
+  let last: TickStats | null = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const r = await runReplyTick(makeDeps());
+    last = r.stats;
+    if (r.status === "disabled" || r.stats.connections > 0) break;
+    await sleep(opts.retryMs ?? 1_500);
+  }
+  return last;
+}
+
+/**
+ * Coalesces triggers in one server instance: while a run is in flight, more
+ * triggers mean exactly ONE more run afterwards (never a pile of ticks for a
+ * burst of messages). trigger() returns the in-flight promise (for after()).
+ */
+export class FastReplyScheduler {
+  private running: Promise<void> | null = null;
+  private again = false;
+  private readonly run: () => Promise<unknown>;
+
+  constructor(run: () => Promise<unknown>) {
+    this.run = run;
+  }
+
+  trigger(): Promise<void> {
+    if (this.running) {
+      this.again = true;
+      return this.running;
+    }
+    this.running = (async () => {
+      try {
+        do {
+          this.again = false;
+          await this.run().catch(() => undefined);
+        } while (this.again);
+      } finally {
+        this.running = null;
+      }
+    })();
+    return this.running;
+  }
 }

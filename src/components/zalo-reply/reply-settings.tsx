@@ -44,7 +44,7 @@ function useAction() {
 }
 
 const NUMBERS: Array<{ key: keyof SettingsValue; label: string; min: number; max: number; hint: string }> = [
-  { key: "cooldownSeconds", label: "Giãn cách mỗi hội thoại (giây)", min: 10, max: 3600, hint: "Không gửi 2 tin vào cùng hội thoại trong khoảng này." },
+  { key: "cooldownSeconds", label: "Giãn cách mỗi hội thoại (giây)", min: 5, max: 3600, hint: "Không gửi 2 tin vào cùng hội thoại trong khoảng này. Muốn hỏi đáp liên tục thì đặt thấp (5–10 giây)." },
   { key: "perUserPerHour", label: "Tối đa mỗi người hỏi / giờ", min: 1, max: 100, hint: "Áp cho cả câu hỏi nhận vào và tin gửi ra." },
   { key: "perGroupPerHour", label: "Tối đa mỗi nhóm / giờ", min: 1, max: 200, hint: "Tin gửi ra trong một nhóm." },
   { key: "dailySendLimit", label: "Tối đa tin gửi / ngày (kết nối)", min: 1, max: 500, hint: "Tính theo ngày giờ Việt Nam." },
@@ -64,7 +64,7 @@ export function ReplySettingsForm({ connectionId, initial, autoAvailable }: { co
           [
             ["off", "Tắt", "Không tạo câu trả lời nào."],
             ["draft_only", "Chỉ bản nháp (mặc định)", "Mọi câu trả lời chờ người duyệt trước khi gửi."],
-            ["auto", "Tự động cho hội thoại thử nghiệm", autoAvailable ? "Chỉ hội thoại trong danh sách cho phép, nhóm ở chế độ Tương tác, người hỏi đã liên kết." : "Đang tắt ở cấp hệ thống (PERSONAL_AUTO_REPLY_ENABLED)."],
+            ["auto", "Tự động gửi, không cần duyệt", autoAvailable ? "Chat 1-1: trả lời ngay mọi người đã liên kết; người lạ không được trả lời. Nhóm: chỉ nhóm trong danh sách cho phép, ở chế độ Tương tác." : "Đang tắt ở cấp hệ thống (PERSONAL_AUTO_REPLY_ENABLED)."],
           ] as const
         ).map(([value, label, hint]) => (
           <label key={value} className="flex items-start gap-3 rounded-lg border p-3">

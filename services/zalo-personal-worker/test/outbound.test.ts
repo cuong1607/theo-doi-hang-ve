@@ -248,6 +248,49 @@ describe("OutboundService", () => {
     }
   });
 
+  it("realtime nudge: an incoming message wakes the idle loop and claims fast for a window, then back to the idle poll", async () => {
+    const h = harness();
+    const t = await tempDir();
+    const journal = new SendJournal({ file: path.join(t.dir, "outbound-journal.json") });
+    await journal.init();
+    const { logger } = captureLogger();
+    let clock = 0;
+    const svc = new OutboundService({ post: h.post, journal, connectionKey: "primary", accountId: () => OWN_ID, session: () => mockSession(), logger, pollMs: 60_000, timeoutMs: 1000, minIntervalMs: 0, fastPollMs: 10, fastWindowMs: 1_000, now: () => clock });
+    const claims = () => h.posts.filter((p) => p.path === CLAIM_PATH).length;
+    try {
+      svc.start();
+      await new Promise((r) => setTimeout(r, 40));
+      assert.equal(claims(), 1, "idle: one claim, then the long poll");
+      svc.nudge();
+      await new Promise((r) => setTimeout(r, 80));
+      const fast = claims();
+      assert.ok(fast >= 4, `fast window claims quickly (got ${fast})`);
+      clock = 5_000; // the window is over → back to the 60 s idle poll
+      await new Promise((r) => setTimeout(r, 40));
+      const settled = claims();
+      await new Promise((r) => setTimeout(r, 60));
+      assert.equal(claims(), settled, "no more fast claims after the window");
+    } finally {
+      await svc.stop();
+      await t.cleanup();
+    }
+  });
+
+  it("nudge without a fast window (ZP_SEND_FAST_WINDOW_MS=0) changes nothing", async () => {
+    const h = harness();
+    const { t, svc } = await setup(h);
+    try {
+      svc.start();
+      await new Promise((r) => setTimeout(r, 30));
+      svc.nudge();
+      await new Promise((r) => setTimeout(r, 30));
+      assert.equal(h.posts.filter((p) => p.path === CLAIM_PATH).length, 1);
+    } finally {
+      await svc.stop();
+      await t.cleanup();
+    }
+  });
+
   it("a corrupted journal file refuses to start (never sends blind)", async () => {
     const t = await tempDir();
     try {
@@ -270,5 +313,6 @@ describe("send config", () => {
     const c = loadConfig({ ...base, ZP_SEND_ENABLED: "true", ZP_INGEST_ENABLED: "true", ZP_INGEST_URL: "http://localhost:3000", ZP_WORKER_KEY: "win-primary" }, { platform: "linux", workerDir: "/w", exists: () => false });
     assert.equal(c.send.enabled, true);
     assert.equal(c.send.minIntervalMs, 5000);
+    assert.deepEqual([c.send.fastPollMs, c.send.fastWindowMs], [1500, 60_000], "realtime defaults");
   });
 });

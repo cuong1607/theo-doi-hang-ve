@@ -4,11 +4,15 @@
 //
 //   PERSONAL_REPLY_ENABLED       router + draft generation + dashboard (default OFF)
 //   PERSONAL_SEND_ENABLED        the worker may claim approved replies (default OFF)
-//   PERSONAL_AUTO_REPLY_ENABLED  allowlisted conversations of an 'auto' connection
-//                                may be sent without approval (default OFF)
+//   PERSONAL_AUTO_REPLY_ENABLED  an 'auto' connection sends without approval: 1-1
+//                                chats of linked users, allowlisted interactive
+//                                groups (default OFF; see policy.autoApproveAllowed)
 //   PERSONAL_REPLY_GLOBAL_DAILY_LIMIT  sends per VN day, all connections (default 100)
 //   PERSONAL_REPLY_MAX_PER_TICK  inbound questions processed per tick (default 5)
 //   PERSONAL_REPLY_LEASE_SECONDS outbound claim lease (default 120)
+//   PERSONAL_REPLY_FAST_PATH     run a reply tick right after the worker delivers a
+//                                stored message (default ON; the cron stays the safety net)
+//   PERSONAL_REPLY_SCAN_LAG_MS   a message is scanned once this old (default 1500)
 //
 // Per connection (DB, owner only): reply mode off / draft_only / auto, 1-1 on/off,
 // unlinked guidance, cooldown, per-user / per-group / daily limits, draft TTL,
@@ -35,7 +39,11 @@ export interface ReplyConfig {
   scanBatch: number;
   /** a message is scanned only once it is this old (concurrent commits) */
   scanLagMs: number;
+  /** tick immediately after an ingest that stored a message (realtime) */
+  fastPath: boolean;
 }
+
+const off = (raw: string | undefined) => ["false", "0", "off", "no"].includes((raw ?? "").trim().toLowerCase());
 
 export function getReplyConfig(env: Env = process.env): ReplyConfig {
   const enabled = on(env.PERSONAL_REPLY_ENABLED);
@@ -49,7 +57,9 @@ export function getReplyConfig(env: Env = process.env): ReplyConfig {
     maxPerTick: int(env.PERSONAL_REPLY_MAX_PER_TICK, 5, 1, 20),
     leaseSeconds: int(env.PERSONAL_REPLY_LEASE_SECONDS, 120, 30, 600),
     scanBatch: 200,
-    scanLagMs: 3_000,
+    // one ingest batch commits in well under a second; the lag only has to outlast it
+    scanLagMs: int(env.PERSONAL_REPLY_SCAN_LAG_MS, 1_500, 500, 10_000),
+    fastPath: enabled && !off(env.PERSONAL_REPLY_FAST_PATH),
   };
 }
 

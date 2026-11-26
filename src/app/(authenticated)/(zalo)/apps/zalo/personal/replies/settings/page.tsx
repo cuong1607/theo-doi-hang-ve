@@ -84,8 +84,8 @@ export default async function ReplySettingsPage() {
             <ReplySettingsForm connectionId={c.connectionId} autoAvailable={s.flags.autoReplyEnabled} initial={{ replyMode: c.settings.replyMode, directEnabled: c.settings.directEnabled, unlinkedHelp: c.settings.unlinkedHelp, cooldownSeconds: c.settings.cooldownSeconds, perUserPerHour: c.settings.perUserPerHour, perGroupPerHour: c.settings.perGroupPerHour, dailySendLimit: c.settings.dailySendLimit, maxPerConversationPerDay: c.settings.maxPerConversationPerDay, draftTtlMinutes: c.settings.draftTtlMinutes }} />
 
             <section className="grid gap-2">
-              <h3 className="text-sm font-semibold">Hội thoại thử nghiệm được tự động trả lời</h3>
-              <p className="text-sm text-muted-foreground">Nhóm: cần chế độ Tương tác (chỉ mở được sau khi một tin duyệt tay đã gửi thành công vào nhóm). Chat 1-1: cần một tin duyệt tay đã gửi thành công trước.</p>
+              <h3 className="text-sm font-semibold">Nhóm được tự động trả lời</h3>
+              <p className="text-sm text-muted-foreground">Danh sách này chỉ áp dụng cho nhóm: cần chế độ Tương tác (chỉ mở được sau khi một tin duyệt tay đã gửi thành công vào nhóm). Chat 1-1 với người đã liên kết được tự động trả lời mà không cần thêm vào đây, sau khi kết nối đã gửi thành công một tin duyệt tay.</p>
               {c.conversations.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Chưa có hội thoại nào.</p>
               ) : (

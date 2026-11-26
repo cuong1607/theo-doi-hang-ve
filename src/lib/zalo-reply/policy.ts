@@ -167,25 +167,37 @@ export interface AutoInput {
   conversationType: "user" | "group";
   groupMode: string | null;
   groupSendVerified: boolean;
-  /** a manually approved reply already reached this 1-1 chat (verified path) */
+  /** 1-1 sending path verified: this CONNECTION already delivered one manually approved reply (00080) */
   directVerified: boolean;
   askerLinked: boolean;
   kind: DraftKind;
   responseStatus: string | null;
 }
 
+/** 1-1 kinds that may be sent without approval: fixed templates or the linked asker's own answer. */
+export const DIRECT_AUTO_KINDS: readonly DraftKind[] = ["ai_answer", "notice", "link_result"];
+
 /**
- * May this draft skip human approval? All of: global flag, connection in
- * 'auto', conversation allowlisted (consent note), sender linked + active,
- * a verified sending path (group: interactive, which needs send_verified;
- * 1-1: one manual reply already delivered), an AI answer that actually
- * answered. Never for guidance / link / notices. The DB re-checks.
+ * May this draft skip human approval? Always: global flag + connection in
+ * 'auto'. Then
+ *   1-1 (00080)  a verified sending path for the connection; an AI answer only
+ *                for a linked asker (any status: "not found" is still an
+ *                answer); notices and LINK results (fixed templates). Never
+ *                link_help (strangers are not answered in auto mode). No
+ *                allowlist: a 1-1 chat only reaches here with a verified link.
+ *   group        allowlisted (consent note) + interactive + send verified +
+ *                linked asker + an AI answer that actually answered.
+ * The DB re-checks both (store_result + claim).
  */
 export function autoApproveAllowed(i: AutoInput): boolean {
-  if (!i.flagEnabled || i.replyMode !== "auto" || !i.allowlisted || !i.askerLinked) return false;
+  if (!i.flagEnabled || i.replyMode !== "auto") return false;
+  if (i.conversationType === "user") {
+    if (!i.directVerified || !DIRECT_AUTO_KINDS.includes(i.kind)) return false;
+    return i.kind !== "ai_answer" || i.askerLinked;
+  }
+  if (!i.allowlisted || !i.askerLinked) return false;
   if (i.kind !== "ai_answer" || i.responseStatus !== "answered") return false;
-  if (i.conversationType === "group") return i.groupMode === "interactive" && i.groupSendVerified;
-  return i.directVerified;
+  return i.groupMode === "interactive" && i.groupSendVerified;
 }
 
 // ------------------------------------------------------------------ reviewers

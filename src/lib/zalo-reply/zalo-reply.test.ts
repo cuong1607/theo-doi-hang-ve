@@ -24,7 +24,7 @@ import type { AiDeps, AiResult, AskResult } from "../zalo-personal/ai/service.ts
 import type { IngestDeps, WorkerRecord } from "../zalo-personal/ingest.ts";
 import { getReplyConfig } from "./config.ts";
 import { actionBody, controlBody, resultBody } from "./contracts.ts";
-import { runReplyTick } from "./engine.ts";
+import { FastReplyScheduler, runFastReply, runReplyTick } from "./engine.ts";
 import { afterReport, allowedActions, canPerform } from "./lifecycle.ts";
 import { handleOutbound } from "./outbound.ts";
 import { decide, processInbound, type PipelineDeps } from "./pipeline.ts";
@@ -165,6 +165,22 @@ describe("policy", () => {
     }
     assert.equal(autoApproveAllowed(auto({ conversationType: "user", groupMode: null, directVerified: false })), false, "1-1 without a verified manual reply");
     assert.equal(autoApproveAllowed(auto({ conversationType: "user", groupMode: null, directVerified: true })), true);
+  });
+
+  it("00080 — 1-1 auto: no allowlist; answers of linked askers (any status), notices and LINK results; never guidance for strangers", () => {
+    const dm = (o: Partial<AutoInput> = {}) => auto({ conversationType: "user", groupMode: null, groupSendVerified: false, allowlisted: false, directVerified: true, ...o });
+    assert.equal(autoApproveAllowed(dm()), true, "not allowlisted, still auto");
+    assert.equal(autoApproveAllowed(dm({ responseStatus: "not_found" })), true, "an honest 'not found' is still an answer");
+    assert.equal(autoApproveAllowed(dm({ kind: "notice", askerLinked: false, responseStatus: null })), true);
+    assert.equal(autoApproveAllowed(dm({ kind: "link_result", askerLinked: false, responseStatus: null })), true);
+    assert.equal(autoApproveAllowed(dm({ kind: "link_help", askerLinked: false, responseStatus: null })), false, "strangers never get an automatic reply");
+    assert.equal(autoApproveAllowed(dm({ askerLinked: false })), false, "an AI answer needs a linked asker");
+    assert.equal(autoApproveAllowed(dm({ directVerified: false })), false, "the connection must have delivered one manual reply");
+    assert.equal(autoApproveAllowed(dm({ flagEnabled: false })), false);
+    assert.equal(autoApproveAllowed(dm({ replyMode: "draft_only" })), false);
+    // groups unchanged: notices / LINK results never auto, allowlist still required
+    assert.equal(autoApproveAllowed(auto({ kind: "notice", responseStatus: null })), false);
+    assert.equal(autoApproveAllowed(auto({ allowlisted: false })), false);
   });
 
   it("reviewers: owner sees all; manage grant only group drafts; read grant nothing; role must hold the data permissions", () => {
@@ -447,6 +463,33 @@ describe("pipeline: identity & authorization (REPLY-03)", () => {
     assert.equal(draftOf(await decide(deps, ctxOf({ ...base, allowlisted: false }))).autoApprove, false);
     assert.equal(draftOf(await decide(deps, ctxOf({ ...base, settings: { ...DEFAULT_SETTINGS, replyMode: "draft_only" } }))).autoApprove, false);
   });
+  it("00080 — 1-1 in auto mode: linked asker answered without approval or allowlist; LINK result + notices too; strangers skipped", async () => {
+    const autoSettings = { ...DEFAULT_SETTINGS, replyMode: "auto" as const, unlinkedHelp: true };
+    const dm = { conversationType: "user" as const, groupMode: null, trigger: "direct" as const, mentions: [], allowlisted: false, directVerified: true, settings: autoSettings };
+    const { deps, id } = pipelineDeps({ auto: true });
+    id.links.set(`${CONN}|${SENDER}`, ADMIN);
+    const answer = draftOf(await decide(deps, ctxOf({ ...dm, text: "công nợ là gì?" })));
+    assert.equal(answer.kind, "ai_answer");
+    assert.equal(answer.autoApprove, true);
+    assert.equal(draftOf(await decide(deps, ctxOf({ ...dm, text: "công nợ là gì?", directVerified: false }))).autoApprove, false, "no verified manual send on the connection yet");
+    // the system flag off → nothing is automatic, even with reply_mode 'auto'
+    const flagOff = pipelineDeps({ auto: false });
+    flagOff.id.links.set(`${CONN}|${SENDER}`, ADMIN);
+    assert.equal(draftOf(await decide(flagOff.deps, ctxOf({ ...dm, text: "công nợ là gì?" }))).autoApprove, false);
+
+    // LINK confirmation (sender becomes linked) → automatic
+    const fresh = pipelineDeps({ auto: true });
+    const link = draftOf(await decide(fresh.deps, ctxOf({ ...dm, trigger: "link", text: "LINK ABCD2345" })));
+    assert.deepEqual([link.kind, link.autoApprove], ["link_result", true]);
+    // a stranger in auto mode: no guidance draft waiting in an inbox nobody reads
+    const stranger = pipelineDeps({ auto: true });
+    assert.deepEqual(await decide(stranger.deps, ctxOf({ ...dm, text: "xin chào" })), { skip: "unlinked" });
+    // a locked linked user → fixed notice, automatic
+    const locked = pipelineDeps({ auto: true });
+    locked.id.links.set(`${CONN}|${SENDER}`, OFF);
+    const n = draftOf(await decide(locked.deps, ctxOf({ ...dm, text: "công nợ?" })));
+    assert.deepEqual([n.kind, n.autoApprove], ["notice", true]);
+  });
   it("a pipeline error is retried after the lease, then recorded as failed (never crashes the tick)", async () => {
     const { deps } = pipelineDeps();
     const stored: StoreResultInput[] = [];
@@ -493,6 +536,64 @@ describe("engine tick", () => {
     assert.equal(results.length, 1);
     assert.equal(r.stats.drafts, 1);
     assert.equal(r.stats.expired, 1);
+  });
+});
+
+describe("realtime fast path (00080)", () => {
+  const emptyStore = (claims: () => number) =>
+    ({
+      recover: async () => ({ expired: 0, unknown: 0 }),
+      scanClaim: async () => (claims() > 0 ? [{ connectionId: CONN, zaloAccountId: BOT, cursorAt: NOW.toISOString(), cursorId: "00000000-0000-0000-0000-000000000000" }] : []),
+      settings: async () => ({ ...DEFAULT_SETTINGS }),
+      scanMessages: async () => [],
+      scanCommit: async () => ({ ok: true as const, queued: 0, skipped: 0 }),
+      scanRelease: async () => {},
+      claimInbound: async () => [],
+    }) as unknown as EngineStore;
+
+  it("waits out the scan lag, then ONE tick when the scan lease is free", async () => {
+    const { deps } = pipelineDeps();
+    const sleeps: number[] = [];
+    let ticks = 0;
+    const stats = await runFastReply(() => (ticks++, { ...deps, store: emptyStore(() => 1), workerId: "w-fast" }), { lagMs: 1500, sleep: async (ms) => void sleeps.push(ms) });
+    assert.equal(ticks, 1);
+    assert.equal(stats?.connections, 1);
+    assert.deepEqual(sleeps, [1750], "scan lag + margin before the first scan");
+  });
+  it("scan lease busy (cron scanning) → one retry, never a loop", async () => {
+    const { deps } = pipelineDeps();
+    let ticks = 0;
+    await runFastReply(() => (ticks++, { ...deps, store: emptyStore(() => 0), workerId: "w-fast" }), { lagMs: 0, sleep: async () => {} });
+    assert.equal(ticks, 2);
+  });
+  it("flag off → disabled tick, no retry", async () => {
+    const { deps } = pipelineDeps();
+    let ticks = 0;
+    await runFastReply(() => (ticks++, { ...deps, config: getReplyConfig({}), store: emptyStore(() => 0), workerId: "w-fast" }), { lagMs: 0, sleep: async () => {} });
+    assert.equal(ticks, 1);
+  });
+  it("a burst of triggers while a run is in flight → exactly one follow-up run", async () => {
+    let runs = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const s = new FastReplyScheduler(async () => {
+      runs++;
+      if (runs === 1) await gate;
+    });
+    const first = s.trigger();
+    for (let i = 0; i < 5; i++) void s.trigger();
+    release();
+    await first;
+    assert.equal(runs, 2);
+    await s.trigger();
+    assert.equal(runs, 3, "idle again → a new trigger runs");
+  });
+  it("config: fast path on with replies (opt-out), scan lag 1.5 s by default and bounded", () => {
+    assert.equal(getReplyConfig({ PERSONAL_REPLY_ENABLED: "true" }).fastPath, true);
+    assert.equal(getReplyConfig({ PERSONAL_REPLY_ENABLED: "true", PERSONAL_REPLY_FAST_PATH: "false" }).fastPath, false);
+    assert.equal(getReplyConfig({}).fastPath, false, "nothing runs while replies are off");
+    assert.equal(getReplyConfig({}).scanLagMs, 1500);
+    assert.equal(getReplyConfig({ PERSONAL_REPLY_SCAN_LAG_MS: "50" }).scanLagMs, 500);
   });
 });
 
