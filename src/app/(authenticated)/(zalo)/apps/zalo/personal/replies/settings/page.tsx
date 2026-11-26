@@ -40,7 +40,7 @@ export default async function ReplySettingsPage() {
     <PageContainer>
       <PageHeader
         title="Cài đặt trả lời AI"
-        description="Mặc định mọi câu trả lời chỉ là bản nháp chờ duyệt. Chỉ chủ kết nối đổi được cài đặt. Cờ hệ thống do quản trị cấu hình trên máy chủ."
+        description="Mặc định mọi câu trả lời chỉ là bản nháp chờ duyệt. Chỉ quản trị viên (chủ kết nối) đổi được cài đặt. Cờ hệ thống do quản trị cấu hình trên máy chủ."
         meta={
           <>
             <span>Trả lời AI: {on(s.flags.replyEnabled)}</span>
@@ -74,7 +74,9 @@ export default async function ReplySettingsPage() {
         </CardContent>
       </Card>
 
-      {s.connections.length === 0 && <Callout tone="info">Bạn không sở hữu kết nối Zalo cá nhân nào nên không có cài đặt để đổi.</Callout>}
+      {s.connections.length === 0 && (
+        <Callout tone="info">{actor.role === "admin" ? "Bạn không sở hữu kết nối Zalo cá nhân nào nên không có cài đặt để đổi." : "Chỉ quản trị viên được cấu hình trả lời AI (chế độ, tự động gửi, giới hạn, danh sách cho phép, chặn). Kết nối của bạn giữ mặc định an toàn: mọi câu trả lời chờ duyệt."}</Callout>
+      )}
       {s.connections.map((c) => (
         <Card key={c.connectionId}>
           <CardHeader>

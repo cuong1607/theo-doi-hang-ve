@@ -196,8 +196,11 @@ describe("policy", () => {
     assert.equal(canReview(manager, "staff", direct), false, "1-1 drafts: owner only");
     assert.equal(canReview(reader, "staff", group), false);
     assert.equal(canReview(manager, "staff", { ...group, requiredPermissions: ["ai_system:use", "user:manage"] }), false, "reviewer may not see data their role cannot");
-    assert.equal(canConfigure(owner, CONN), true);
-    assert.equal(canConfigure(manager, CONN), false);
+    assert.equal(canConfigure(owner, CONN, "admin"), true);
+    assert.equal(canConfigure(manager, CONN, "staff"), false);
+    // a STAFF member who owns a connection still cannot configure replies (admin-only)
+    const staffOwner = buildScope({ userId: STAFF, role: "staff" }, [{ id: CONN, ownerUserId: STAFF, status: "active" as const }], []);
+    assert.equal(canConfigure(staffOwner, CONN, "staff"), false);
   });
 });
 

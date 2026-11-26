@@ -222,7 +222,10 @@ export function canReview(scope: AccessScope, role: Role, d: ReviewTarget): bool
   return d.requiredPermissions.every((p) => hasPermission(role, p as Permission));
 }
 
-/** Settings, allowlist, blocks, pause: connection owner only. */
-export function canConfigure(scope: AccessScope, connectionId: string): boolean {
-  return scope.connections.get(connectionId)?.owner === true;
+/** Settings, allowlist, blocks, pause: an ADMIN who owns the connection. */
+export function canConfigure(scope: AccessScope, connectionId: string, role: Role): boolean {
+  // owner decision 2026-11-26: reply settings (mode, auto, limits, allowlist, blocks,
+  // pause) are ADMIN-only — a staff member owning a connection cannot change them
+  // (their connection keeps the safe defaults: drafts wait for approval).
+  return role === "admin" && scope.connections.get(connectionId)?.owner === true;
 }

@@ -502,6 +502,13 @@ describe("outbound queue: claim / report (00079 gates)", () => {
     assert.ok(m.ok && m.data.connections.length === 0, "a manage grant cannot configure");
     const x = await saveSettings(review(), actorOf("manager"), { connectionId: ids.c1, replyMode: "off" });
     assert.ok(!x.ok && x.error === "not_found");
+    // owner2 is STAFF and owns c2: reply settings are admin-only
+    const o2 = await getSettings(review(), actorOf("owner2"));
+    assert.ok(o2.ok && o2.data.connections.length === 0, "a staff owner sees no settings section");
+    const s2 = await saveSettings(review({ PERSONAL_AUTO_REPLY_ENABLED: "true" }), actorOf("owner2"), { connectionId: ids.c2, replyMode: "auto" });
+    assert.ok(!s2.ok && s2.error === "not_found", "a staff owner cannot switch their connection to auto");
+    const b2 = await control(review(), actorOf("owner2"), { action: "pause_sending", connectionId: ids.c2 });
+    assert.ok(!b2.ok && b2.error === "not_found");
   });
 });
 

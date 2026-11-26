@@ -248,7 +248,8 @@ export interface SettingsView {
 export async function getSettings(deps: ReviewDeps, actor: Actor): Promise<Result<SettingsView>> {
   const now = deps.now?.() ?? new Date();
   const scope = await scopeOf(deps, actor);
-  const owned = [...scope.connections.values()].filter((a) => a.owner).map((a) => a.connectionId);
+  // only what this actor may configure (admin + owner); staff see no connection section
+  const owned = [...scope.connections.values()].filter((a) => canConfigure(scope, a.connectionId, actor.role)).map((a) => a.connectionId);
   const vn = new Date(now.getTime() + 7 * 3_600_000);
   const dayStart = new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - 7 * 3_600_000);
   const [conns, settings, conversations, blocks, control, identities] = await Promise.all([
@@ -292,7 +293,7 @@ const ADMIN_ERROR: Record<string, { error: ErrorKind; message: string }> = {
 
 export async function saveSettings(deps: ReviewDeps, actor: Actor, input: SettingsInput): Promise<Result<{ saved: true }>> {
   const scope = await scopeOf(deps, actor);
-  if (!canConfigure(scope, input.connectionId)) return NOT_FOUND();
+  if (!canConfigure(scope, input.connectionId, actor.role)) return NOT_FOUND();
   if (input.replyMode === "auto" && !deps.config.autoReplyEnabled) return fail("conflict", "auto_disabled", "Tự động gửi đang tắt ở cấp hệ thống (PERSONAL_AUTO_REPLY_ENABLED). Chỉ có thể dùng chế độ nháp.");
   const { connectionId, ...rest } = input;
   const r = await deps.store.admin(actor.userId, "save_settings", connectionId, rest);
@@ -309,7 +310,7 @@ export async function control(deps: ReviewDeps, actor: Actor, input: ControlInpu
     if (scope.connections.size === 0) return fail("forbidden", "forbidden", "Bạn không có quyền với Zalo cá nhân.");
   } else if (input.action === "emergency_resume") {
     if (actor.role !== "admin") return fail("forbidden", "forbidden", "Chỉ quản trị viên mới được gỡ dừng khẩn cấp.");
-  } else if (!canConfigure(scope, input.connectionId)) return NOT_FOUND();
+  } else if (!canConfigure(scope, input.connectionId, actor.role)) return NOT_FOUND();
   if (input.action === "allow_conversation") {
     const conv = await deps.dashboard.conversation(input.conversationId);
     if (!conv || conv.connectionId !== input.connectionId) return NOT_FOUND();
