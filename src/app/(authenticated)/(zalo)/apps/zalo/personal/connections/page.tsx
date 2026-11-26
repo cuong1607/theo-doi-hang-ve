@@ -17,7 +17,7 @@ import { AUDIT_LABEL, listAudit, listConnections, listGrants, type ConnectionVie
 export const metadata: Metadata = { title: "Zalo cá nhân — Kết nối" };
 export const dynamic = "force-dynamic";
 
-const DM_LABEL = { off: "Không lưu", metadata: "Chỉ metadata (không lưu nội dung)", content: "Lưu nội dung" } as const;
+const DM_LABEL = { off: "Không lưu", metadata: "Chỉ metadata (không lưu nội dung)", linked: "Chỉ lưu nội dung của người đã liên kết", content: "Lưu nội dung mọi người" } as const;
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (

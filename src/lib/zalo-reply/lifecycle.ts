@@ -99,6 +99,7 @@ export const HOLD_LABEL: Record<string, string> = {
   user_rate_limited: "Người hỏi đã đạt giới hạn mỗi giờ",
   group_rate_limited: "Nhóm đã đạt giới hạn mỗi giờ",
   conversation_daily_cap: "Hội thoại đã đạt giới hạn trong ngày",
+  mode_no_send: "Kết nối đang ở chế độ Tắt / Chỉ bản nháp (không gửi)",
 };
 
 export const ERROR_LABEL: Record<string, string> = {
@@ -119,5 +120,19 @@ export const ERROR_LABEL: Record<string, string> = {
   sender_blocked: "Người hỏi bị chặn",
   asker_not_authorized: "Người hỏi không còn liên kết / bị khóa",
   approver_inactive: "Người duyệt bị khóa",
+  operator_cancelled: "Người vận hành đã hủy",
+  channel_disabled: "Kênh nhắc việc qua Zalo đã tắt",
+  task_closed: "Công việc đã hoàn thành / hủy",
   unknown: "Không rõ kết quả",
+};
+
+/** Claim reasons the worker gets when nothing is sent (operations page). */
+export const CLAIM_REASON_LABEL: Record<string, string> = {
+  emergency_stop: "Dừng khẩn cấp đang bật",
+  connection_send_off: "Kết nối chưa được bật gửi",
+  send_paused: "Kết nối đang tạm dừng gửi",
+  global_daily_limit: "Đã đạt giới hạn toàn hệ thống hôm nay",
+  daily_limit: "Kết nối đã đạt giới hạn hôm nay",
+  send_disabled: "Gửi tin đang tắt ở cấp hệ thống",
+  empty: "Không có tin chờ gửi",
 };

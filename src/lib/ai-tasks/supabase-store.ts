@@ -11,7 +11,7 @@ import { hasPermission, isRole } from "../auth/permissions.ts";
 import type { ConversationScope } from "../zalo-personal/dashboard/access.ts";
 import { SupabaseDashboardStore } from "../zalo-personal/dashboard/supabase-store.ts";
 import type { ReserveResult } from "../zalo-personal/ai/service.ts";
-import type { DeliveryRecord, ExternalChannel } from "./channels.ts";
+import { zaloPersonalRecipientRef, type DeliveryRecord, type ExternalChannel } from "./channels.ts";
 import type { ScannedMessage } from "./detect.ts";
 import type { TaskStatus } from "./lifecycle.ts";
 import type { InboxNotification } from "./messages.ts";
@@ -339,9 +339,12 @@ export class SupabaseTaskStore implements TaskEngineStore, TaskServiceStore {
   // ------------------------------------------------------------ external channels (no sender exists yet)
   async externalRecipient(userId: string, channel: ExternalChannel, connectionId: string | null): Promise<string | null> {
     if (channel === "zalo_personal") {
-      if (!connectionId) return null;
-      const r = check<Raw | null>("externalRecipient", await this.db.from("ai_channel_identities").select("external_user_id").eq("internal_user_id", userId).eq("connection_id", connectionId).eq("status", "active").limit(1).maybeSingle());
-      return r ? String(r.external_user_id) : null;
+      // PHASE 07: "<connection>:<zalo id>" from a VERIFIED identity of this user. The task's
+      // connection first; a digest (no task) uses the user's most recent link on an active connection.
+      let q = this.db.from("ai_channel_identities").select("connection_id, external_user_id, conn:zalo_personal_connections!inner(status)").eq("internal_user_id", userId).eq("status", "active").eq("conn.status", "active");
+      if (connectionId) q = q.eq("connection_id", connectionId);
+      const r = check<Raw | null>("externalRecipient", await q.order("linked_at", { ascending: false }).limit(1).maybeSingle());
+      return r ? zaloPersonalRecipientRef(String(r.connection_id), String(r.external_user_id)) : null;
     }
     const r = check<Raw | null>("externalRecipient", await this.db.from("zalo_user_links").select("zalo_user_id").eq("internal_user_id", userId).eq("status", "active").limit(1).maybeSingle());
     return r ? String(r.zalo_user_id) : null;
@@ -355,6 +358,9 @@ export class SupabaseTaskStore implements TaskEngineStore, TaskServiceStore {
   }
 
   async recordDelivery(notificationId: string, channel: ExternalChannel, record: DeliveryRecord): Promise<void> {
+    // queued (PHASE 07): the enqueue RPC already wrote 'pending' and the outbound queue
+    // trigger keeps it current — an upsert here could overwrite 'sending' / 'sent'
+    if (record.status === "pending") return;
     check(
       "recordDelivery",
       await this.db.from("notification_deliveries").upsert(

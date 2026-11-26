@@ -18,5 +18,5 @@ export function DraftStatusBadge({ status, label }: { status: string; label: str
   return <StatusBadge tone={TONE[status] ?? "neutral"}>{label}</StatusBadge>;
 }
 
-export const KIND_LABEL: Record<string, string> = { ai_answer: "Câu trả lời AI", link_help: "Hướng dẫn liên kết", link_result: "Kết quả liên kết", notice: "Thông báo" };
+export const KIND_LABEL: Record<string, string> = { ai_answer: "Câu trả lời AI", link_help: "Hướng dẫn liên kết", link_result: "Kết quả liên kết", notice: "Thông báo", reminder: "Nhắc việc" };
 export const PIPELINE_LABEL: Record<string, string> = { system: "Dữ liệu hệ thống (Trợ lý hệ thống)", memory: "Lịch sử hội thoại (Hỏi AI)", none: "Không dùng AI" };

@@ -121,6 +121,8 @@ async function seed() {
   await db.rpc("zp_grant_access", { p_actor: ids.owner, p_connection_id: ids.conn, p_grantee: ids.manager, p_scope: "connection", p_conversation_id: null, p_level: "manage", p_note: null });
   await db.from("ai_channel_identities").insert({ channel: "zalo_personal", connection_id: ids.conn, external_user_id: U_ADMIN, internal_user_id: ids.owner, verified_via: "link_code" });
   await tick(); // cursor = now: older messages are never answered
+  // PHASE 07 defaults are draft_only + sending OFF: the owner explicitly switches to approve-then-send
+  await db.from("zalo_personal_reply_settings").update({ reply_mode: "manual_approval", send_enabled: true }).eq("connection_id", ids.conn);
   await ingest([ev("group", GROUP, U_ADMIN, "@Bot công nợ là gì?", true), ev("user", U_ADMIN, U_ADMIN, "công nợ nhà cung cấp hôm nay")]);
   const r = await tick();
   if (r.status === "error") throw new Error(`tick ${JSON.stringify(r.stats)}`);
@@ -235,6 +237,24 @@ async function main() {
       expect(s.cooldown_seconds === 120, JSON.stringify(s));
     });
 
+    await step("PHASE 07 owner: 1-1 content mode 'only linked people' saved from the settings page", async () => {
+      await page.getByText("Chỉ người đã liên kết (khuyên dùng)").click();
+      await page.getByRole("button", { name: "Lưu chế độ nội dung 1-1" }).click();
+      await page.getByText("Đã đổi chế độ lưu nội dung 1-1.").waitFor({ timeout: 30_000 });
+      const c = (await db.from("zalo_personal_connections").select("direct_message_mode").eq("id", ids.conn).single()).data!;
+      expect(c.direct_message_mode === "linked", JSON.stringify(c));
+    });
+
+    await step("PHASE 07 owner: operations page — real health, queues, AI, reminders, audit", async () => {
+      await page.goto(`${BASE}/apps/zalo/personal/operations`);
+      await settle(page);
+      const body = await main$(page);
+      for (const s of ["Vận hành Zalo cá nhân", `Kết nối e2e-`, "Worker", "Trả lời & gửi", "AI trả lời", "Nhắc việc", "Nhật ký thao tác gần đây"]) expect(body.includes(s), `missing: ${s}`);
+      expect(/Hoạt động tốt|Cần chú ý|Mất kết nối|Cần đăng nhập lại|Chưa rõ/.test(body), "a health state is shown");
+      expect(!/zps_|session|cookie/i.test(body.replace(/Phiên Zalo/g, "")), "no secret / session shown");
+      await shot(page, "07-operations");
+    });
+
     await step("mobile 390px: inbox has no horizontal page overflow", async () => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto(`${BASE}/apps/zalo/personal/replies`);
@@ -254,10 +274,24 @@ async function main() {
       expect(list.status() === 200 && (j.data?.rows ?? []).length > 0 && j.data!.rows!.every((r) => r.conversation.type === "group"), `group only (${list.status()})`);
       const dm = await mp.request.get(`${BASE}/api/zalo-personal/replies/${ids.dmDraft}`);
       expect(dm.status() === 404, `dm ${dm.status()}`);
-      const save = await mp.request.patch(`${BASE}/api/zalo-personal/replies/settings`, { data: { connectionId: ids.conn, replyMode: "off" } });
+      const save = await mp.request.patch(`${BASE}/api/zalo-personal/replies/settings`, { data: { connectionId: ids.conn, replyMode: "disabled" } });
       expect(save.status() === 404, `settings ${save.status()}`);
+      const dmMode = await mp.request.post(`${BASE}/api/zalo-personal/replies/control`, { data: { action: "set_direct_mode", connectionId: ids.conn, directMessageMode: "content" } });
+      expect(dmMode.status() === 404, `1-1 content mode ${dmMode.status()}`);
       const resume = await mp.request.post(`${BASE}/api/zalo-personal/replies/control`, { data: { action: "emergency_resume" } });
       expect(resume.status() === 403, `resume ${resume.status()}`);
+    });
+    await step("PHASE 07 manager (staff): operations page → not found, nothing of it rendered", async () => {
+      // the (zalo) segment streams (loading.tsx), so notFound() arrives after a 200 header: assert the CONTENT
+      const r = await mp.goto(`${BASE}/apps/zalo/personal/operations`);
+      await settle(mp);
+      const body = await mp.locator("body").innerText();
+      expect(r?.status() === 404 || !body.includes("Vận hành Zalo cá nhân"), `operations heading rendered (${r?.status()})`);
+      expect(!body.includes("Heartbeat gần nhất") && !body.includes(`e2e-${TAG}`.slice(0, 20)), "no connection data");
+      await mp.goto(`${BASE}/apps/zalo/personal/replies`);
+      await settle(mp);
+      const shell = await mp.locator("body").innerText();
+      expect(shell.includes("Hộp duyệt trả lời") && !shell.includes("Vận hành"), "menu item hidden for staff");
     });
     await mctx.close();
 

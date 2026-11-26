@@ -67,6 +67,10 @@ export const PERMISSIONS = {
   // Self-service: create a Zalo Personal connection the user OWNS, issue / revoke its
   // worker, pause / resume it. Never gives access to anybody else's connection.
   "zalo_personal:connect": OPERATORS,
+  // PHASE 07: the Zalo Personal operations page + reply configuration (modes, auto,
+  // send switch, limits, 1-1 content mode). Admin-only (owner decision 2026-11-26);
+  // the data shown is still limited to the connections the admin owns.
+  "zalo_personal:operate": ADMIN,
 
   // PHASE 05: Central AI System Assistant (read-only questions about business data).
   // Only a NECESSARY condition: every tool ALSO requires the feature permission of

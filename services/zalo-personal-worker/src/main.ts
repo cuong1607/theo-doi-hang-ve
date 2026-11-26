@@ -38,7 +38,10 @@ import { OutboundService } from "./outbound/service.ts";
 
 const WORKER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-const EXIT = { ok: 0, unexpected: 1, config: 2, operator: 3, refused: 4 } as const;
+// PHASE 07: a supervisor (Windows wrapper / Docker) restarts ONLY on 1 (crash) and 5
+// (network: reconnect attempts exhausted). 3 = a person must act (Zalo refused / kicked
+// the session, no session): never restarted automatically. 2 = config, 4 = refused (lock / STOP).
+const EXIT = { ok: 0, unexpected: 1, config: 2, operator: 3, refused: 4, network: 5 } as const;
 
 const print = (line: string) => process.stdout.write(`${line}\n`);
 
@@ -195,7 +198,7 @@ async function cmdRun(config: WorkerConfig, logger: Logger): Promise<number> {
       const outcome = await run.run();
       if (outcome.state === "error") {
         print(explainError(outcome.reason));
-        return EXIT.operator;
+        return outcome.reason === "reconnect_exhausted" ? EXIT.network : EXIT.operator;
       }
       print("Worker đã dừng.");
       return EXIT.ok;
@@ -373,6 +376,21 @@ async function cmdStatus(config: WorkerConfig): Promise<number> {
   return EXIT.ok;
 }
 
+/**
+ * PHASE 07 (Docker HEALTHCHECK / Windows monitor): healthy = the health file was
+ * written recently AND the Zalo listener is connected. A live process alone is not
+ * healthy. Offline (reads the local health file only), prints one JSON line.
+ */
+async function cmdHealthcheck(config: WorkerConfig): Promise<number> {
+  const health = await readHealth(dataPaths(config.dataDir).healthFile);
+  const maxAgeMs = Math.max(3 * config.healthIntervalMs, 60_000);
+  const updated = health ? Date.parse(health.updatedAt) : Number.NaN;
+  const fresh = Number.isFinite(updated) && Date.now() - updated <= maxAgeMs;
+  const ok = fresh && health?.state === "connected";
+  print(JSON.stringify({ ok, state: health?.state ?? null, errorReason: health?.errorReason ?? null, fresh }));
+  return ok ? EXIT.ok : EXIT.unexpected;
+}
+
 async function main(argv: string[]): Promise<number> {
   const [command = "run", ...rest] = argv;
   let config: WorkerConfig;
@@ -397,6 +415,8 @@ async function main(argv: string[]): Promise<number> {
       return cmdSessionClear(config);
     case "status":
       return cmdStatus(config);
+    case "healthcheck":
+      return cmdHealthcheck(config);
     case "stop":
       await requestStop(dataPaths(config.dataDir).stopFile);
       print("Đã tạo lệnh DỪNG KHẨN CẤP. Worker đang chạy sẽ dừng trong vài giây; mọi lệnh kết nối bị chặn cho tới `npm run resume`.");

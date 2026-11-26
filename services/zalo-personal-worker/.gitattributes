@@ -1,0 +1,3 @@
+# shell scripts run inside the Linux container: always LF (a CRLF entrypoint fails with "/bin/sh^M")
+*.sh text eol=lf
+Dockerfile text eol=lf

@@ -4,7 +4,7 @@ import { MessageSquare, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Callout } from "@/components/patterns/callout";
 import { PageContainer, PageHeader } from "@/components/patterns/page-header";
-import { AllowlistToggle, BlockForm, EmergencyControl, LinkCodeCard, PauseControl, ReplySettingsForm, UnblockButton } from "@/components/zalo-reply/reply-settings";
+import { AllowlistToggle, BlockForm, DirectModeSelect, EmergencyControl, LinkCodeCard, PauseControl, ReplySettingsForm, UnblockButton } from "@/components/zalo-reply/reply-settings";
 import { ERROR_LABEL } from "@/lib/zalo-reply/lifecycle";
 import { requireReplyPage, unwrapReply } from "@/lib/zalo-reply/server";
 import { getSettings } from "@/lib/zalo-reply/service";
@@ -98,11 +98,21 @@ export default async function ReplySettingsPage() {
               <PauseControl connectionId={c.connectionId} paused={c.settings.sendPaused} />
             </div>
 
-            <ReplySettingsForm connectionId={c.connectionId} autoAvailable={s.flags.autoReplyEnabled} initial={{ replyMode: c.settings.replyMode, directEnabled: c.settings.directEnabled, unlinkedHelp: c.settings.unlinkedHelp, cooldownSeconds: c.settings.cooldownSeconds, perUserPerHour: c.settings.perUserPerHour, perGroupPerHour: c.settings.perGroupPerHour, dailySendLimit: c.settings.dailySendLimit, maxPerConversationPerDay: c.settings.maxPerConversationPerDay, draftTtlMinutes: c.settings.draftTtlMinutes }} />
+            <ReplySettingsForm
+              connectionId={c.connectionId}
+              autoAvailable={s.flags.autoReplyEnabled}
+              sendAvailable={s.flags.sendEnabled}
+              initial={{ replyMode: c.settings.replyMode, sendEnabled: c.settings.sendEnabled, autoDirect: c.settings.autoDirect, autoGroups: c.settings.autoGroups, directEnabled: c.settings.directEnabled, unlinkedHelp: c.settings.unlinkedHelp, cooldownSeconds: c.settings.cooldownSeconds, perUserPerHour: c.settings.perUserPerHour, perGroupPerHour: c.settings.perGroupPerHour, dailySendLimit: c.settings.dailySendLimit, maxPerConversationPerDay: c.settings.maxPerConversationPerDay, draftTtlMinutes: c.settings.draftTtlMinutes }}
+            />
 
             <section className="grid gap-2">
-              <h3 className="text-sm font-semibold">Nhóm được tự động trả lời</h3>
-              <p className="text-sm text-muted-foreground">Danh sách này chỉ áp dụng cho nhóm: cần chế độ Tương tác (chỉ mở được sau khi một tin duyệt tay đã gửi thành công vào nhóm). Chat 1-1 với người đã liên kết được tự động trả lời mà không cần thêm vào đây, sau khi kết nối đã gửi thành công một tin duyệt tay.</p>
+              <h3 className="text-sm font-semibold">Nội dung chat 1-1 được lưu</h3>
+              <DirectModeSelect connectionId={c.connectionId} mode={c.directMessageMode} />
+            </section>
+
+            <section className="grid gap-2">
+              <h3 className="text-sm font-semibold">Danh sách cho phép tự động</h3>
+              <p className="text-sm text-muted-foreground">Nhóm: cần chế độ Tương tác (chỉ mở được sau khi một tin duyệt tay đã gửi thành công vào nhóm) và bật &quot;Nhóm&quot; trong phạm vi tự động. Chat 1-1: chỉ cần khi phạm vi 1-1 là &quot;Chỉ các chat trong danh sách cho phép&quot;.</p>
               {c.conversations.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Chưa có hội thoại nào.</p>
               ) : (

@@ -19,6 +19,7 @@ import type { ReplyConfig } from "./config.ts";
 import type { ActionInput, ControlInput, SettingsInput } from "./contracts.ts";
 import { ACTION_LABEL, allowedActions, ERROR_LABEL, HOLD_LABEL, STATUS_LABEL, type DraftStatus, type ReviewAction } from "./lifecycle.ts";
 import { canConfigure, canReview, type DraftCitation } from "./policy.ts";
+import { classifyAi, classifyConnection, classifyReminders, type AiHealth, type AiSnapshot, type HealthState, type OpsSnapshot, type OpsStore, type ReminderHealth, type ReminderSnapshot, type SnapshotConnection } from "./ops.ts";
 import { SKIP_REASON_LABEL } from "./router.ts";
 import { DEFAULT_SETTINGS, type BlockRow, type ConversationOption, type DraftRow, type ReplySettings, type ReviewStore } from "./store.ts";
 
@@ -232,6 +233,8 @@ export interface ConnectionSettingsView {
   connectionId: string;
   connectionKey: string;
   settings: ReplySettings;
+  /** which 1-1 texts the server keeps for this connection (PHASE 07) */
+  directMessageMode: "off" | "metadata" | "linked" | "content";
   conversations: Array<ConversationOption & { title: string }>;
   blocks: Array<BlockRow & { label: string }>;
   sentToday: number;
@@ -270,6 +273,7 @@ export async function getSettings(deps: ReviewDeps, actor: Actor): Promise<Resul
       connectionId: id,
       connectionKey: keyOf.get(id) ?? id.slice(0, 8),
       settings: settings.get(id) ?? DEFAULT_SETTINGS,
+      directMessageMode: conns.find((c) => c.id === id)?.directMessageMode ?? "metadata",
       conversations: conversations.filter((c) => c.connectionId === id).map((c) => ({ ...c, title: conversationTitle(c) })),
       blocks: blocks.filter((b) => b.connectionId === id).map((b) => ({ ...b, label: maskId(b.externalUserId) ?? b.externalUserId })),
       sentToday: await deps.store.sentToday([id], dayStart),
@@ -294,7 +298,8 @@ const ADMIN_ERROR: Record<string, { error: ErrorKind; message: string }> = {
 export async function saveSettings(deps: ReviewDeps, actor: Actor, input: SettingsInput): Promise<Result<{ saved: true }>> {
   const scope = await scopeOf(deps, actor);
   if (!canConfigure(scope, input.connectionId, actor.role)) return NOT_FOUND();
-  if (input.replyMode === "auto" && !deps.config.autoReplyEnabled) return fail("conflict", "auto_disabled", "Tự động gửi đang tắt ở cấp hệ thống (PERSONAL_AUTO_REPLY_ENABLED). Chỉ có thể dùng chế độ nháp.");
+  if (input.replyMode === "auto_reply_allowlist" && !deps.config.autoReplyEnabled) return fail("conflict", "auto_disabled", "Tự động gửi đang tắt ở cấp hệ thống (PERSONAL_AUTO_REPLY_ENABLED). Chỉ có thể dùng chế độ duyệt tay hoặc bản nháp.");
+  if (input.sendEnabled === true && !deps.config.sendEnabled) return fail("conflict", "send_disabled", "Gửi tin đang tắt ở cấp hệ thống (PERSONAL_SEND_ENABLED). Không thể bật gửi cho kết nối.");
   const { connectionId, ...rest } = input;
   const r = await deps.store.admin(actor.userId, "save_settings", connectionId, rest);
   if (!r.ok) {
@@ -335,6 +340,54 @@ export async function createLinkCode(deps: ReviewDeps, actor: Actor): Promise<Re
 export async function revokeIdentity(deps: ReviewDeps, actor: Actor, id: string): Promise<Result<{ revoked: true }>> {
   const done = await deps.identity.revokePersonalIdentity(id, actor.userId, actor.userId);
   return done ? ok({ revoked: true }) : NOT_FOUND();
+}
+
+// ---------------------------------------------------------------- PHASE 07: operations (admin)
+
+export interface OpsDeps {
+  review: ReviewDeps;
+  ops: OpsStore & { recentAudit(connectionIds: string[], limit: number): Promise<Array<{ id: number; action: string; actorKind: string; actorName: string | null; createdAt: string; connectionId: string | null }>> };
+  ai: { enabled: boolean; provider: string; apiKeyConfigured: boolean; modelValid: boolean; model: string | null; tier: string; dataSharing: string };
+  tasks: { enabled: boolean; zaloChannelEnabled: boolean; killSwitch: boolean };
+}
+
+export interface OperationsView {
+  generatedAt: string;
+  control: { emergencyStop: boolean; lastTickAt: string | null; lastTickStatus: string | null; canResume: boolean };
+  flags: SettingsView["flags"];
+  connections: Array<SnapshotConnection & { health: { state: HealthState; reasons: string[] } }>;
+  ai: { health: AiHealth; snapshot: AiSnapshot | null; provider: string; model: string | null; tier: string; dataSharing: string };
+  reminders: { health: ReminderHealth; snapshot: ReminderSnapshot | null; zaloDeliveries24h: Record<string, number>; zaloChannelEnabled: boolean; killSwitch: boolean };
+  audit: Array<{ id: number; action: string; actorKind: string; actorName: string | null; createdAt: string; connectionKey: string | null }>;
+}
+
+/** The operations page: admin only (zalo_personal:operate), connections the admin OWNS; AI / reminder figures are system-wide counts. */
+export async function getOperations(deps: OpsDeps, actor: Actor): Promise<Result<OperationsView>> {
+  if (!hasPermission(actor.role, "zalo_personal:operate")) return NOT_FOUND();
+  const scope = await scopeOf(deps.review, actor);
+  const ids = [...scope.connections.values()].filter((a) => canConfigure(scope, a.connectionId, actor.role)).map((a) => a.connectionId);
+  const now = deps.review.now?.() ?? new Date();
+  const [raw, audit] = await Promise.all([deps.ops.opsSnapshot(ids), deps.ops.recentAudit(ids, 25)]);
+  const snap = raw as unknown as OpsSnapshot;
+  const ctx = { now, replyEnabled: deps.review.config.enabled, lastTickAt: snap.control?.lastTickAt ?? null, lastTickStatus: snap.control?.lastTickStatus ?? null };
+  const connections = (snap.connections ?? []).map((c) => ({ ...c, health: classifyConnection(c, ctx) }));
+  const keyOf = new Map(connections.map((c) => [c.id, c.key]));
+  const reminderSnap = (snap.reminders?.health ?? null) as ReminderSnapshot | null;
+  return ok({
+    generatedAt: now.toISOString(),
+    control: { emergencyStop: snap.control?.emergencyStop === true, lastTickAt: ctx.lastTickAt, lastTickStatus: ctx.lastTickStatus, canResume: actor.role === "admin" },
+    flags: { replyEnabled: deps.review.config.enabled, sendEnabled: deps.review.config.sendEnabled, autoReplyEnabled: deps.review.config.autoReplyEnabled, globalDailyLimit: deps.review.config.globalDailyLimit },
+    connections,
+    ai: { health: classifyAi(snap.ai, deps.ai), snapshot: snap.ai, provider: deps.ai.provider, model: deps.ai.model, tier: deps.ai.tier, dataSharing: deps.ai.dataSharing },
+    reminders: {
+      health: classifyReminders(reminderSnap, deps.tasks.enabled, now),
+      snapshot: reminderSnap,
+      zaloDeliveries24h: snap.reminders?.zaloDeliveries24h ?? {},
+      zaloChannelEnabled: deps.tasks.zaloChannelEnabled,
+      killSwitch: deps.tasks.killSwitch,
+    },
+    audit: audit.map((a) => ({ id: a.id, action: a.action, actorKind: a.actorKind, actorName: a.actorName, createdAt: a.createdAt, connectionKey: a.connectionId ? keyOf.get(a.connectionId) ?? null : null })),
+  });
 }
 
 export { SKIP_REASON_LABEL };

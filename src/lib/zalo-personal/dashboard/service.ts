@@ -39,7 +39,8 @@ export interface ConnectionRow {
   ownerName: string | null;
   zaloAccountId: string | null;
   status: "active" | "disabled";
-  directMessageMode: "off" | "metadata" | "content";
+  // 'linked' (PHASE 07): text only for chats of linked people + LINK commands
+  directMessageMode: "off" | "metadata" | "linked" | "content";
   lastHeartbeatAt: string | null;
   lastConnectedAt: string | null;
   lastErrorCategory: string | null;

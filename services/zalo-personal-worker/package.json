@@ -15,6 +15,7 @@
     "logout": "node --env-file-if-exists=.env src/main.ts logout",
     "session:clear": "node --env-file-if-exists=.env src/main.ts session-clear",
     "status": "node --env-file-if-exists=.env src/main.ts status",
+    "healthcheck": "node --env-file-if-exists=.env src/main.ts healthcheck",
     "stop": "node --env-file-if-exists=.env src/main.ts stop",
     "resume": "node --env-file-if-exists=.env src/main.ts resume",
     "test": "node --test --test-concurrency=1 \"test/**/*.test.ts\"",

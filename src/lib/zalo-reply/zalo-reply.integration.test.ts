@@ -146,8 +146,12 @@ before(async () => {
   ids.g1 = (await db.from("zalo_personal_groups").select("id").eq("connection_id", ids.c1).eq("external_group_id", G1).single()).data!.id;
   await db.rpc("zp_update_group", { p_actor: users.owner, p_connection_id: ids.c1, p_group_id: ids.g1, p_action: "grant_consent", p_mode: null, p_note: "nhóm đồng ý thử bot (test)" });
   await db.rpc("zp_update_group", { p_actor: users.owner, p_connection_id: ids.c1, p_group_id: ids.g1, p_action: "set_mode", p_mode: "mention_only", p_note: null });
-  // first tick initializes the scan cursors at now(): older messages are NEVER answered
+  // first tick initializes the scan cursors (1 minute back): older messages are NEVER answered
   await runReplyTick(engine());
+  // PHASE 07 defaults: a new connection is draft_only with sending OFF. These tests exercise
+  // the approve-then-send path, so the owner switched both connections explicitly.
+  const { error: setupErr } = await db.from("zalo_personal_reply_settings").update({ reply_mode: "manual_approval", send_enabled: true }).in("connection_id", [ids.c1, ids.c2]);
+  if (setupErr) throw new Error(setupErr.message);
 });
 
 after(async () => {
@@ -428,9 +432,9 @@ describe("outbound queue: claim / report (00079 gates)", () => {
   it("auto-reply only for an allowlisted, interactive, verified group of an 'auto' connection with the flag on", async () => {
     await settleQueue();
     const auto = { PERSONAL_AUTO_REPLY_ENABLED: "true" };
-    const refused = await saveSettings(review(), actorOf("owner"), { connectionId: ids.c1, replyMode: "auto" });
+    const refused = await saveSettings(review(), actorOf("owner"), { connectionId: ids.c1, replyMode: "auto_reply_allowlist" });
     assert.ok(!refused.ok && refused.code === "auto_disabled", "auto refused while the system flag is off");
-    assert.ok((await saveSettings(review(auto), actorOf("owner"), { connectionId: ids.c1, replyMode: "auto" })).ok);
+    assert.ok((await saveSettings(review(auto), actorOf("owner"), { connectionId: ids.c1, replyMode: "auto_reply_allowlist", autoGroups: true })).ok);
     const noNote = await control(review(auto), actorOf("owner"), { action: "allow_conversation", connectionId: ids.c1, conversationId: ids.conv, note: "ok" });
     assert.ok(!noNote.ok && noNote.code === "note_required", "the DB requires a consent note too");
     assert.ok((await control(review(auto), actorOf("owner"), { action: "allow_conversation", connectionId: ids.c1, conversationId: ids.conv, note: "Nhóm thử nghiệm đã đồng ý bot tự trả lời" })).ok);
@@ -452,14 +456,14 @@ describe("outbound queue: claim / report (00079 gates)", () => {
     assert.ok(r.ok && r.job === null);
     assert.equal((await db.from("zalo_personal_reply_drafts").select("status, error_category").eq("id", String(d!.id)).single()).data!.error_category, "auto_not_allowed");
     await control(review(auto), actorOf("owner"), { action: "disallow_conversation", connectionId: ids.c1, conversationId: ids.conv });
-    await saveSettings(review(auto), actorOf("owner"), { connectionId: ids.c1, replyMode: "draft_only" });
+    await saveSettings(review(auto), actorOf("owner"), { connectionId: ids.c1, replyMode: "manual_approval", autoGroups: false });
   });
 
   it("00080 — 1-1 auto without allowlist: linked asker answered + LINK confirmation queued as 'auto'; stranger gets nothing; claim re-checks", async () => {
     await settleQueue();
     const auto = { PERSONAL_AUTO_REPLY_ENABLED: "true" };
     // cooldown floor is now 5 s (DB CHECK + contract)
-    assert.ok((await saveSettings(review(auto), actorOf("owner"), { connectionId: ids.c1, replyMode: "auto", cooldownSeconds: 5, unlinkedHelp: true })).ok);
+    assert.ok((await saveSettings(review(auto), actorOf("owner"), { connectionId: ids.c1, replyMode: "auto_reply_allowlist", autoDirect: "all_linked", cooldownSeconds: 5, unlinkedHelp: true })).ok);
     const tooLow = await db.from("zalo_personal_reply_settings").update({ cooldown_seconds: 4 }).eq("connection_id", ids.c1);
     assert.ok(tooLow.error, "the DB refuses a cooldown under 5 s");
     const code = await createLinkCode(review(auto), actorOf("manager"));
@@ -490,7 +494,7 @@ describe("outbound queue: claim / report (00079 gates)", () => {
     const r = (await db.from("zalo_personal_reply_drafts").select("status, error_category").eq("id", String(remaining)).single()).data!;
     assert.deepEqual([r.status, r.error_category], ["cancelled", "auto_not_allowed"]);
     await settleQueue();
-    await saveSettings(review(auto), actorOf("owner"), { connectionId: ids.c1, replyMode: "draft_only", cooldownSeconds: 60 });
+    await saveSettings(review(auto), actorOf("owner"), { connectionId: ids.c1, replyMode: "manual_approval", autoDirect: "off", cooldownSeconds: 60 });
   });
 
   it("settings page: owner only sees own connections; sent count today; flags reported", async () => {
@@ -500,12 +504,12 @@ describe("outbound queue: claim / report (00079 gates)", () => {
     assert.ok(!s.data.connections.some((c) => c.connectionId === ids.c2));
     const m = await getSettings(review(), actorOf("manager"));
     assert.ok(m.ok && m.data.connections.length === 0, "a manage grant cannot configure");
-    const x = await saveSettings(review(), actorOf("manager"), { connectionId: ids.c1, replyMode: "off" });
+    const x = await saveSettings(review(), actorOf("manager"), { connectionId: ids.c1, replyMode: "disabled" });
     assert.ok(!x.ok && x.error === "not_found");
     // owner2 is STAFF and owns c2: reply settings are admin-only
     const o2 = await getSettings(review(), actorOf("owner2"));
     assert.ok(o2.ok && o2.data.connections.length === 0, "a staff owner sees no settings section");
-    const s2 = await saveSettings(review({ PERSONAL_AUTO_REPLY_ENABLED: "true" }), actorOf("owner2"), { connectionId: ids.c2, replyMode: "auto" });
+    const s2 = await saveSettings(review({ PERSONAL_AUTO_REPLY_ENABLED: "true" }), actorOf("owner2"), { connectionId: ids.c2, replyMode: "auto_reply_allowlist" });
     assert.ok(!s2.ok && s2.error === "not_found", "a staff owner cannot switch their connection to auto");
     const b2 = await control(review(), actorOf("owner2"), { action: "pause_sending", connectionId: ids.c2 });
     assert.ok(!b2.ok && b2.error === "not_found");

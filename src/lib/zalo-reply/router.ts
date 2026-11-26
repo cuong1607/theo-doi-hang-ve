@@ -40,7 +40,7 @@ export interface MentionMeta {
 }
 
 export interface RouterSettings {
-  replyMode: "off" | "draft_only" | "auto";
+  replyMode: "disabled" | "draft_only" | "manual_approval" | "auto_reply_allowlist";
   directEnabled: boolean;
 }
 
@@ -109,7 +109,7 @@ export function routeMessage(msg: ScannedMessage, botUid: string | null, setting
   const t = detectTrigger(msg, botUid);
   if (!t) return { record: false };
   const skip = (reason: string): RouteDecision => ({ record: true, trigger: t.trigger, decision: "skip", reason });
-  if (settings.replyMode === "off") return skip("replies_off");
+  if (settings.replyMode === "disabled") return skip("replies_off");
   if (msg.conversationType === "group") {
     if (msg.groupConsent !== "granted" || !msg.groupMode || msg.groupMode === "disabled") return skip("group_disabled");
     if (msg.groupMode === "monitor") return skip("group_monitor_only");

@@ -11,7 +11,9 @@ import "server-only";
 import { notFound } from "next/navigation";
 import { NextResponse } from "next/server";
 
+import { getAiConfig } from "@/lib/ai-assistant/config";
 import { getSystemAssistantDeps } from "@/lib/ai-system/server";
+import { getTaskEngineConfig } from "@/lib/ai-tasks/config";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isZaloPersonalDashboardEnabled } from "@/lib/zalo-personal/config";
 import { getAiDeps } from "@/lib/zalo-personal/ai/server";
@@ -21,7 +23,7 @@ import { getZaloPersonalIngestDeps } from "@/lib/zalo-personal/server";
 import { getReplyConfig } from "./config.ts";
 import { FastReplyScheduler, runFastReply, type EngineDeps } from "./engine.ts";
 import type { OutboundDeps } from "./outbound.ts";
-import { httpStatusOf, type Actor, type Result, type ReviewDeps } from "./service.ts";
+import { httpStatusOf, type Actor, type OpsDeps, type Result, type ReviewDeps } from "./service.ts";
 import { SupabaseReplyStore } from "./supabase-store.ts";
 
 export function replyEnabled(): boolean {
@@ -68,8 +70,27 @@ export function triggerFastReply(): Promise<void> | null {
   return fastScheduler.trigger();
 }
 
+/** PHASE 07 operations page: reads only (snapshot + audit); every button reuses the authorized reply APIs. */
+export function getOpsDeps(): OpsDeps {
+  const ai = getAiConfig();
+  const tasks = getTaskEngineConfig();
+  return {
+    review: getReviewDeps(),
+    ops: new SupabaseReplyStore(createAdminClient()),
+    ai: { enabled: ai.enabled, provider: ai.provider, apiKeyConfigured: ai.apiKeyConfigured, modelValid: ai.modelValid, model: ai.model, tier: ai.tier, dataSharing: ai.dataSharing },
+    tasks: { enabled: tasks.enabled && isZaloPersonalDashboardEnabled(), zaloChannelEnabled: tasks.external.zaloPersonalEnabled, killSwitch: tasks.external.killSwitch },
+  };
+}
+
 export function getOutboundDeps(): OutboundDeps {
-  return { ingest: getZaloPersonalIngestDeps(), config: getReplyConfig(), store: new SupabaseReplyStore(createAdminClient()) };
+  const ext = getTaskEngineConfig().external;
+  return {
+    ingest: getZaloPersonalIngestDeps(),
+    config: getReplyConfig(),
+    store: new SupabaseReplyStore(createAdminClient()),
+    // a queued reminder leaves only while its channel is still on at the moment of the claim
+    remindersEnabled: ext.zaloPersonalEnabled && !ext.killSwitch,
+  };
 }
 
 /**

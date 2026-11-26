@@ -4,6 +4,7 @@
 import { z } from "zod";
 
 import { DRAFT_STATUSES, REVIEW_ACTIONS } from "./lifecycle.ts";
+import { AUTO_DIRECT_SCOPES, DIRECT_MESSAGE_MODES, REPLY_MODES } from "./store.ts";
 
 const uuid = z.uuid();
 const zaloId = z.string().regex(/^[0-9]{1,32}$/);
@@ -61,7 +62,10 @@ export const actionBody = z
 export const settingsBody = z
   .object({
     connectionId: uuid,
-    replyMode: z.enum(["off", "draft_only", "auto"]).optional(),
+    replyMode: z.enum(REPLY_MODES).optional(),
+    sendEnabled: z.boolean().optional(),
+    autoDirect: z.enum(AUTO_DIRECT_SCOPES).optional(),
+    autoGroups: z.boolean().optional(),
     directEnabled: z.boolean().optional(),
     unlinkedHelp: z.boolean().optional(),
     cooldownSeconds: z.number().int().min(5).max(3600).optional(),
@@ -80,6 +84,8 @@ export const controlBody = z.discriminatedUnion("action", [
   z.object({ action: z.literal("disallow_conversation"), connectionId: uuid, conversationId: uuid }).strict(),
   z.object({ action: z.literal("block_user"), connectionId: uuid, externalUserId: zaloId, note: z.string().max(300).optional() }).strict(),
   z.object({ action: z.literal("unblock_user"), connectionId: uuid, externalUserId: zaloId }).strict(),
+  // which 1-1 texts the server keeps (PHASE 07: 'linked' = only chats of linked people + LINK commands)
+  z.object({ action: z.literal("set_direct_mode"), connectionId: uuid, directMessageMode: z.enum(DIRECT_MESSAGE_MODES) }).strict(),
   z.object({ action: z.literal("emergency_stop"), note: z.string().max(300).optional() }).strict(),
   z.object({ action: z.literal("emergency_resume"), note: z.string().max(300).optional() }).strict(),
 ]);

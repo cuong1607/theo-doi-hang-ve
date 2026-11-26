@@ -51,7 +51,7 @@ const draft = (kind: DraftKind, text: string, askerUserId: string | null, extra:
 });
 
 /** Auto mode is effective: system flag + this connection in 'auto'. */
-const autoMode = (deps: PipelineDeps, ctx: InboundContext) => deps.config.autoReplyEnabled && ctx.settings.replyMode === "auto";
+const autoMode = (deps: PipelineDeps, ctx: InboundContext) => deps.config.autoReplyEnabled && ctx.settings.replyMode === "auto_reply_allowlist" && ctx.settings.autoDirect !== "off";
 
 /**
  * Decides the result for one claimed inbound row (no write). Exported for tests.
@@ -64,6 +64,8 @@ export async function decide(deps: PipelineDeps, ctx: InboundContext): Promise<S
   payload.autoApprove = autoApproveAllowed({
     flagEnabled: deps.config.autoReplyEnabled,
     replyMode: ctx.settings.replyMode,
+    autoDirect: ctx.settings.autoDirect,
+    autoGroups: ctx.settings.autoGroups,
     allowlisted: ctx.allowlisted,
     conversationType: ctx.conversationType,
     groupMode: ctx.groupMode,
@@ -79,7 +81,7 @@ export async function decide(deps: PipelineDeps, ctx: InboundContext): Promise<S
 async function decideDraft(deps: PipelineDeps, ctx: InboundContext): Promise<StoreResultInput> {
   const s = ctx.settings;
   if (ctx.connectionStatus !== "active") return { skip: "connection_disabled" };
-  if (s.replyMode === "off") return { skip: "replies_off" };
+  if (s.replyMode === "disabled") return { skip: "replies_off" };
   if (ctx.blocked) return { skip: "sender_blocked" };
   // the group / 1-1 policy is re-read here (it may have changed since the scan)
   if (ctx.conversationType === "group") {

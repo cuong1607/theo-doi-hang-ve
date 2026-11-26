@@ -18,7 +18,10 @@ import { isZaloPersonalDashboardEnabled } from "@/lib/zalo-personal/config";
 import { authorizeZaloApi, requireZaloPersonal } from "@/lib/zalo-personal/dashboard/server";
 import type { DashboardDeps } from "@/lib/zalo-personal/dashboard/service";
 
-import { unavailableAdapter } from "./channels.ts";
+import { getReplyConfig } from "@/lib/zalo-reply/config";
+import { SupabaseReplyStore } from "@/lib/zalo-reply/supabase-store";
+
+import { unavailableAdapter, zaloPersonalQueueAdapter } from "./channels.ts";
 import { getTaskEngineConfig } from "./config.ts";
 import type { EngineDeps } from "./engine.ts";
 import { taskDemoScript } from "./fake-script.ts";
@@ -40,8 +43,13 @@ export function getEngineDeps(workerId: string, signal?: AbortSignal): EngineDep
     config: getTaskEngineConfig(),
     aiConfig,
     provider: () => (aiConfig.provider === "fake" ? new FakeAiProvider(taskDemoScript, "fake-demo") : new GeminiProvider({ apiKey: process.env.GEMINI_API_KEY, model: aiConfig.model, baseUrl: aiConfig.geminiBaseUrl })),
-    // Phase 04.5 (a verified Zalo sending path) does not exist: no real adapter is wired
-    adapters: { zalo_personal: unavailableAdapter("zalo_personal"), zalo_oa: unavailableAdapter("zalo_oa") },
+    // PHASE 07: Zalo Personal reminders go into the reply outbound queue (sent by the
+    // connection's worker after the claim gates). Available only while replies +
+    // sending are on system-wide; the channel flag / kill switch / preference gate it too.
+    adapters: {
+      zalo_personal: zaloPersonalQueueAdapter((i) => new SupabaseReplyStore(createAdminClient()).enqueueReminder(i), getReplyConfig().sendEnabled),
+      zalo_oa: unavailableAdapter("zalo_oa"),
+    },
     workerId,
     signal,
     // counters and categories only — never message text, titles or ids of people

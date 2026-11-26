@@ -23,7 +23,7 @@ import { generateWithRetry, AiProviderError, estimateTokens, type AiTextProvider
 import type { AiConfig } from "../ai-assistant/config.ts";
 import { sharingDecision } from "../ai-assistant/policy.ts";
 import { TaskAccess } from "./access.ts";
-import { dispatchExternal, externalGate, type ExternalChannel, type NotificationChannelAdapter } from "./channels.ts";
+import { dispatchExternal, externalExpiry, externalGate, type ExternalChannel, type NotificationChannelAdapter } from "./channels.ts";
 import { TASK_EXTRACT_PROMPT_VERSION, type TaskEngineConfig } from "./config.ts";
 import { detectCandidate, detectMentions, REMINDER_MARKER, type ScannedMessage } from "./detect.ts";
 import { buildExtractionPrompt, EXTRACTION_JSON_SCHEMA, rulesExtraction, validateExtraction, type ExtractionInput, type ExtractionOutcome } from "./extractor.ts";
@@ -433,7 +433,13 @@ async function external(deps: EngineDeps, notificationId: string, o: ClaimedOccu
       // a reminder is never posted into a group the engine reads (only to the user's own 1-1)
       wouldLoop: false,
     });
-    const record = await dispatchExternal(adapter, gate, { notificationId, userId: o.userId, text: `${REMINDER_MARKER} ${n.title}`, idempotencyKey: `${notificationId}:${channel}` });
+    const record = await dispatchExternal(adapter, gate, {
+      notificationId,
+      userId: o.userId,
+      text: `${REMINDER_MARKER} ${n.title}`,
+      idempotencyKey: `${notificationId}:${channel}`,
+      expiresAt: externalExpiry(n.kind, deps.now?.() ?? new Date(), deps.config.reminders),
+    });
     await deps.store.recordDelivery(notificationId, channel, record).catch(() => {});
   }
 }

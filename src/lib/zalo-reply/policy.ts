@@ -18,7 +18,8 @@ import { can, canUseModule, type AccessScope } from "../zalo-personal/dashboard/
 import { MAX_REPLY_CHARS } from "./config.ts";
 
 export type Pipeline = "system" | "memory";
-export type DraftKind = "ai_answer" | "link_help" | "link_result" | "notice";
+/** 'reminder' (PHASE 07) is only ever created by the reminder engine (zp_reply_enqueue_reminder), never by the pipeline */
+export type DraftKind = "ai_answer" | "link_help" | "link_result" | "notice" | "reminder";
 
 export interface DraftCitation {
   ref: string;
@@ -162,7 +163,10 @@ export const REPLY_TEXT = {
 
 export interface AutoInput {
   flagEnabled: boolean;
-  replyMode: "off" | "draft_only" | "auto";
+  replyMode: "disabled" | "draft_only" | "manual_approval" | "auto_reply_allowlist";
+  /** PHASE 07 scopes (00081): 1-1 nobody | allowlisted chats | every linked person; groups on/off */
+  autoDirect: "off" | "allowlist" | "all_linked";
+  autoGroups: boolean;
   allowlisted: boolean;
   conversationType: "user" | "group";
   groupMode: string | null;
@@ -179,23 +183,23 @@ export const DIRECT_AUTO_KINDS: readonly DraftKind[] = ["ai_answer", "notice", "
 
 /**
  * May this draft skip human approval? Always: global flag + connection in
- * 'auto'. Then
- *   1-1 (00080)  a verified sending path for the connection; an AI answer only
- *                for a linked asker (any status: "not found" is still an
- *                answer); notices and LINK results (fixed templates). Never
- *                link_help (strangers are not answered in auto mode). No
- *                allowlist: a 1-1 chat only reaches here with a verified link.
- *   group        allowlisted (consent note) + interactive + send verified +
- *                linked asker + an AI answer that actually answered.
+ * 'auto_reply_allowlist' (00081). Then
+ *   1-1    autoDirect 'all_linked', or 'allowlist' + this chat allowlisted;
+ *          a verified sending path for the connection; an AI answer only for
+ *          a linked asker (any status: "not found" is still an answer);
+ *          notices and LINK results (fixed templates). Never link_help.
+ *   group  autoGroups + allowlisted (consent note) + interactive + send
+ *          verified + linked asker + an AI answer that actually answered.
  * The DB re-checks both (store_result + claim).
  */
 export function autoApproveAllowed(i: AutoInput): boolean {
-  if (!i.flagEnabled || i.replyMode !== "auto") return false;
+  if (!i.flagEnabled || i.replyMode !== "auto_reply_allowlist") return false;
   if (i.conversationType === "user") {
+    if (i.autoDirect === "off" || (i.autoDirect === "allowlist" && !i.allowlisted)) return false;
     if (!i.directVerified || !DIRECT_AUTO_KINDS.includes(i.kind)) return false;
     return i.kind !== "ai_answer" || i.askerLinked;
   }
-  if (!i.allowlisted || !i.askerLinked) return false;
+  if (!i.autoGroups || !i.allowlisted || !i.askerLinked) return false;
   if (i.kind !== "ai_answer" || i.responseStatus !== "answered") return false;
   return i.groupMode === "interactive" && i.groupSendVerified;
 }
@@ -227,5 +231,5 @@ export function canConfigure(scope: AccessScope, connectionId: string, role: Rol
   // owner decision 2026-11-26: reply settings (mode, auto, limits, allowlist, blocks,
   // pause) are ADMIN-only — a staff member owning a connection cannot change them
   // (their connection keeps the safe defaults: drafts wait for approval).
-  return role === "admin" && scope.connections.get(connectionId)?.owner === true;
+  return hasPermission(role, "zalo_personal:operate") && scope.connections.get(connectionId)?.owner === true;
 }

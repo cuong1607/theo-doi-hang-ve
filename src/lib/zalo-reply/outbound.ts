@@ -20,6 +20,8 @@ export interface OutboundDeps {
   ingest: IngestDeps;
   config: ReplyConfig;
   store: OutboundStore;
+  /** PHASE 07: task reminders may leave through Zalo (ZALO_NOTIFY_PERSONAL_ENABLED and the kill switch off) — re-checked at every claim */
+  remindersEnabled?: boolean;
   log?: (event: string, fields: Record<string, unknown>) => void;
 }
 
@@ -48,7 +50,7 @@ export async function handleOutbound(kind: "claim" | "result", req: WorkerReques
     if (p.data.connectionKey !== worker.connectionKey) return fail(403, "connection_mismatch");
     // flags are enforced by the backend: a disabled feature answers "nothing to send"
     if (!deps.config.sendEnabled) return { status: 200, body: { ok: true, job: null, reason: "send_disabled", pollAfterMs: IDLE_MS * 4 } };
-    const r = await deps.store.claim(worker.id, p.data.accountId, deps.config.leaseSeconds, deps.config.globalDailyLimit, deps.config.autoReplyEnabled);
+    const r = await deps.store.claim(worker.id, p.data.accountId, deps.config.leaseSeconds, deps.config.globalDailyLimit, deps.config.autoReplyEnabled, deps.remindersEnabled === true);
     if (!r.ok) {
       log("claim_refused", { workerKey: worker.workerKey, error: r.error });
       return fail(STORE_STATUS[r.error] ?? 500, r.error);

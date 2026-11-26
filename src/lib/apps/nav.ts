@@ -170,6 +170,8 @@ export const APP_NAV: Record<AppId, NavGroup[]> = {
         { title: "Hộp duyệt trả lời", href: "/apps/zalo/personal/replies", icon: "bot", permission: "zalo_personal:use", requires: "aiReply" },
         { title: "Lịch sử gửi", href: "/apps/zalo/personal/replies/outbound", icon: "send", permission: "zalo_personal:use", requires: "aiReply" },
         { title: "Cài đặt trả lời", href: "/apps/zalo/personal/replies/settings", icon: "settings", permission: "zalo_personal:use", requires: "aiReply" },
+        // PHASE 07 — health, queues, AI, reminders, kill switch, audit (admin)
+        { title: "Vận hành", href: "/apps/zalo/personal/operations", icon: "siren", permission: "zalo_personal:operate", requires: "aiReply" },
       ],
     },
   ],

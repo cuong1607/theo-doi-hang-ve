@@ -7,8 +7,11 @@
 import { NextResponse } from "next/server";
 
 import { isAuthorizedInternalRequest } from "@/lib/cron/auth";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { runReplyTick } from "@/lib/zalo-reply/engine";
+import { runOpsCheck } from "@/lib/zalo-reply/ops";
 import { getReplyEngineDeps, replyEnabled } from "@/lib/zalo-reply/server";
+import { SupabaseReplyStore } from "@/lib/zalo-reply/supabase-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,8 +23,13 @@ async function handle(request: Request) {
   const region = (process.env.VERCEL_REGION ?? "local").toLowerCase().replace(/[^a-z0-9]/g, "");
   const workerId = `reply-${region}-${crypto.randomUUID().slice(0, 8)}`;
   try {
-    const r = await runReplyTick(getReplyEngineDeps(workerId, request.signal));
-    return NextResponse.json({ ok: r.status !== "error", status: r.status, stats: r.stats }, { status: r.status === "error" ? 500 : 200 });
+    const deps = getReplyEngineDeps(workerId, request.signal);
+    const r = await runReplyTick(deps);
+    // PHASE 07 (OPS-07): last tick + health of every connection (alerts on state changes only)
+    const store = new SupabaseReplyStore(createAdminClient());
+    await store.recordTick(r.status).catch(() => {});
+    const ops = await runOpsCheck(store, { now: new Date(), replyEnabled: true }).catch(() => null);
+    return NextResponse.json({ ok: r.status !== "error", status: r.status, stats: r.stats, ops }, { status: r.status === "error" ? 500 : 200 });
   } catch (err) {
     console.error(JSON.stringify({ source: "zalo-reply", event: "tick_failed", error: err instanceof Error ? err.name : "unknown" }));
     return NextResponse.json({ ok: false, error: "tick_failed" }, { status: 500 });

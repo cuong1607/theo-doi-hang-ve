@@ -93,7 +93,7 @@ describe("router: trigger detection (REPLY-01 / REPLY-02)", () => {
 });
 
 describe("router: eligibility", () => {
-  const r = (m: Partial<ScannedMessage>, s: Partial<typeof S> | { replyMode: "off" } = {}) => routeMessage(msg(m), BOT, { ...S, ...s } as typeof S);
+  const r = (m: Partial<ScannedMessage>, s: Partial<typeof S> | { replyMode: "disabled" } = {}) => routeMessage(msg(m), BOT, { ...S, ...s } as typeof S);
   it("group modes: disabled / no consent / monitor → recorded skip; mention_only + mention → process", () => {
     assert.deepEqual(r({ groupMode: "disabled" }), { record: true, trigger: "mention", decision: "skip", reason: "group_disabled" });
     assert.equal((r({ groupConsent: "withdrawn" }) as { reason: string }).reason, "group_disabled");
@@ -110,7 +110,7 @@ describe("router: eligibility", () => {
     assert.equal((r({ messageType: "image" }) as { reason: string }).reason, "unsupported_type");
     assert.equal((r({ text: "@Bot" }) as { reason: string }).reason, "empty_question");
     assert.equal((r({ text: `@Bot ${"a".repeat(600)}` }) as { reason: string }).reason, "question_too_long");
-    assert.equal((r({}, { replyMode: "off" }) as { reason: string }).reason, "replies_off");
+    assert.equal((r({}, { replyMode: "disabled" }) as { reason: string }).reason, "replies_off");
   });
 });
 
@@ -157,10 +157,10 @@ describe("policy", () => {
     assert.ok(none.ok && none.text === MEMORY_NOT_FOUND);
   });
 
-  const auto = (o: Partial<AutoInput> = {}): AutoInput => ({ flagEnabled: true, replyMode: "auto", allowlisted: true, conversationType: "group", groupMode: "interactive", groupSendVerified: true, directVerified: false, askerLinked: true, kind: "ai_answer", responseStatus: "answered", ...o });
-  it("auto-approval needs EVERY condition (flag, mode, allowlist, verified path, linked asker, real answer)", () => {
+  const auto = (o: Partial<AutoInput> = {}): AutoInput => ({ flagEnabled: true, replyMode: "auto_reply_allowlist", autoDirect: "all_linked", autoGroups: true, allowlisted: true, conversationType: "group", groupMode: "interactive", groupSendVerified: true, directVerified: false, askerLinked: true, kind: "ai_answer", responseStatus: "answered", ...o });
+  it("auto-approval needs EVERY condition (flag, mode, scope, allowlist, verified path, linked asker, real answer)", () => {
     assert.equal(autoApproveAllowed(auto()), true);
-    for (const o of [{ flagEnabled: false }, { replyMode: "draft_only" as const }, { allowlisted: false }, { groupMode: "mention_only" }, { groupSendVerified: false }, { askerLinked: false }, { kind: "link_help" as const }, { responseStatus: "denied" }]) {
+    for (const o of [{ flagEnabled: false }, { replyMode: "manual_approval" as const }, { replyMode: "draft_only" as const }, { autoGroups: false }, { allowlisted: false }, { groupMode: "mention_only" }, { groupSendVerified: false }, { askerLinked: false }, { kind: "link_help" as const }, { responseStatus: "denied" }]) {
       assert.equal(autoApproveAllowed(auto(o)), false, JSON.stringify(o));
     }
     assert.equal(autoApproveAllowed(auto({ conversationType: "user", groupMode: null, directVerified: false })), false, "1-1 without a verified manual reply");
@@ -177,7 +177,12 @@ describe("policy", () => {
     assert.equal(autoApproveAllowed(dm({ askerLinked: false })), false, "an AI answer needs a linked asker");
     assert.equal(autoApproveAllowed(dm({ directVerified: false })), false, "the connection must have delivered one manual reply");
     assert.equal(autoApproveAllowed(dm({ flagEnabled: false })), false);
-    assert.equal(autoApproveAllowed(dm({ replyMode: "draft_only" })), false);
+    assert.equal(autoApproveAllowed(dm({ replyMode: "manual_approval" })), false);
+    // PHASE 07 scopes: 1-1 auto off / allowlist-only
+    assert.equal(autoApproveAllowed(dm({ autoDirect: "off" })), false, "DM auto-reply OFF by default");
+    assert.equal(autoApproveAllowed(dm({ autoDirect: "allowlist" })), false, "allowlist scope: a chat not in the list is not automatic");
+    assert.equal(autoApproveAllowed(dm({ autoDirect: "allowlist", allowlisted: true })), true);
+    assert.equal(autoApproveAllowed(auto({ autoGroups: false })), false, "group auto-reply OFF unless enabled");
     // groups unchanged: notices / LINK results never auto, allowlist still required
     assert.equal(autoApproveAllowed(auto({ kind: "notice", responseStatus: null })), false);
     assert.equal(autoApproveAllowed(auto({ allowlisted: false })), false);
@@ -460,14 +465,15 @@ describe("pipeline: identity & authorization (REPLY-03)", () => {
   it("auto-approve is proposed only when every condition holds (group interactive + verified + allowlisted + 'auto')", async () => {
     const { deps, id } = pipelineDeps({ auto: true });
     id.links.set(`${CONN}|${SENDER}`, ADMIN);
-    const base = { text: "@Bot công nợ là gì?", groupMode: "interactive" as const, groupSendVerified: true, allowlisted: true, settings: { ...DEFAULT_SETTINGS, replyMode: "auto" as const } };
+    const base = { text: "@Bot công nợ là gì?", groupMode: "interactive" as const, groupSendVerified: true, allowlisted: true, settings: { ...DEFAULT_SETTINGS, replyMode: "auto_reply_allowlist" as const, autoGroups: true } };
     const d = draftOf(await decide(deps, ctxOf(base)));
     assert.equal(d.autoApprove, d.responseStatus === "answered");
     assert.equal(draftOf(await decide(deps, ctxOf({ ...base, allowlisted: false }))).autoApprove, false);
-    assert.equal(draftOf(await decide(deps, ctxOf({ ...base, settings: { ...DEFAULT_SETTINGS, replyMode: "draft_only" } }))).autoApprove, false);
+    assert.equal(draftOf(await decide(deps, ctxOf({ ...base, settings: { ...DEFAULT_SETTINGS, replyMode: "manual_approval" } }))).autoApprove, false);
+    assert.equal(draftOf(await decide(deps, ctxOf({ ...base, settings: { ...base.settings, autoGroups: false } }))).autoApprove, false, "group auto OFF");
   });
   it("00080 — 1-1 in auto mode: linked asker answered without approval or allowlist; LINK result + notices too; strangers skipped", async () => {
-    const autoSettings = { ...DEFAULT_SETTINGS, replyMode: "auto" as const, unlinkedHelp: true };
+    const autoSettings = { ...DEFAULT_SETTINGS, replyMode: "auto_reply_allowlist" as const, autoDirect: "all_linked" as const, unlinkedHelp: true };
     const dm = { conversationType: "user" as const, groupMode: null, trigger: "direct" as const, mentions: [], allowlisted: false, directVerified: true, settings: autoSettings };
     const { deps, id } = pipelineDeps({ auto: true });
     id.links.set(`${CONN}|${SENDER}`, ADMIN);

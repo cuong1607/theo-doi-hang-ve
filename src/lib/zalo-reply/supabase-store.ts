@@ -7,7 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { DraftStatus, ReviewAction, WorkerOutcome } from "./lifecycle.ts";
 import type { DraftCitation } from "./policy.ts";
-import { DEFAULT_SETTINGS, type AuditEntry, type BlockRow, type ControlRow, type ConversationOption, type DraftFilter, type DraftRow, type EngineStore, type InboundClaim, type InboundContext, type InboundDecision, type InboundRow, type OutboundJob, type OutboundStore, type ReplySettings, type ReviewStore, type ScanClaim, type ScannedRow, type StoreResultInput } from "./store.ts";
+import { AUTO_DIRECT_SCOPES, DEFAULT_SETTINGS, REPLY_MODES, type AuditEntry, type BlockRow, type ControlRow, type ConversationOption, type DraftFilter, type DraftRow, type EngineStore, type InboundClaim, type InboundContext, type InboundDecision, type InboundRow, type OutboundJob, type OutboundStore, type ReplySettings, type ReviewStore, type ScanClaim, type ScannedRow, type StoreResultInput } from "./store.ts";
 
 export class ReplyStoreError extends Error {
   readonly category: string;
@@ -31,7 +31,10 @@ const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 function settingsOf(r: Raw | null | undefined): ReplySettings {
   if (!r) return { ...DEFAULT_SETTINGS };
   return {
-    replyMode: (s(r.reply_mode) ?? "draft_only") as ReplySettings["replyMode"],
+    replyMode: (REPLY_MODES as readonly string[]).includes(String(r.reply_mode)) ? (r.reply_mode as ReplySettings["replyMode"]) : "draft_only",
+    sendEnabled: r.send_enabled === true,
+    autoDirect: (AUTO_DIRECT_SCOPES as readonly string[]).includes(String(r.auto_direct)) ? (r.auto_direct as ReplySettings["autoDirect"]) : "off",
+    autoGroups: r.auto_groups === true,
     directEnabled: r.direct_enabled !== false,
     unlinkedHelp: r.unlinked_help === true,
     cooldownSeconds: n(r.cooldown_seconds),
@@ -141,8 +144,11 @@ export class SupabaseReplyStore implements EngineStore, ReviewStore, OutboundSto
   }
 
   // ------------------------------------------------------------ outbound
-  async claim(workerId: string, accountId: string, leaseSeconds: number, globalDailyCap: number, autoEnabled: boolean) {
-    const r = check<Raw>("claim", await this.db.rpc("zp_reply_claim_outbound", { p_worker_id: workerId, p_account_id: accountId, p_lease_seconds: leaseSeconds, p_global_daily_cap: globalDailyCap, p_auto_enabled: autoEnabled }));
+  async claim(workerId: string, accountId: string, leaseSeconds: number, globalDailyCap: number, autoEnabled: boolean, remindersEnabled = false) {
+    const r = check<Raw>(
+      "claim",
+      await this.db.rpc("zp_reply_claim_outbound", { p_worker_id: workerId, p_account_id: accountId, p_lease_seconds: leaseSeconds, p_global_daily_cap: globalDailyCap, p_auto_enabled: autoEnabled, p_reminders_enabled: remindersEnabled }),
+    );
     if (r.ok !== true) return { ok: false as const, error: String(r.error ?? "unknown") };
     const j = r.job as Raw | null;
     const job: OutboundJob | null = j
@@ -160,19 +166,20 @@ export class SupabaseReplyStore implements EngineStore, ReviewStore, OutboundSto
   private async hydrate(rows: Raw[]): Promise<DraftRow[]> {
     if (!rows.length) return [];
     const convIds = [...new Set(rows.map((r) => String(r.conversation_id)))];
-    const msgIds = [...new Set(rows.map((r) => String(r.source_message_id)))];
+    // reminders have no source message
+    const msgIds = [...new Set(rows.map((r) => s(r.source_message_id)).filter((v): v is string => !!v))];
     const userIds = [...new Set(rows.flatMap((r) => [s(r.asker_user_id), s(r.approved_by)]).filter((v): v is string => !!v))];
     const [convs, msgs, users] = await Promise.all([
       this.db.from("zalo_personal_conversations").select("id, external_conversation_id, grp:zalo_personal_groups(display_name)").in("id", convIds),
-      this.db.from("zalo_personal_messages").select("id, text_content, content_stored, sent_at, received_at").in("id", msgIds),
+      msgIds.length ? this.db.from("zalo_personal_messages").select("id, text_content, content_stored, sent_at, received_at").in("id", msgIds) : Promise.resolve({ data: [], error: null }),
       userIds.length ? this.db.from("profiles").select("id, full_name").in("id", userIds) : Promise.resolve({ data: [], error: null }),
     ]);
     const conv = new Map(check<Raw[]>("drafts_conv", convs).map((c) => [String(c.id), c]));
-    const msg = new Map(check<Raw[]>("drafts_msg", msgs).map((m) => [String(m.id), m]));
+    const msg = new Map(check<Raw[]>("drafts_msg", msgs as { data: Raw[] | null; error: { code?: string } | null }).map((m) => [String(m.id), m]));
     const user = new Map(check<Raw[]>("drafts_user", users as { data: Raw[] | null; error: { code?: string } | null }).map((u) => [String(u.id), s(u.full_name)]));
     return rows.map((r) => {
       const c = conv.get(String(r.conversation_id));
-      const m = msg.get(String(r.source_message_id));
+      const m = s(r.source_message_id) ? msg.get(String(r.source_message_id)) : undefined;
       const g = c?.grp as Raw | Raw[] | null | undefined;
       const groupName = Array.isArray(g) ? s(g[0]?.display_name) : s(g?.display_name);
       return {
@@ -182,7 +189,7 @@ export class SupabaseReplyStore implements EngineStore, ReviewStore, OutboundSto
         conversationType: r.conversation_type === "group" ? "group" : "user",
         externalConversationId: s(c?.external_conversation_id) ?? "0",
         groupName,
-        sourceMessageId: String(r.source_message_id),
+        sourceMessageId: s(r.source_message_id),
         sourceText: m && m.content_stored === true ? s(m.text_content) : null,
         sourceAt: m ? s(m.sent_at) ?? s(m.received_at) : null,
         askerExternalId: String(r.asker_external_id),
@@ -324,6 +331,40 @@ export class SupabaseReplyStore implements EngineStore, ReviewStore, OutboundSto
   async admin(actorId: string, action: string, connectionId: string | null, payload: Record<string, unknown>) {
     const r = check<Raw>("admin", await this.db.rpc("zp_reply_admin", { p_actor: actorId, p_action: action, p_connection_id: connectionId, p_payload: payload }));
     return r.ok === true ? { ok: true as const } : { ok: false as const, error: String(r.error ?? "unknown") };
+  }
+
+  // ------------------------------------------------------------ PHASE 07: reminders + operations
+  async enqueueReminder(input: { connectionId: string; userId: string; externalUserId: string; text: string; sourceKey: string; notificationId: string | null; expiresAt: Date }) {
+    const r = check<Raw>(
+      "enqueueReminder",
+      await this.db.rpc("zp_reply_enqueue_reminder", { p_connection_id: input.connectionId, p_user_id: input.userId, p_external_user_id: input.externalUserId, p_text: input.text, p_source_key: input.sourceKey, p_notification_id: input.notificationId, p_expires_at: input.expiresAt.toISOString() }),
+    );
+    return r.ok === true ? { ok: true as const, draftId: s(r.draftId), duplicate: r.duplicate === true } : { ok: false as const, error: String(r.error ?? "unknown") };
+  }
+
+  async opsSnapshot(connectionIds: string[]): Promise<Raw> {
+    return check<Raw>("opsSnapshot", await this.db.rpc("zp_ops_snapshot", { p_connection_ids: connectionIds }));
+  }
+
+  async allConnectionIds(): Promise<string[]> {
+    const rows = check<Raw[]>("allConnectionIds", await this.db.from("zalo_personal_connections").select("id").limit(200));
+    return (rows ?? []).map((r) => String(r.id));
+  }
+
+  async opsObserve(connectionId: string, state: string, reasons: string[]): Promise<boolean> {
+    const r = check<Raw>("opsObserve", await this.db.rpc("zp_ops_observe", { p_connection_id: connectionId, p_state: state, p_reasons: reasons }));
+    return r.notified === true;
+  }
+
+  async recordTick(status: "ok" | "partial" | "error" | "disabled"): Promise<void> {
+    check("recordTick", await this.db.rpc("zp_reply_record_tick", { p_status: status }));
+  }
+
+  async recentAudit(connectionIds: string[], limit: number): Promise<Array<{ id: number; action: string; actorKind: string; actorName: string | null; createdAt: string; connectionId: string | null }>> {
+    let q = this.db.from("zalo_personal_reply_audit").select("id, action, actor_kind, created_at, connection_id, actor:profiles(full_name)");
+    q = connectionIds.length ? q.or(`connection_id.is.null,connection_id.in.(${connectionIds.join(",")})`) : q.is("connection_id", null);
+    const rows = check<Raw[]>("recentAudit", await q.order("id", { ascending: false }).limit(Math.min(Math.max(limit, 1), 100)));
+    return (rows ?? []).map((a) => ({ id: n(a.id), action: String(a.action), actorKind: String(a.actor_kind), actorName: s((a.actor as Raw | null)?.full_name), createdAt: String(a.created_at), connectionId: s(a.connection_id) }));
   }
 
   async sentToday(connectionIds: string[], since: Date): Promise<number> {

@@ -6,8 +6,28 @@ import type { DraftStatus, ReviewAction, WorkerOutcome } from "./lifecycle.ts";
 import type { DraftCitation, DraftPayload } from "./policy.ts";
 import type { GroupMode, ScannedMessage, Trigger } from "./router.ts";
 
+/**
+ * PHASE 07 reply modes (00081):
+ *   disabled              nothing is analysed or answered
+ *   draft_only            drafts for review — NEVER sent (approve refused)
+ *   manual_approval       a person approves each reply, then the worker sends it
+ *   auto_reply_allowlist  auto-send inside the auto scopes below; the rest still needs approval
+ */
+export const REPLY_MODES = ["disabled", "draft_only", "manual_approval", "auto_reply_allowlist"] as const;
+export type ReplyMode = (typeof REPLY_MODES)[number];
+/** 1-1 auto scope: nobody | allowlisted chats only | every linked person */
+export const AUTO_DIRECT_SCOPES = ["off", "allowlist", "all_linked"] as const;
+export type AutoDirectScope = (typeof AUTO_DIRECT_SCOPES)[number];
+/** 1-1 text kept by the server: none | metadata | LINKED people only (recommended) | everybody */
+export const DIRECT_MESSAGE_MODES = ["off", "metadata", "linked", "content"] as const;
+export type DirectMessageMode = (typeof DIRECT_MESSAGE_MODES)[number];
+
 export interface ReplySettings {
-  replyMode: "off" | "draft_only" | "auto";
+  replyMode: ReplyMode;
+  /** per-connection outbound switch (default OFF) */
+  sendEnabled: boolean;
+  autoDirect: AutoDirectScope;
+  autoGroups: boolean;
   directEnabled: boolean;
   unlinkedHelp: boolean;
   cooldownSeconds: number;
@@ -23,6 +43,9 @@ export interface ReplySettings {
 
 export const DEFAULT_SETTINGS: ReplySettings = {
   replyMode: "draft_only",
+  sendEnabled: false,
+  autoDirect: "off",
+  autoGroups: false,
   directEnabled: true,
   unlinkedHelp: false,
   cooldownSeconds: 60,
@@ -112,7 +135,8 @@ export interface DraftRow {
   conversationType: "user" | "group";
   externalConversationId: string;
   groupName: string | null;
-  sourceMessageId: string;
+  /** null for a reminder (no inbound message) */
+  sourceMessageId: string | null;
   sourceText: string | null;
   sourceAt: string | null;
   askerExternalId: string;
@@ -228,6 +252,6 @@ export interface OutboundJob {
 }
 
 export interface OutboundStore {
-  claim(workerId: string, accountId: string, leaseSeconds: number, globalDailyCap: number, autoEnabled: boolean): Promise<{ ok: true; job: OutboundJob | null; reason: string | null } | { ok: false; error: string }>;
+  claim(workerId: string, accountId: string, leaseSeconds: number, globalDailyCap: number, autoEnabled: boolean, remindersEnabled?: boolean): Promise<{ ok: true; job: OutboundJob | null; reason: string | null } | { ok: false; error: string }>;
   report(workerId: string, draftId: string, claimToken: string, outcome: WorkerOutcome, zaloMsgId: string | null, error: string | null): Promise<{ ok: true; status: string; changed: boolean } | { ok: false; error: string }>;
 }

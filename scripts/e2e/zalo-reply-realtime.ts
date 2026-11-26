@@ -54,7 +54,7 @@ async function main() {
   const hb = await db.rpc("zp_record_heartbeat", { p_worker_id: workerId, p_account_id: ACC, p_state: { workerVersion: "rt", workerStartedAt: new Date().toISOString(), sessionState: "authenticated", listenerState: "active", lastMessageReceivedAt: null, lastDeliveryOkAt: null, outboxDepth: 0, deadLetterCount: 0, outboxFullDrops: 0, lastErrorCategory: null } });
   assert.equal(hb.data?.ok, true, "heartbeat");
   await db.from("ai_channel_identities").insert({ channel: "zalo_personal", connection_id: created.conn, external_user_id: ASKER, internal_user_id: created.user, verified_via: "link_code" });
-  await db.from("zalo_personal_reply_settings").upsert({ connection_id: created.conn, reply_mode: "auto", cooldown_seconds: 5 });
+  await db.from("zalo_personal_reply_settings").upsert({ connection_id: created.conn, reply_mode: "auto_reply_allowlist", auto_direct: "all_linked", send_enabled: true, cooldown_seconds: 5 });
   // verified sending path = one manually approved reply already delivered by this connection
   const seedAt = new Date(Date.now() - 3_600_000).toISOString();
   const seed = await db.rpc("zp_ingest_events", { p_worker_id: workerId, p_account_id: ACC, p_events: [ev("seed", "câu hỏi cũ", seedAt)] });

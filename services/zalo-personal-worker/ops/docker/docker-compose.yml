@@ -1,0 +1,43 @@
+# ============================================================
+# PHASE 07 (OPS-10) — Zalo Personal worker on a Linux VPS. NOT deployed by this phase.
+#
+# ONE worker per Zalo account: never run this while the Windows worker of the same
+# account is running (Zalo kicks one of them; the account may be flagged).
+#
+#   cp worker.env.example worker.env && chmod 600 worker.env   # fill it (no value in Git)
+#   docker compose -f docker-compose.yml build
+#   docker compose -f docker-compose.yml run --rm zalo-worker login      # QR → /data/qr/*.png (docker cp it out)
+#   docker compose -f docker-compose.yml up -d
+#   docker compose -f docker-compose.yml exec zalo-worker node dist/main.js status
+#   docker compose -f docker-compose.yml exec zalo-worker node dist/main.js stop   # emergency stop
+# The worker needs NO Supabase key: it talks to the backend over HTTPS with its HMAC secret.
+# ============================================================
+services:
+  zalo-worker:
+    build:
+      context: ../..
+    image: congtrangbedding/zalo-worker:0.2.0
+    init: true
+    # 1 (crash) / 5 (network, after a 5-minute pause) are restarted at most 5 times;
+    # session refused / kicked (3) is never restarted — see ops/docker/entrypoint.sh
+    restart: on-failure:5
+    stop_grace_period: 40s
+    env_file: ./worker.env
+    volumes:
+      - zalo-worker-data:/data
+    # sized from a measured run (Windows, 2026-11-26): ~58 MB working set, 108 MB peak,
+    # ~0.2 % of one core on average — 3× headroom
+    mem_limit: 320m
+    cpus: 0.5
+    pids_limit: 64
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  zalo-worker-data:

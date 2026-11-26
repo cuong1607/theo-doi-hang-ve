@@ -15,7 +15,10 @@ import { toast } from "@/components/patterns/toast";
 import { callApi } from "@/components/zalo-personal/api-client";
 
 export interface SettingsValue {
-  replyMode: "off" | "draft_only" | "auto";
+  replyMode: "disabled" | "draft_only" | "manual_approval" | "auto_reply_allowlist";
+  sendEnabled: boolean;
+  autoDirect: "off" | "allowlist" | "all_linked";
+  autoGroups: boolean;
   directEnabled: boolean;
   unlinkedHelp: boolean;
   cooldownSeconds: number;
@@ -52,23 +55,25 @@ const NUMBERS: Array<{ key: keyof SettingsValue; label: string; min: number; max
   { key: "draftTtlMinutes", label: "Hạn của bản nháp (phút)", min: 5, max: 1440, hint: "Quá hạn chưa gửi → hết hạn, không gửi câu trả lời đã lỗi thời." },
 ];
 
-export function ReplySettingsForm({ connectionId, initial, autoAvailable }: { connectionId: string; initial: SettingsValue; autoAvailable: boolean }) {
+export function ReplySettingsForm({ connectionId, initial, autoAvailable, sendAvailable }: { connectionId: string; initial: SettingsValue; autoAvailable: boolean; sendAvailable: boolean }) {
   const [v, setV] = useState(initial);
   const { pending, run } = useAction();
   const valid = NUMBERS.every((n) => Number.isInteger(v[n.key] as number) && (v[n.key] as number) >= n.min && (v[n.key] as number) <= n.max);
+  const auto = v.replyMode === "auto_reply_allowlist";
   return (
     <div className="grid gap-4">
       <fieldset className="grid gap-2">
         <legend className="mb-1 text-sm font-medium">Chế độ trả lời</legend>
         {(
           [
-            ["off", "Tắt", "Không tạo câu trả lời nào."],
-            ["draft_only", "Chỉ bản nháp (mặc định)", "Mọi câu trả lời chờ người duyệt trước khi gửi."],
-            ["auto", "Tự động gửi, không cần duyệt", autoAvailable ? "Chat 1-1: trả lời ngay mọi người đã liên kết; người lạ không được trả lời. Nhóm: chỉ nhóm trong danh sách cho phép, ở chế độ Tương tác." : "Đang tắt ở cấp hệ thống (PERSONAL_AUTO_REPLY_ENABLED)."],
+            ["disabled", "Tắt", "Không phân tích, không tạo câu trả lời nào."],
+            ["draft_only", "Chỉ bản nháp (mặc định)", "Tạo bản nháp để xem trước. Không bao giờ gửi, kể cả khi bấm duyệt."],
+            ["manual_approval", "Duyệt tay rồi gửi", "Mỗi câu trả lời chờ người có quyền duyệt; duyệt xong worker mới gửi."],
+            ["auto_reply_allowlist", "Tự động trong phạm vi cho phép", autoAvailable ? "Tự gửi trong phạm vi chọn bên dưới; ngoài phạm vi vẫn phải duyệt tay." : "Đang tắt ở cấp hệ thống (PERSONAL_AUTO_REPLY_ENABLED)."],
           ] as const
         ).map(([value, label, hint]) => (
           <label key={value} className="flex items-start gap-3 rounded-lg border p-3">
-            <input type="radio" name={`mode-${connectionId}`} className="mt-1" checked={v.replyMode === value} disabled={value === "auto" && !autoAvailable} onChange={() => setV((s) => ({ ...s, replyMode: value }))} />
+            <input type="radio" name={`mode-${connectionId}`} className="mt-1" checked={v.replyMode === value} disabled={value === "auto_reply_allowlist" && !autoAvailable} onChange={() => setV((s) => ({ ...s, replyMode: value }))} />
             <span className="grid gap-0.5">
               <span className="font-medium">{label}</span>
               <span className="text-sm text-muted-foreground">{hint}</span>
@@ -76,12 +81,40 @@ export function ReplySettingsForm({ connectionId, initial, autoAvailable }: { co
           </label>
         ))}
       </fieldset>
+      {auto && (
+        <fieldset className="grid gap-2 rounded-lg border p-3">
+          <legend className="px-1 text-sm font-medium">Phạm vi tự động</legend>
+          <label className="grid gap-1 text-sm">
+            <span className="font-medium">Chat 1-1</span>
+            <select className="h-9 rounded-md border bg-background px-2" value={v.autoDirect} onChange={(e) => setV((s) => ({ ...s, autoDirect: e.target.value as SettingsValue["autoDirect"] }))}>
+              <option value="off">Không tự động (duyệt tay)</option>
+              <option value="allowlist">Chỉ các chat trong danh sách cho phép</option>
+              <option value="all_linked">Mọi người đã liên kết</option>
+            </select>
+            <span className="text-xs text-muted-foreground">Người chưa liên kết không bao giờ được trả lời tự động.</span>
+          </label>
+          <label className="flex items-start gap-3 text-sm">
+            <input type="checkbox" className="mt-1" checked={v.autoGroups} onChange={(e) => setV((s) => ({ ...s, autoGroups: e.target.checked }))} />
+            <span className="grid gap-0.5">
+              <span className="font-medium">Nhóm</span>
+              <span className="text-muted-foreground">Chỉ nhóm trong danh sách cho phép, ở chế độ Tương tác, khi bot được @nhắc hoặc gọi /bot.</span>
+            </span>
+          </label>
+        </fieldset>
+      )}
+      <label className="flex items-start gap-3 rounded-lg border p-3">
+        <input type="checkbox" className="mt-1" checked={v.sendEnabled} disabled={!sendAvailable && !v.sendEnabled} onChange={(e) => setV((s) => ({ ...s, sendEnabled: e.target.checked }))} />
+        <span className="grid gap-0.5">
+          <span className="font-medium">Cho phép gửi tin từ kết nối này</span>
+          <span className="text-sm text-muted-foreground">{sendAvailable ? "Tắt = không tin nào rời tài khoản này (trả lời và nhắc việc), kể cả tin đã duyệt." : "Đang tắt ở cấp hệ thống (PERSONAL_SEND_ENABLED)."}</span>
+        </span>
+      </label>
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="flex items-start gap-3 rounded-lg border p-3">
           <input type="checkbox" className="mt-1" checked={v.directEnabled} onChange={(e) => setV((s) => ({ ...s, directEnabled: e.target.checked }))} />
           <span className="grid gap-0.5">
             <span className="font-medium">Trả lời chat 1-1</span>
-            <span className="text-sm text-muted-foreground">Cần kết nối lưu nội dung 1-1 (chế độ content).</span>
+            <span className="text-sm text-muted-foreground">Cần lưu nội dung 1-1 (mục &quot;Nội dung chat 1-1&quot; bên dưới).</span>
           </span>
         </label>
         <label className="flex items-start gap-3 rounded-lg border p-3">
@@ -104,6 +137,37 @@ export function ReplySettingsForm({ connectionId, initial, autoAvailable }: { co
       <div>
         <Button disabled={pending || !valid} onClick={() => run("/api/zalo-personal/replies/settings", "PATCH", { connectionId, ...v }, "Đã lưu cài đặt trả lời.")}>
           Lưu cài đặt
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+const DIRECT_MODES = [
+  ["linked", "Chỉ người đã liên kết (khuyên dùng)", "Lưu nội dung chat 1-1 của người đã LINK và lệnh LINK. Tin của người khác: chỉ metadata."],
+  ["metadata", "Chỉ metadata", "Không lưu nội dung 1-1 nào: bot không trả lời được chat 1-1."],
+  ["content", "Mọi người", "Lưu nội dung chat 1-1 của mọi người nhắn tới tài khoản này. Chỉ dùng khi đã cân nhắc quyền riêng tư."],
+  ["off", "Tắt", "Không nhận tin 1-1."],
+] as const;
+
+/** Which 1-1 texts the server keeps (00081). The worker must send text (ZP_DIRECT_MESSAGES=content). */
+export function DirectModeSelect({ connectionId, mode }: { connectionId: string; mode: "off" | "metadata" | "linked" | "content" }) {
+  const { pending, run } = useAction();
+  const [v, setV] = useState(mode);
+  return (
+    <div className="grid gap-2">
+      {DIRECT_MODES.map(([value, label, hint]) => (
+        <label key={value} className="flex items-start gap-3 rounded-lg border p-3 text-sm">
+          <input type="radio" name={`dm-${connectionId}`} className="mt-1" checked={v === value} onChange={() => setV(value)} />
+          <span className="grid gap-0.5">
+            <span className="font-medium">{label}</span>
+            <span className="text-muted-foreground">{hint}</span>
+          </span>
+        </label>
+      ))}
+      <div>
+        <Button size="sm" variant="outline" disabled={pending || v === mode} onClick={() => run("/api/zalo-personal/replies/control", "POST", { action: "set_direct_mode", connectionId, directMessageMode: v }, "Đã đổi chế độ lưu nội dung 1-1.")}>
+          Lưu chế độ nội dung 1-1
         </Button>
       </div>
     </div>

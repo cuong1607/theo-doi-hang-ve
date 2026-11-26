@@ -1,0 +1,11 @@
+# never in the image: secrets, sessions, local data, tests, build leftovers
+.env
+.env.*
+!ops/docker/entrypoint.sh
+.data
+data
+node_modules
+dist
+test
+ops/docker/worker.env
+*.log
