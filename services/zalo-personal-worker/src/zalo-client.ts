@@ -8,9 +8,17 @@
 //   checkUpdate: false no call to the npm registry at login
 //   logging: false     the library's own console logs are off (they print
 //                      the account uid / display name and QR paths)
-// Read-only by design: this interface exposes NO send / join / history API.
+// Phase 04.5 adds exactly ONE write: sendText (plain text to one thread),
+// used only by outbound/ for replies the backend approved. No join / history /
+// friend / bulk API is exposed.
+//   api.sendMessage(message: MessageContent | string, threadId: string,
+//                   type: ThreadType = User) → { message: { msgId } | null, attachment }
+//   (verified in node_modules/zca-js@2.4.0/dist/apis/sendMessage.{d.ts,js};
+//   ThreadType.User = 0, ThreadType.Group = 1; errors are ZaloApiError with
+//   `code` = Zalo error_code when Zalo answered and refused). zca-js has NO
+//   idempotency key and no request timeout for sendMessage.
 // ============================================================
-import { LoginQRCallbackEventType, Zalo, type API } from "zca-js";
+import { LoginQRCallbackEventType, ThreadType, Zalo, ZaloApiError, type API } from "zca-js";
 
 import type { SessionCredentials } from "./session-manager.ts";
 
@@ -32,6 +40,28 @@ export interface ZaloSession {
   readonly listener: ListenerLike;
   /** Invalidates the session on Zalo's side. */
   logout(): Promise<void>;
+  /** Plain text to one thread (Phase 04.5 outbound only). Resolves with Zalo's message id. */
+  sendText(threadId: string, threadType: "user" | "group", text: string): Promise<{ msgId: string | null }>;
+}
+
+/** Library-independent view of a send failure (see outbound/sender.ts classifySendError). */
+export interface SendErrorInfo {
+  /** a ZaloApiError: Zalo (or the library) produced it */
+  zaloApi: boolean;
+  /** Zalo's numeric error_code when Zalo answered and refused */
+  code: number | null;
+  message: string;
+  name: string;
+  networkCode: string | null;
+}
+
+export function sendErrorInfo(err: unknown): SendErrorInfo {
+  if (!(err instanceof Error)) return { zaloApi: false, code: null, message: "", name: "unknown", networkCode: null };
+  const raw = (err as { code?: unknown }).code;
+  const causeCode = (err.cause as { code?: unknown } | undefined)?.code;
+  const net = typeof raw === "string" ? raw : typeof causeCode === "string" ? causeCode : null;
+  const isZalo = err instanceof ZaloApiError;
+  return { zaloApi: isZalo, code: isZalo && typeof raw === "number" ? raw : isZalo && typeof raw === "string" && /^-?\d+$/.test(raw) ? Number(raw) : null, message: err.message, name: err.name, networkCode: isZalo ? null : net };
 }
 
 export type QrEvent =
@@ -66,6 +96,11 @@ function wrap(api: API): ZaloSession {
     listener,
     logout: async () => {
       await api.logout();
+    },
+    sendText: async (threadId, threadType, text) => {
+      const r = await api.sendMessage({ msg: text }, threadId, threadType === "group" ? ThreadType.Group : ThreadType.User);
+      const id = r?.message?.msgId;
+      return { msgId: id === undefined || id === null ? null : String(id) };
     },
   };
 }

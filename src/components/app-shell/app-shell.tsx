@@ -11,6 +11,7 @@ import { redirect } from "next/navigation";
 
 import { systemAssistantAvailable } from "@/lib/ai-system/server";
 import { tasksEnabled } from "@/lib/ai-tasks/server";
+import { replyEnabled } from "@/lib/zalo-reply/server";
 import { visibleNav } from "@/lib/apps/nav";
 import { canAccessApp, hubApps, type AppId } from "@/lib/apps/registry";
 import { displayLogin } from "@/lib/auth/login-identifier";
@@ -47,7 +48,7 @@ export async function AppShell({ app: appId, children }: { app: AppId; children:
   const flags = getShopeeFlags();
   const apps = hubApps(user.role, gates);
   const app = apps.find((a) => a.id === appId)!;
-  const groups = visibleNav(appId, { role: user.role, adsEnabled: flags.adsEnabled, legacyModulesEnabled: flags.legacyModulesEnabled, aiWebEnabled: webAssistantAvailable(user.role), aiSystemEnabled: systemAssistantAvailable(user.role), aiTasksEnabled: tasksEnabled() });
+  const groups = visibleNav(appId, { role: user.role, adsEnabled: flags.adsEnabled, legacyModulesEnabled: flags.legacyModulesEnabled, aiWebEnabled: webAssistantAvailable(user.role), aiSystemEnabled: systemAssistantAvailable(user.role), aiTasksEnabled: tasksEnabled(), aiReplyEnabled: replyEnabled() });
 
   return (
     <div data-app={app.accent} data-app-shell={appId} className="contents">

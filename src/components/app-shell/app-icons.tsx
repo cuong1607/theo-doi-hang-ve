@@ -24,6 +24,7 @@ import {
   Activity,
   Plug,
   Search,
+  Send,
   PackagePlus,
   PackageSearch,
   Palette,
@@ -97,6 +98,8 @@ export const NAV_ICONS: Record<NavIconName, LucideIcon> = {
   messages: MessagesSquare,
   search: Search,
   activity: Activity,
+  send: Send,
+  settings: Settings,
 };
 
 /** The app's icon on its two-hue gradient tile (needs a [data-app] ancestor). */

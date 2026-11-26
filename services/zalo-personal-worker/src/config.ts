@@ -32,8 +32,20 @@ export interface IngestConfig {
   outboxMaxBytes: number;
 }
 
+/** Phase 04.5 outbound (approved replies). Off unless ZP_SEND_ENABLED=true; needs ingestion (signed client). */
+export interface SendConfig {
+  enabled: boolean;
+  /** idle wait between two claims */
+  pollMs: number;
+  /** a send without an answer within this window is "unknown" (never retried) */
+  timeoutMs: number;
+  /** local brake: minimum gap between two sends from this account */
+  minIntervalMs: number;
+}
+
 export interface WorkerConfig {
   enabled: boolean;
+  send: SendConfig;
   connectionId: string;
   dataDir: string;
   sessionProtection: SessionProtection;
@@ -169,6 +181,8 @@ export function loadConfig(env: Env, opts: { platform?: NodeJS.Platform; workerD
     if (!workerKey || !/^[a-z0-9][a-z0-9_-]{2,47}$/.test(workerKey)) throw new ConfigError("ZP_INGEST_ENABLED=true cần ZP_WORKER_KEY hợp lệ (3-48 ký tự a-z, 0-9, _ và -).");
   }
   const ingestBaseMs = int("ZP_INGEST_BACKOFF_BASE_MS", env.ZP_INGEST_BACKOFF_BASE_MS, 2_000, 200, 60_000);
+  const sendEnabled = bool(env.ZP_SEND_ENABLED, false);
+  if (sendEnabled && !ingestEnabled) throw new ConfigError("ZP_SEND_ENABLED=true cần ZP_INGEST_ENABLED=true (dùng chung kết nối có chữ ký tới backend).");
 
   const logLevel = env.ZP_LOG_LEVEL?.trim().toLowerCase() || "info";
   if (!isLogLevel(logLevel)) throw new ConfigError('ZP_LOG_LEVEL phải là "debug", "info", "warn" hoặc "error".');
@@ -178,6 +192,12 @@ export function loadConfig(env: Env, opts: { platform?: NodeJS.Platform; workerD
 
   return {
     enabled: bool(env.ZP_ENABLED, false),
+    send: {
+      enabled: sendEnabled,
+      pollMs: int("ZP_SEND_POLL_MS", env.ZP_SEND_POLL_MS, 15_000, 2_000, 10 * 60_000),
+      timeoutMs: int("ZP_SEND_TIMEOUT_MS", env.ZP_SEND_TIMEOUT_MS, 20_000, 3_000, 120_000),
+      minIntervalMs: int("ZP_SEND_MIN_INTERVAL_MS", env.ZP_SEND_MIN_INTERVAL_MS, 5_000, 1_000, 10 * 60_000),
+    },
     connectionId,
     dataDir,
     sessionProtection: rawProtection,
@@ -225,5 +245,6 @@ export function dataPaths(dataDir: string) {
     ingestSecretFile: path.join(dataDir, "ingest-secret.json"),
     outboxKeyFile: path.join(dataDir, "outbox.key"),
     outboxDir: path.join(dataDir, "outbox"),
+    sendJournalFile: path.join(dataDir, "outbound-journal.json"),
   };
 }

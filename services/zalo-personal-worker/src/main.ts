@@ -33,6 +33,8 @@ import { Outbox } from "./ingest/outbox.ts";
 import { IngestSetupError, startIngestion, type IngestRuntime } from "./ingest/runtime.ts";
 import { clearIngestSecret, isValidIngestSecret, loadIngestSecret, loadOrCreateOutboxKey, saveIngestSecret } from "./ingest/secret-store.ts";
 import type { EventSink } from "./metadata-sink.ts";
+import { SendJournal } from "./outbound/journal.ts";
+import { OutboundService } from "./outbound/service.ts";
 
 const WORKER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -105,6 +107,27 @@ async function cmdRun(config: WorkerConfig, logger: Logger): Promise<number> {
       }
     }
     const sink: EventSink = ingest ? new CompositeSink([metadataSink, ingest.sink]) : metadataSink;
+    let currentSession: ZaloSession | null = null;
+
+    // Phase 04.5: approved replies (off unless ZP_SEND_ENABLED=true; the backend flags + gates still apply)
+    let outbound: OutboundService | null = null;
+    if (config.send.enabled && ingest) {
+      const journal = new SendJournal({ file: paths.sendJournalFile });
+      const recovered = await journal.init();
+      if (recovered) logger.warn("outbound_recovered_unknown", { count: recovered });
+      const rt = ingest;
+      outbound = new OutboundService({
+        post: (p, payload, signal) => rt.post(p, payload, signal),
+        journal,
+        connectionKey: config.connectionId,
+        accountId: () => rt.accountId(),
+        session: () => (manager?.state === "connected" ? currentSession : null),
+        logger,
+        pollMs: config.send.pollMs,
+        timeoutMs: config.send.timeoutMs,
+        minIntervalMs: config.send.minIntervalMs,
+      });
+    }
 
     const pipeline = createEventPipeline({
       connectionId: config.connectionId,
@@ -125,6 +148,7 @@ async function cmdRun(config: WorkerConfig, logger: Logger): Promise<number> {
       health,
       onEvent: (name, raw) => void pipeline(name, raw),
       onSession: (session: ZaloSession | null) => {
+        currentSession = session;
         try {
           ownId = session ? session.ownId() : null;
         } catch {
@@ -154,6 +178,10 @@ async function cmdRun(config: WorkerConfig, logger: Logger): Promise<number> {
     print(`Worker Zalo Personal đang chạy (connection "${config.connectionId}"). Nhóm được phép: ${config.allowedGroupIds.size}. Ctrl+C hoặc \`npm run stop\` để dừng.`);
     logger.info("worker_started", { connectionId: config.connectionId, allowedGroups: config.allowedGroupIds.size, discovery: config.discoveryToken !== null, directMessages: config.directMessages, protection: config.sessionProtection, ingest: config.ingest.enabled });
     if (ingest) print(`Đồng bộ về backend: BẬT (${new URL(config.ingest.baseUrl!).host}, worker "${config.ingest.workerKey}"). Outbox đang chờ: ${ingest.outbox.stats().depth}.`);
+    if (outbound) {
+      print("GỬI TIN TRẢ LỜI: BẬT (ZP_SEND_ENABLED). Chỉ gửi tin đã được duyệt trên hệ thống; `npm run stop` để dừng ngay.");
+      outbound.start();
+    }
 
     try {
       const outcome = await run.run();
@@ -168,6 +196,8 @@ async function cmdRun(config: WorkerConfig, logger: Logger): Promise<number> {
       clearInterval(healthTimer);
       process.off("SIGINT", onSignal);
       process.off("SIGTERM", onSignal);
+      // no new claim; the in-flight send (≤ its timeout) is journaled and reported first
+      await outbound?.stop();
       // after the listener stopped: let delivery finish its in-flight request (outbox stays consistent)
       await ingest?.shutdown();
       await health.flush();

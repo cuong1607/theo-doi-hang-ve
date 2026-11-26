@@ -671,19 +671,23 @@ describe("static guards", () => {
     const routes = filesUnder("src/app/api/zalo-personal").filter((f) => f.endsWith("route.ts") && !isAi(f));
     // Phase 03: 14 routes; Phase 06 adds 7 (tasks / notifications / reminders) gated by
     // authorizeTasksApi, which is itself authorizeZaloApi + the AI_TASKS_ENABLED flag (checked below)
-    assert.equal(routes.length, 21);
+    // Phase 04.5 adds 7 (replies) gated by authorizeReplyApi = authorizeZaloApi + PERSONAL_REPLY_ENABLED
+    assert.equal(routes.length, 28);
     const tasksServer = readFileSync(path.join(ROOT, "src/lib/ai-tasks/server.ts"), "utf8");
     assert.match(tasksServer, /export async function authorizeTasksApi\(\)[\s\S]{0,400}await authorizeZaloApi\(\)/);
     assert.match(tasksServer, /export async function requireTasksPage\(\)[\s\S]{0,300}await requireZaloPersonal\(\)/);
+    const replyServer = readFileSync(path.join(ROOT, "src/lib/zalo-reply/server.ts"), "utf8");
+    assert.match(replyServer, /export async function authorizeReplyApi\(\)[\s\S]{0,400}await authorizeZaloApi\(\)/);
+    assert.match(replyServer, /export async function requireReplyPage\(\)[\s\S]{0,300}await requireZaloPersonal\(\)/);
     for (const f of routes) {
       const src = readFileSync(f, "utf8");
-      assert.match(src, /authorizeZaloApi\(\)|authorizeTasksApi\(\)/, f);
+      assert.match(src, /authorizeZaloApi\(\)|authorizeTasksApi\(\)|authorizeReplyApi\(\)/, f);
       if (f.includes("[")) assert.match(src, /parseInput\(idParam/, f);
       assert.doesNotMatch(src, /Access-Control-Allow-Origin/i, f);
     }
   });
   it("every page gates through requireZaloPersonal", () => {
-    for (const f of filesUnder("src/app/(authenticated)/(zalo)").filter((x) => x.endsWith("page.tsx") && !isAi(x))) assert.match(readFileSync(f, "utf8"), /requireZaloPersonal\((\{ setupPage: true \})?\)|requireTasksPage\(\)/, f);
+    for (const f of filesUnder("src/app/(authenticated)/(zalo)").filter((x) => x.endsWith("page.tsx") && !isAi(x))) assert.match(readFileSync(f, "utf8"), /requireZaloPersonal\((\{ setupPage: true \})?\)|requireTasksPage\(\)|requireReplyPage\(\)/, f);
   });
   it("no sending / AI / Zalo OA code is reachable from the dashboard", () => {
     for (const f of DASHBOARD) assert.doesNotMatch(readFileSync(f, "utf8"), /lib\/zalo\/|zca-js|sendMessage|anthropic|gemini|product-analyst/i, f);

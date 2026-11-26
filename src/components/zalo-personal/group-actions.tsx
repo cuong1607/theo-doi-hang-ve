@@ -51,7 +51,8 @@ export function GroupActions({ group }: { group: { id: string; name: string; mod
     else setConfirmMode(value);
   };
 
-  const items = MODE_ITEMS.map((i) => ({ ...i, disabled: (i.value === "interactive" && !group.interactiveAvailable) || (i.value !== "disabled" && i.value !== "interactive" && !consent) }));
+  // Phase 04.5: "interactive" opens once a MANUALLY approved reply reached the group (send_verified_at)
+  const items = MODE_ITEMS.map((i) => ({ ...i, label: i.value === "interactive" ? (group.interactiveAvailable ? "Tương tác" : "Tương tác (cần 1 tin duyệt đã gửi)") : i.label, disabled: (i.value === "interactive" && !group.interactiveAvailable) || (i.value !== "disabled" && i.value !== "interactive" && !consent) }));
 
   return (
     <div className="flex flex-col items-start gap-1.5 sm:items-end">

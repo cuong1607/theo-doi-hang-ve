@@ -31,6 +31,9 @@ export interface IngestRuntime {
   delivery: DeliveryService;
   heartbeat: HeartbeatReporter;
   auth: AuthGate;
+  /** signed POST to the backend (Phase 04.5 outbound reuses the same client + secret) */
+  post(path: string, payload: unknown, signal?: AbortSignal): Promise<import("./http-client.ts").HttpResult>;
+  accountId(): string | null;
   onAccount(accountId: string | null): void;
   onStateChange(state: ConnectionState): void;
   publishHealth(): void;
@@ -103,6 +106,8 @@ export async function startIngestion(deps: {
     delivery,
     heartbeat,
     auth,
+    post: (path, payload, signal) => client.post(path, payload, signal),
+    accountId: () => accountId,
     onAccount(id) {
       if (id) {
         accountId = id; // kept after a disconnect so heartbeats keep identifying the account

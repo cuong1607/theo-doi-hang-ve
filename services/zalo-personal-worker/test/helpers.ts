@@ -50,13 +50,19 @@ export class MockListener extends EventEmitter implements ListenerLike {
   }
 }
 
-export function mockSession(listener: MockListener = new MockListener()): ZaloSession & { listener: MockListener; logouts: number } {
+export function mockSession(listener: MockListener = new MockListener()): ZaloSession & { listener: MockListener; logouts: number; sent: Array<{ threadId: string; threadType: string; text: string }>; onSend: (threadId: string, threadType: string, text: string) => Promise<{ msgId: string | null }> } {
   const s = {
     listener,
     logouts: 0,
+    sent: [] as Array<{ threadId: string; threadType: string; text: string }>,
+    onSend: async (...args: [string, string, string]): Promise<{ msgId: string | null }> => ({ msgId: args.length ? String(8000000000000 + s.sent.length) : null }),
     ownId: () => OWN_ID,
     async logout() {
       s.logouts++;
+    },
+    async sendText(threadId: string, threadType: "user" | "group", text: string) {
+      s.sent.push({ threadId, threadType, text });
+      return s.onSend(threadId, threadType, text);
     },
   };
   return s;

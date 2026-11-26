@@ -266,7 +266,7 @@ const FORBIDDEN = <T>(message = "Bạn không có quyền thực hiện thao tá
 const STORE_ERRORS: Record<string, { error: ErrorCode; message: string }> = {
   not_found: { error: "not_found", message: "Không tìm thấy hoặc bạn không có quyền xem." },
   consent_required: { error: "conflict", message: "Nhóm chưa được ghi nhận đồng ý: không thể bật theo dõi." },
-  interactive_not_available: { error: "conflict", message: "Chế độ tương tác chưa khả dụng: hệ thống chưa có đường gửi tin đã xác minh (phase sau)." },
+  interactive_not_available: { error: "conflict", message: "Chế độ tương tác chưa khả dụng cho nhóm này: cần ít nhất một tin trả lời được duyệt tay và gửi thành công vào nhóm (đường gửi đã xác minh)." },
   invalid_mode: { error: "invalid_input", message: "Chế độ không hợp lệ." },
   note_required: { error: "invalid_input", message: "Cần ghi chú cách nhóm đã đồng ý (3–500 ký tự)." },
   grantee_is_owner: { error: "conflict", message: "Chủ sở hữu đã có toàn quyền." },
@@ -302,7 +302,7 @@ export const GROUP_MODE_LABEL: Record<GroupRow["mode"], string> = {
   disabled: "Tắt",
   monitor: "Theo dõi",
   mention_only: "Chỉ khi được nhắc",
-  interactive: "Tương tác (chưa khả dụng)",
+  interactive: "Tương tác",
 };
 
 export const CONSENT_LABEL: Record<GroupRow["consentStatus"], string> = { none: "Chưa ghi nhận", granted: "Đã đồng ý", withdrawn: "Đã rút lại" };

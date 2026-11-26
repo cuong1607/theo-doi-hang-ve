@@ -159,6 +159,16 @@ test("PHASE 06: 'Công việc' items only with AI_TASKS_ENABLED; exactly one act
   assert.equal(activeNavItemHref(nav, "/apps/zalo/personal/tasks/reminders", ""), "/apps/zalo/personal/tasks/reminders");
 });
 
+test("Phase 04.5: 'Trả lời AI' group only with PERSONAL_REPLY_ENABLED; active item per page", () => {
+  const nav = visibleNav("zalo", ctx({ role: "staff", aiReplyEnabled: true }));
+  const replies = nav.find((g) => g.label === "Trả lời AI")!;
+  assert.deepEqual(replies.items.map((i) => i.href), ["/apps/zalo/personal/replies", "/apps/zalo/personal/replies/outbound", "/apps/zalo/personal/replies/settings"]);
+  assert.equal(visibleNav("zalo", ctx({ role: "staff" })).some((g) => g.label === "Trả lời AI"), false, "off by default");
+  assert.deepEqual(visibleNav("zalo", ctx({ role: "viewer", aiReplyEnabled: true })), []);
+  assert.equal(activeNavItemHref(nav, "/apps/zalo/personal/replies/2b1c", ""), "/apps/zalo/personal/replies");
+  assert.equal(activeNavItemHref(nav, "/apps/zalo/personal/replies/settings", ""), "/apps/zalo/personal/replies/settings");
+});
+
 test("post-login: plain sign-in → /apps, deep links kept, open redirects refused", () => {
   assert.equal(safeNextPath(""), "/apps");
   assert.equal(safeNextPath("/shopee/ads"), "/shopee/ads");

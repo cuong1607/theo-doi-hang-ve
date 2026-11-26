@@ -15,7 +15,7 @@ export type NavIconName =
   | "megaphone" | "chart" | "siren" | "bot" | "store" | "heart-pulse"
   | "users" | "bell"
   | "clipboard" | "list-checks" | "lightbulb" | "image" | "video" | "library" | "layout-template" | "target" | "pen" | "calendar"
-  | "plug" | "messages" | "search" | "activity";
+  | "plug" | "messages" | "search" | "activity" | "send" | "settings";
 
 export interface NavItem {
   title: string;
@@ -30,7 +30,7 @@ export interface NavItem {
   /** PA-4: "Sắp có" unless this capability is on for the user (then a normal link). */
   soonUnless?: "aiWeb";
   /** PHASE 05 / 06: hidden unless this capability is on for the user (flag + permission). */
-  requires?: "aiSystem" | "aiTasks";
+  requires?: "aiSystem" | "aiTasks" | "aiReply";
 }
 
 export interface NavGroup {
@@ -163,6 +163,15 @@ export const APP_NAV: Record<AppId, NavGroup[]> = {
         { title: "Cài đặt nhắc việc", href: "/apps/zalo/personal/tasks/preferences", icon: "calendar", permission: "zalo_personal:use", requires: "aiTasks" },
       ],
     },
+    // PHASE 04.5 — AI replies (PERSONAL_REPLY_ENABLED); drafts / settings re-checked on the server (owner / manage grant)
+    {
+      label: "Trả lời AI",
+      items: [
+        { title: "Hộp duyệt trả lời", href: "/apps/zalo/personal/replies", icon: "bot", permission: "zalo_personal:use", requires: "aiReply" },
+        { title: "Lịch sử gửi", href: "/apps/zalo/personal/replies/outbound", icon: "send", permission: "zalo_personal:use", requires: "aiReply" },
+        { title: "Cài đặt trả lời", href: "/apps/zalo/personal/replies/settings", icon: "settings", permission: "zalo_personal:use", requires: "aiReply" },
+      ],
+    },
   ],
   system: [
     {
@@ -185,6 +194,8 @@ export interface NavContext {
   aiSystemEnabled?: boolean;
   /** PHASE 06 task engine on (AI_TASKS_ENABLED + Zalo Personal dashboard) */
   aiTasksEnabled?: boolean;
+  /** PHASE 04.5 AI replies on (PERSONAL_REPLY_ENABLED + Zalo Personal dashboard) */
+  aiReplyEnabled?: boolean;
 }
 
 /** The app's nav for this role and these flags; empty groups dropped. */
@@ -197,6 +208,7 @@ export function visibleNav(app: AppId, ctx: NavContext): NavGroup[] {
           (!item.permission || hasPermission(ctx.role, item.permission)) &&
           (item.requires !== "aiSystem" || !!ctx.aiSystemEnabled) &&
           (item.requires !== "aiTasks" || !!ctx.aiTasksEnabled) &&
+          (item.requires !== "aiReply" || !!ctx.aiReplyEnabled) &&
           (item.flag !== "shopeeAds" || ctx.adsEnabled) &&
           (item.flag !== "legacy" || ctx.legacyModulesEnabled),
       ),
